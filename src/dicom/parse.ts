@@ -32,6 +32,8 @@ const TAG = {
   RotationDirection: "x00181140",
   NumberOfFramesInRotation: "x00540053",
   AngularViewVector: "x00540090",
+  DetectorInformationSequence: "x00540022",
+  ImageOrientationPatient: "x00200037",
 } as const;
 
 class DicomParseError extends Error {}
@@ -61,6 +63,8 @@ const VR_DICTIONARY: Record<string, string> = {
   [TAG.RotationDirection]: "CS",
   [TAG.NumberOfFramesInRotation]: "US",
   [TAG.AngularViewVector]: "US",
+  [TAG.DetectorInformationSequence]: "SQ",
+  [TAG.ImageOrientationPatient]: "DS",
 };
 
 function vrCallback(tag: string): string | undefined {
@@ -173,17 +177,74 @@ function normalizeAngle(angleDeg: number): number {
   return a;
 }
 
+/** Per-detector geometry, read from DetectorInformationSequence (0054,0022). */
+interface DetectorInfo {
+  /** This detector head's own absolute start angle, overriding the shared rotation group's value. */
+  startAngleDeg?: number;
+  /** Row-direction (increasing-column) cosines from ImageOrientationPatient, first 3 of 6 values. */
+  rowDirection?: [number, number, number];
+}
+
+function readDetectorInformationSequence(dataSet: DataSet): DetectorInfo[] {
+  const element = dataSet.elements[TAG.DetectorInformationSequence];
+  if (!element || !element.items) return [];
+  return element.items.map((item) => {
+    const itemDataSet = item.dataSet!;
+    const startAngleDeg = readNumeric(itemDataSet, TAG.StartAngle);
+    const orientation = readNumericArray(itemDataSet, TAG.ImageOrientationPatient);
+    const rowDirection: [number, number, number] | undefined =
+      orientation && orientation.length >= 3 ? [orientation[0], orientation[1], orientation[2]] : undefined;
+    return { startAngleDeg, rowDirection };
+  });
+}
+
+/**
+ * For each detector, whether its pixel columns must be mirrored (reversed) before merging into a
+ * shared sinogram. Mechanically opposed detector heads commonly face the patient from opposite
+ * sides, so their row-direction (ImageOrientationPatient) is flipped relative to a reference head;
+ * left unmirrored, this would merge geometrically inconsistent column conventions into one sinogram.
+ */
+function detectorColumnFlips(detectorInfos: DetectorInfo[], numDetectors: number): boolean[] {
+  const reference = detectorInfos[0]?.rowDirection;
+  const flips: boolean[] = new Array(numDetectors).fill(false);
+  if (!reference) return flips;
+  for (let d = 0; d < numDetectors; d++) {
+    const rowDirection = detectorInfos[d]?.rowDirection;
+    if (!rowDirection) continue;
+    const dot =
+      rowDirection[0] * reference[0] + rowDirection[1] * reference[1] + rowDirection[2] * reference[2];
+    flips[d] = dot < 0;
+  }
+  return flips;
+}
+
+/** Reverses each row of a row-major (rows x cols) pixel buffer, leaving the input untouched. */
+function mirrorColumns(pixels: Float32Array, rows: number, cols: number): Float32Array {
+  const out = new Float32Array(pixels.length);
+  for (let r = 0; r < rows; r++) {
+    const base = r * cols;
+    for (let c = 0; c < cols; c++) out[base + c] = pixels[base + cols - 1 - c];
+  }
+  return out;
+}
+
 /**
  * Computes the absolute projection angle for every frame.
  *
  * Prefers standard DICOM geometry (RotationInformationSequence + RotationVector/AngularViewVector).
  * Falls back to evenly spacing each detector's frames over 360 degrees when the geometry
  * attributes are absent, which covers simplified/legacy exports.
+ *
+ * For mechanically opposed multi-head cameras, the rotation group's StartAngle often describes
+ * only the gantry's own sweep, shared identically across all heads; each head's true absolute
+ * start angle (offset by its fixed mounting position) comes from DetectorInformationSequence and,
+ * when present, takes precedence over the shared rotation group's StartAngle.
  */
 function computeFrameAngles(
   dataSet: DataSet,
   numberOfFrames: number,
   detectorVector: number[],
+  detectorInfos: DetectorInfo[],
 ): number[] {
   const rotationGroups = readRotationInformationSequence(dataSet);
   const rotationVectorRaw = readNumericArray(dataSet, TAG.RotationVector);
@@ -197,6 +258,7 @@ function computeFrameAngles(
     for (let i = 0; i < numberOfFrames; i++) {
       const rotationIndex1Based = rotationVector[i] ?? 1;
       const group = rotationGroups[rotationIndex1Based - 1] ?? rotationGroups[0];
+      const startAngleDeg = detectorInfos[detectorVector[i]]?.startAngleDeg ?? group.startAngleDeg;
       let viewIndex: number;
       if (angularViewVectorRaw && angularViewVectorRaw[i] !== undefined) {
         viewIndex = angularViewVectorRaw[i] - 1;
@@ -205,7 +267,7 @@ function computeFrameAngles(
         viewIndex = groupCounters.get(key) ?? 0;
         groupCounters.set(key, viewIndex + 1);
       }
-      angles[i] = normalizeAngle(group.startAngleDeg + group.directionSign * group.angularStepDeg * viewIndex);
+      angles[i] = normalizeAngle(startAngleDeg + group.directionSign * group.angularStepDeg * viewIndex);
     }
     return angles;
   }
@@ -394,13 +456,16 @@ export function parseSpectDicom(arrayBuffer: ArrayBuffer, fileName: string): Spe
 
   const numDetectors = Math.max(1, ...detectorVector.map((d) => d + 1));
 
-  const angles = computeFrameAngles(dataSet, numberOfFrames, detectorVector);
+  const detectorInfos = readDetectorInformationSequence(dataSet);
+  const columnFlips = detectorColumnFlips(detectorInfos, numDetectors);
+
+  const angles = computeFrameAngles(dataSet, numberOfFrames, detectorVector, detectorInfos);
   const pixelFrames = readPixelFrames(dataSet, byteArray, numberOfFrames, rows, cols);
 
   const frames: ProjectionFrame[] = pixelFrames.map((pixels, i) => ({
     detector: detectorVector[i],
     angleDeg: angles[i],
-    pixels,
+    pixels: columnFlips[detectorVector[i]] ? mirrorColumns(pixels, rows, cols) : pixels,
   }));
 
   return {
