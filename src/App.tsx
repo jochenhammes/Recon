@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { UploadPanel } from "./components/UploadPanel";
 import { ReconControls } from "./components/ReconControls";
+import { ExportPanel } from "./components/ExportPanel";
 import { buildSinogram } from "./recon/sinogram";
 import type { ReconParams } from "./recon/volume";
 import { reconstructVolume } from "./workers/workerPool";
@@ -12,6 +13,7 @@ import "./App.css";
 function App() {
   const [projectionSet, setProjectionSet] = useState<SpectProjectionSet | null>(null);
   const [volume, setVolume] = useState<Volume3D | null>(null);
+  const [lastReconParams, setLastReconParams] = useState<ReconParams | null>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +39,7 @@ function App() {
       const [spacingRow, spacingCol] = projectionSet.pixelSpacingMm;
       const voxelSpacingMm: [number, number, number] = [spacingRow, spacingCol, spacingCol];
       setVolume(new Volume3D(result.data, result.rows, result.cols, result.cols, voxelSpacingMm));
+      setLastReconParams(params);
     } catch (e) {
       if (!(e instanceof DOMException && e.name === "AbortError")) {
         setError(`Rekonstruktion fehlgeschlagen: ${String(e instanceof Error ? e.message : e)}`);
@@ -68,6 +71,9 @@ function App() {
               onStart={handleStart}
               onCancel={handleCancel}
             />
+          )}
+          {volume && lastReconParams && projectionSet && (
+            <ExportPanel volume={volume} reconParams={lastReconParams} sourceFileName={projectionSet.meta.sourceFileName} />
           )}
           {error && <div className="error-banner">{error}</div>}
         </aside>
