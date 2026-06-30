@@ -1,8 +1,16 @@
 import * as dicomParser from "dicom-parser";
 import type { DataSet } from "dicom-parser";
+import { Decoder as JpegLosslessDecoder } from "jpeg-lossless-decoder-js";
 import type { ProjectionFrame, SpectProjectionSet } from "./types";
 
+/** Transfer syntaxes this parser can decode for encapsulated (compressed) PixelData. */
+const JPEG_LOSSLESS_TRANSFER_SYNTAXES = new Set([
+  "1.2.840.10008.1.2.4.57", // JPEG Lossless, Non-Hierarchical (Process 14)
+  "1.2.840.10008.1.2.4.70", // JPEG Lossless, Non-Hierarchical, First-Order Prediction (Process 14 [Selection Value 1])
+]);
+
 const TAG = {
+  TransferSyntaxUID: "x00020010",
   Rows: "x00280010",
   Columns: "x00280011",
   NumberOfFrames: "x00280008",
@@ -59,8 +67,19 @@ function vrCallback(tag: string): string | undefined {
   return VR_DICTIONARY[tag];
 }
 
+/**
+ * dicom-parser throws plain strings or `{ exception, dataSet }` objects rather than Error
+ * instances, so `String(e)` on those yields "[object Object]". Extracts a readable message.
+ */
+function describeParseError(e: unknown): string {
+  if (typeof e === "string") return e;
+  if (e instanceof Error) return e.message;
+  if (e && typeof e === "object" && "exception" in e && typeof e.exception === "string") return e.exception;
+  return String(e);
+}
+
 function isMissingP10Prefix(e: unknown): boolean {
-  const message = typeof e === "string" ? e : e instanceof Error ? e.message : "";
+  const message = describeParseError(e);
   // "DICM prefix not found" covers files long enough to read the 132-byte header where the magic
   // doesn't match; "attempt to read past end of buffer" covers bare datasets too short to even
   // contain a 132-byte Part10 header (readFixedString fails before the magic check runs).
@@ -206,6 +225,69 @@ function computeFrameAngles(
   return angles;
 }
 
+/** Decodes one JPEG-Lossless-compressed frame (fragment bytes) into raw sample bytes. */
+function decodeJpegLosslessFrame(fragment: Uint8Array): ArrayBuffer {
+  const decoder = new JpegLosslessDecoder();
+  return decoder.decompress(
+    fragment.buffer as ArrayBuffer,
+    fragment.byteOffset,
+    fragment.length,
+  ) as ArrayBuffer;
+}
+
+function readEncapsulatedPixelFrames(
+  dataSet: DataSet,
+  pixelDataElement: dicomParser.Element,
+  numberOfFrames: number,
+  pixelsPerFrame: number,
+  bytesPerPixel: number,
+  pixelRepresentation: number,
+): Float32Array[] {
+  const transferSyntax = dataSet.string(TAG.TransferSyntaxUID);
+  if (!transferSyntax || !JPEG_LOSSLESS_TRANSFER_SYNTAXES.has(transferSyntax)) {
+    throw new DicomParseError(
+      `Komprimierte PixelData mit Transfer Syntax "${transferSyntax ?? "unbekannt"}" wird nicht unterstützt. ` +
+        "Unterstützt werden unkomprimierte Dateien sowie JPEG Lossless " +
+        "(1.2.840.10008.1.2.4.57 / 1.2.840.10008.1.2.4.70).",
+    );
+  }
+  const basicOffsetTable =
+    pixelDataElement.basicOffsetTable && pixelDataElement.basicOffsetTable.length > 0
+      ? pixelDataElement.basicOffsetTable
+      : dicomParser.createJPEGBasicOffsetTable(dataSet, pixelDataElement);
+
+  const frames: Float32Array[] = [];
+  for (let f = 0; f < numberOfFrames; f++) {
+    const fragment = dicomParser.readEncapsulatedImageFrame(dataSet, pixelDataElement, f, basicOffsetTable);
+    let decoded: ArrayBuffer;
+    try {
+      decoded = decodeJpegLosslessFrame(fragment);
+    } catch (e) {
+      throw new DicomParseError(`JPEG-Lossless-Dekodierung von Frame ${f} fehlgeschlagen: ${describeParseError(e)}`);
+    }
+    if (decoded.byteLength < pixelsPerFrame * bytesPerPixel) {
+      throw new DicomParseError(
+        `Dekodierter Frame ${f} ist zu kurz: erwartet ${pixelsPerFrame * bytesPerPixel} Bytes, ` +
+          `gefunden ${decoded.byteLength}.`,
+      );
+    }
+    const view = new DataView(decoded);
+    const pixels = new Float32Array(pixelsPerFrame);
+    for (let p = 0; p < pixelsPerFrame; p++) {
+      const byteOffset = p * bytesPerPixel;
+      let value: number;
+      if (bytesPerPixel === 2) {
+        value = pixelRepresentation === 1 ? view.getInt16(byteOffset, true) : view.getUint16(byteOffset, true);
+      } else {
+        value = pixelRepresentation === 1 ? view.getInt8(byteOffset) : view.getUint8(byteOffset);
+      }
+      pixels[p] = value;
+    }
+    frames.push(pixels);
+  }
+  return frames;
+}
+
 function readPixelFrames(
   dataSet: DataSet,
   byteArray: Uint8Array,
@@ -215,16 +297,22 @@ function readPixelFrames(
 ): Float32Array[] {
   const pixelDataElement = dataSet.elements[TAG.PixelData];
   if (!pixelDataElement) throw new DicomParseError("DICOM-Datei enthält keine PixelData (7FE0,0010).");
-  if (pixelDataElement.encapsulatedPixelData) {
-    throw new DicomParseError(
-      "Komprimierte PixelData (z.B. JPEG) wird nicht unterstützt. Bitte unkomprimierte DICOM-Dateien " +
-        "(Implicit/Explicit VR Little Endian) verwenden.",
-    );
-  }
   const bitsAllocated = readNumeric(dataSet, TAG.BitsAllocated) ?? 16;
   const pixelRepresentation = readNumeric(dataSet, TAG.PixelRepresentation) ?? 0;
   const bytesPerPixel = bitsAllocated / 8;
   const pixelsPerFrame = rows * cols;
+
+  if (pixelDataElement.encapsulatedPixelData) {
+    return readEncapsulatedPixelFrames(
+      dataSet,
+      pixelDataElement,
+      numberOfFrames,
+      pixelsPerFrame,
+      bytesPerPixel,
+      pixelRepresentation,
+    );
+  }
+
   const frameByteLength = pixelsPerFrame * bytesPerPixel;
   const dataOffset = pixelDataElement.dataOffset;
   const available = pixelDataElement.length;
@@ -270,10 +358,10 @@ export function parseSpectDicom(arrayBuffer: ArrayBuffer, fileName: string): Spe
           TransferSyntaxUID: "1.2.840.10008.1.2.1",
         });
       } catch (e2) {
-        throw new DicomParseError(`Konnte DICOM-Datei nicht parsen: ${String(e2)}`);
+        throw new DicomParseError(`Konnte DICOM-Datei nicht parsen: ${describeParseError(e2)}`);
       }
     } else {
-      throw new DicomParseError(`Konnte DICOM-Datei nicht parsen: ${String(e)}`);
+      throw new DicomParseError(`Konnte DICOM-Datei nicht parsen: ${describeParseError(e)}`);
     }
   }
 
@@ -361,4 +449,4 @@ export function mergeProjectionSets(sets: SpectProjectionSet[]): SpectProjection
   };
 }
 
-export { DicomParseError };
+export { DicomParseError, decodeJpegLosslessFrame };

@@ -1,5 +1,8 @@
+import * as dicomParser from "dicom-parser";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { DicomParseError, mergeProjectionSets, parseSpectDicom } from "./parse";
+import { DicomParseError, decodeJpegLosslessFrame, mergeProjectionSets, parseSpectDicom } from "./parse";
 import { buildSyntheticNmDicom } from "./testDicomBuilder";
 
 describe("parseSpectDicom", () => {
@@ -72,6 +75,31 @@ describe("parseSpectDicom", () => {
       numDetectors: 1,
     });
     expect(() => parseSpectDicom(bytes, "single-frame.dcm")).toThrow(DicomParseError);
+  });
+});
+
+describe("decodeJpegLosslessFrame", () => {
+  it("decodes a real encapsulated JPEG-Lossless (Process 14) fragment via dicom-parser", () => {
+    // Fixture from https://github.com/rii-mango/JPEGLosslessDecoderJS (MIT), used upstream to
+    // verify transfer syntax 1.2.840.10008.1.2.4.57 decoding: 256x256, 16-bit signed, 1 fragment.
+    const fixturePath = fileURLToPath(new URL("./fixtures/jpeg-lossless-sel1.dcm", import.meta.url));
+    const byteArray = new Uint8Array(readFileSync(fixturePath));
+    const dataSet = dicomParser.parseDicom(byteArray);
+    const pixelDataElement = dataSet.elements["x7fe00010"];
+    expect(pixelDataElement.encapsulatedPixelData).toBe(true);
+
+    const fragment = dicomParser.readEncapsulatedImageFrame(
+      dataSet,
+      pixelDataElement,
+      0,
+      pixelDataElement.basicOffsetTable,
+    );
+    const decoded = decodeJpegLosslessFrame(fragment);
+
+    expect(decoded.byteLength).toBe(256 * 256 * 2);
+    const view = new DataView(decoded);
+    const first10 = Array.from({ length: 10 }, (_, i) => view.getInt16(i * 2, true));
+    expect(first10).toEqual([1024, 1024, 1024, 1025, 1024, 1024, 1025, 1024, 1024, 1024]);
   });
 });
 
