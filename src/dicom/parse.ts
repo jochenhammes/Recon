@@ -1,0 +1,364 @@
+import * as dicomParser from "dicom-parser";
+import type { DataSet } from "dicom-parser";
+import type { ProjectionFrame, SpectProjectionSet } from "./types";
+
+const TAG = {
+  Rows: "x00280010",
+  Columns: "x00280011",
+  NumberOfFrames: "x00280008",
+  PixelSpacing: "x00280030",
+  BitsAllocated: "x00280100",
+  PixelRepresentation: "x00280103",
+  Modality: "x00080060",
+  PatientID: "x00100020",
+  StudyDate: "x00080020",
+  Manufacturer: "x00080070",
+  Radionuclide: "x00540300",
+  PixelData: "x7fe00010",
+  DetectorVector: "x00540020",
+  NumberOfDetectors: "x00540021",
+  RotationVector: "x00540050",
+  RotationInformationSequence: "x00540052",
+  StartAngle: "x00540200",
+  AngularStep: "x00181144",
+  RotationDirection: "x00181140",
+  NumberOfFramesInRotation: "x00540053",
+  AngularViewVector: "x00540090",
+} as const;
+
+class DicomParseError extends Error {}
+
+/**
+ * VR dictionary for the tags this parser reads. Only needed for the (less common but still
+ * encountered) Implicit VR Little Endian transfer syntax, where dicom-parser cannot infer VRs
+ * on its own and relies on a caller-supplied vrCallback. Ignored for Explicit VR files.
+ */
+const VR_DICTIONARY: Record<string, string> = {
+  [TAG.Rows]: "US",
+  [TAG.Columns]: "US",
+  [TAG.NumberOfFrames]: "IS",
+  [TAG.PixelSpacing]: "DS",
+  [TAG.BitsAllocated]: "US",
+  [TAG.PixelRepresentation]: "US",
+  [TAG.Modality]: "CS",
+  [TAG.PatientID]: "LO",
+  [TAG.StudyDate]: "DA",
+  [TAG.Manufacturer]: "LO",
+  [TAG.DetectorVector]: "US",
+  [TAG.NumberOfDetectors]: "US",
+  [TAG.RotationVector]: "US",
+  [TAG.RotationInformationSequence]: "SQ",
+  [TAG.StartAngle]: "DS",
+  [TAG.AngularStep]: "DS",
+  [TAG.RotationDirection]: "CS",
+  [TAG.NumberOfFramesInRotation]: "US",
+  [TAG.AngularViewVector]: "US",
+};
+
+function vrCallback(tag: string): string | undefined {
+  return VR_DICTIONARY[tag];
+}
+
+function isMissingP10Prefix(e: unknown): boolean {
+  const message = typeof e === "string" ? e : e instanceof Error ? e.message : "";
+  // "DICM prefix not found" covers files long enough to read the 132-byte header where the magic
+  // doesn't match; "attempt to read past end of buffer" covers bare datasets too short to even
+  // contain a 132-byte Part10 header (readFixedString fails before the magic check runs).
+  return message.includes("DICM prefix not found") || message.includes("attempt to read past end of buffer");
+}
+
+/** Reads a numeric value that may be encoded as US/UL (binary) or DS/IS (numeric string). */
+function readNumeric(dataSet: DataSet, tag: string, index = 0): number | undefined {
+  const element = dataSet.elements[tag];
+  if (!element) return undefined;
+  try {
+    switch (element.vr) {
+      case "US":
+        return dataSet.uint16(tag, index);
+      case "UL":
+        return dataSet.uint32(tag, index);
+      case "SS":
+        return dataSet.int16(tag, index);
+      case "SL":
+        return dataSet.int32(tag, index);
+      case "FL":
+        return dataSet.float(tag, index);
+      case "FD":
+        return dataSet.double(tag, index);
+      case "DS":
+        return dataSet.floatString(tag, index);
+      case "IS":
+        return dataSet.intString(tag, index);
+      default: {
+        const s = dataSet.string(tag);
+        if (s === undefined) return undefined;
+        const parts = s.split("\\");
+        const v = parseFloat(parts[index]);
+        return Number.isNaN(v) ? undefined : v;
+      }
+    }
+  } catch {
+    return undefined;
+  }
+}
+
+/** Reads a multi-valued numeric (US/UL/DS/IS) element into a plain number array. */
+function readNumericArray(dataSet: DataSet, tag: string, expectedLength?: number): number[] | undefined {
+  const element = dataSet.elements[tag];
+  if (!element) return undefined;
+  const out: number[] = [];
+  if (element.vr === "US" || element.vr === "SS") {
+    const count = element.length / 2;
+    for (let i = 0; i < count; i++) out.push(readNumeric(dataSet, tag, i)!);
+  } else if (element.vr === "UL" || element.vr === "SL" || element.vr === "FL") {
+    const count = element.length / 4;
+    for (let i = 0; i < count; i++) out.push(readNumeric(dataSet, tag, i)!);
+  } else {
+    const s = dataSet.string(tag);
+    if (s === undefined) return undefined;
+    for (const part of s.split("\\")) {
+      const v = parseFloat(part);
+      out.push(Number.isNaN(v) ? 0 : v);
+    }
+  }
+  if (expectedLength !== undefined && out.length !== expectedLength) {
+    // Some files pad or under-report; trust what's present, caller handles fallback per-frame.
+  }
+  return out;
+}
+
+interface RotationGroup {
+  startAngleDeg: number;
+  angularStepDeg: number;
+  directionSign: 1 | -1;
+  framesInRotation?: number;
+}
+
+function readRotationInformationSequence(dataSet: DataSet): RotationGroup[] {
+  const element = dataSet.elements[TAG.RotationInformationSequence];
+  if (!element || !element.items) return [];
+  return element.items.map((item) => {
+    const itemDataSet = item.dataSet!;
+    const startAngleDeg = readNumeric(itemDataSet, TAG.StartAngle) ?? 0;
+    const angularStepDeg = readNumeric(itemDataSet, TAG.AngularStep) ?? 0;
+    const directionStr = itemDataSet.string(TAG.RotationDirection);
+    const directionSign: 1 | -1 = directionStr === "CW" ? -1 : 1;
+    const framesInRotation = readNumeric(itemDataSet, TAG.NumberOfFramesInRotation);
+    return { startAngleDeg, angularStepDeg, directionSign, framesInRotation };
+  });
+}
+
+function normalizeAngle(angleDeg: number): number {
+  let a = angleDeg % 360;
+  if (a < 0) a += 360;
+  return a;
+}
+
+/**
+ * Computes the absolute projection angle for every frame.
+ *
+ * Prefers standard DICOM geometry (RotationInformationSequence + RotationVector/AngularViewVector).
+ * Falls back to evenly spacing each detector's frames over 360 degrees when the geometry
+ * attributes are absent, which covers simplified/legacy exports.
+ */
+function computeFrameAngles(
+  dataSet: DataSet,
+  numberOfFrames: number,
+  detectorVector: number[],
+): number[] {
+  const rotationGroups = readRotationInformationSequence(dataSet);
+  const rotationVectorRaw = readNumericArray(dataSet, TAG.RotationVector);
+  const angularViewVectorRaw = readNumericArray(dataSet, TAG.AngularViewVector);
+
+  if (rotationGroups.length > 0) {
+    const rotationVector = rotationVectorRaw ?? new Array(numberOfFrames).fill(1);
+    // Running view-index counter per (detector, rotation) group, used when AngularViewVector is absent.
+    const groupCounters = new Map<string, number>();
+    const angles: number[] = new Array(numberOfFrames);
+    for (let i = 0; i < numberOfFrames; i++) {
+      const rotationIndex1Based = rotationVector[i] ?? 1;
+      const group = rotationGroups[rotationIndex1Based - 1] ?? rotationGroups[0];
+      let viewIndex: number;
+      if (angularViewVectorRaw && angularViewVectorRaw[i] !== undefined) {
+        viewIndex = angularViewVectorRaw[i] - 1;
+      } else {
+        const key = `${detectorVector[i]}:${rotationIndex1Based}`;
+        viewIndex = groupCounters.get(key) ?? 0;
+        groupCounters.set(key, viewIndex + 1);
+      }
+      angles[i] = normalizeAngle(group.startAngleDeg + group.directionSign * group.angularStepDeg * viewIndex);
+    }
+    return angles;
+  }
+
+  // No rotation geometry at all: evenly space each detector's own frames over 360 degrees.
+  const framesPerDetector = new Map<number, number>();
+  for (const d of detectorVector) framesPerDetector.set(d, (framesPerDetector.get(d) ?? 0) + 1);
+  const seenPerDetector = new Map<number, number>();
+  const angles: number[] = new Array(numberOfFrames);
+  for (let i = 0; i < numberOfFrames; i++) {
+    const d = detectorVector[i];
+    const total = framesPerDetector.get(d) ?? numberOfFrames;
+    const seen = seenPerDetector.get(d) ?? 0;
+    seenPerDetector.set(d, seen + 1);
+    angles[i] = normalizeAngle((360 * seen) / total);
+  }
+  return angles;
+}
+
+function readPixelFrames(
+  dataSet: DataSet,
+  byteArray: Uint8Array,
+  numberOfFrames: number,
+  rows: number,
+  cols: number,
+): Float32Array[] {
+  const pixelDataElement = dataSet.elements[TAG.PixelData];
+  if (!pixelDataElement) throw new DicomParseError("DICOM-Datei enthält keine PixelData (7FE0,0010).");
+  if (pixelDataElement.encapsulatedPixelData) {
+    throw new DicomParseError(
+      "Komprimierte PixelData (z.B. JPEG) wird nicht unterstützt. Bitte unkomprimierte DICOM-Dateien " +
+        "(Implicit/Explicit VR Little Endian) verwenden.",
+    );
+  }
+  const bitsAllocated = readNumeric(dataSet, TAG.BitsAllocated) ?? 16;
+  const pixelRepresentation = readNumeric(dataSet, TAG.PixelRepresentation) ?? 0;
+  const bytesPerPixel = bitsAllocated / 8;
+  const pixelsPerFrame = rows * cols;
+  const frameByteLength = pixelsPerFrame * bytesPerPixel;
+  const dataOffset = pixelDataElement.dataOffset;
+  const available = pixelDataElement.length;
+  if (frameByteLength * numberOfFrames > available) {
+    throw new DicomParseError(
+      `PixelData zu kurz für ${numberOfFrames} Frames à ${rows}x${cols} (${bitsAllocated} bit): ` +
+        `erwartet ${frameByteLength * numberOfFrames} Bytes, gefunden ${available}.`,
+    );
+  }
+  const view = new DataView(byteArray.buffer, byteArray.byteOffset, byteArray.byteLength);
+  const frames: Float32Array[] = [];
+  for (let f = 0; f < numberOfFrames; f++) {
+    const frameOffset = dataOffset + f * frameByteLength;
+    const pixels = new Float32Array(pixelsPerFrame);
+    for (let p = 0; p < pixelsPerFrame; p++) {
+      const byteOffset = frameOffset + p * bytesPerPixel;
+      let value: number;
+      if (bytesPerPixel === 2) {
+        value = pixelRepresentation === 1 ? view.getInt16(byteOffset, true) : view.getUint16(byteOffset, true);
+      } else {
+        value = pixelRepresentation === 1 ? view.getInt8(byteOffset) : view.getUint8(byteOffset);
+      }
+      pixels[p] = value;
+    }
+    frames.push(pixels);
+  }
+  return frames;
+}
+
+/** Parses a single NM (Nuclear Medicine) multi-frame DICOM file containing SPECT raw projections. */
+export function parseSpectDicom(arrayBuffer: ArrayBuffer, fileName: string): SpectProjectionSet {
+  const byteArray = new Uint8Array(arrayBuffer);
+  let dataSet: DataSet;
+  try {
+    dataSet = dicomParser.parseDicom(byteArray, { vrCallback });
+  } catch (e) {
+    if (isMissingP10Prefix(e)) {
+      // No 128-byte preamble / "DICM" magic: treat as a bare dataset in the most common
+      // transfer syntax used for such exports (Explicit VR Little Endian).
+      try {
+        dataSet = dicomParser.parseDicom(byteArray, {
+          vrCallback,
+          TransferSyntaxUID: "1.2.840.10008.1.2.1",
+        });
+      } catch (e2) {
+        throw new DicomParseError(`Konnte DICOM-Datei nicht parsen: ${String(e2)}`);
+      }
+    } else {
+      throw new DicomParseError(`Konnte DICOM-Datei nicht parsen: ${String(e)}`);
+    }
+  }
+
+  const modality = dataSet.string(TAG.Modality);
+  if (modality && modality !== "NM") {
+    throw new DicomParseError(`Erwartet Modality "NM" (Nuklearmedizin), gefunden "${modality}".`);
+  }
+
+  const rows = readNumeric(dataSet, TAG.Rows);
+  const cols = readNumeric(dataSet, TAG.Columns);
+  if (!rows || !cols) throw new DicomParseError("Rows/Columns fehlen in der DICOM-Datei.");
+
+  const numberOfFrames = readNumeric(dataSet, TAG.NumberOfFrames) ?? 1;
+  if (numberOfFrames < 2) {
+    throw new DicomParseError(
+      "Die Datei enthält nur einen Frame. Für eine SPECT-Rekonstruktion wird ein Multi-Frame-Datensatz " +
+        "mit mehreren Projektionswinkeln benötigt.",
+    );
+  }
+
+  const pixelSpacingRaw = readNumericArray(dataSet, TAG.PixelSpacing);
+  const pixelSpacingMm: [number, number] =
+    pixelSpacingRaw && pixelSpacingRaw.length >= 2 ? [pixelSpacingRaw[0], pixelSpacingRaw[1]] : [4.8, 4.8];
+
+  const detectorVectorRaw = readNumericArray(dataSet, TAG.DetectorVector, numberOfFrames);
+  const detectorVector: number[] =
+    detectorVectorRaw && detectorVectorRaw.length === numberOfFrames
+      ? detectorVectorRaw.map((d) => Math.max(0, d - 1))
+      : new Array(numberOfFrames).fill(0);
+
+  const numDetectors = Math.max(1, ...detectorVector.map((d) => d + 1));
+
+  const angles = computeFrameAngles(dataSet, numberOfFrames, detectorVector);
+  const pixelFrames = readPixelFrames(dataSet, byteArray, numberOfFrames, rows, cols);
+
+  const frames: ProjectionFrame[] = pixelFrames.map((pixels, i) => ({
+    detector: detectorVector[i],
+    angleDeg: angles[i],
+    pixels,
+  }));
+
+  return {
+    rows,
+    cols,
+    pixelSpacingMm,
+    numDetectors,
+    frames,
+    meta: {
+      patientId: dataSet.string(TAG.PatientID),
+      studyDate: dataSet.string(TAG.StudyDate),
+      manufacturer: dataSet.string(TAG.Manufacturer),
+      radionuclide: dataSet.string(TAG.Radionuclide),
+      sourceFileName: fileName,
+    },
+  };
+}
+
+/**
+ * Merges one or more parsed acquisitions into a single projection set. When more than one file
+ * is supplied, each file is treated as one detector head's data (overriding any embedded
+ * DetectorVector), covering vendors that export each head as a separate series.
+ */
+export function mergeProjectionSets(sets: SpectProjectionSet[]): SpectProjectionSet {
+  if (sets.length === 0) throw new DicomParseError("Keine Dateien zum Zusammenführen übergeben.");
+  const [first, ...rest] = sets;
+  for (const s of rest) {
+    if (s.rows !== first.rows || s.cols !== first.cols) {
+      throw new DicomParseError(
+        `Bildgrößen der hochgeladenen Dateien stimmen nicht überein (${first.rows}x${first.cols} vs. ${s.rows}x${s.cols}).`,
+      );
+    }
+  }
+  const multiFile = sets.length > 1;
+  const frames = sets.flatMap((s, fileIndex) =>
+    s.frames.map((f) => ({ ...f, detector: multiFile ? fileIndex : f.detector })),
+  );
+  const numDetectors = multiFile ? sets.length : first.numDetectors;
+  return {
+    rows: first.rows,
+    cols: first.cols,
+    pixelSpacingMm: first.pixelSpacingMm,
+    numDetectors,
+    frames,
+    meta: { ...first.meta, sourceFileName: sets.map((s) => s.meta.sourceFileName).join(", ") },
+  };
+}
+
+export { DicomParseError };
