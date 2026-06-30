@@ -82,6 +82,12 @@ export interface RotationGroupSpec {
   framesInRotation: number;
 }
 
+export interface DetectorInfoSpec {
+  startAngleDeg?: number;
+  /** ImageOrientationPatient: 6 DS values (row-direction cosines, then column-direction cosines). */
+  imageOrientationPatient?: [number, number, number, number, number, number];
+}
+
 export interface SyntheticDicomSpec {
   rows: number;
   cols: number;
@@ -96,6 +102,13 @@ export interface SyntheticDicomSpec {
   rotationVector?: number[];
   /** 1-based view index per frame (only used when rotationGroups is set). */
   angularViewVector?: number[];
+  /** Per-detector geometry (DetectorInformationSequence), 0-based, length should match numDetectors. */
+  detectorInfo?: DetectorInfoSpec[];
+  /**
+   * Per-frame pixel rows (row-major, length rows*cols), overriding the uniform frameValues fill
+   * for frames where present. Used to make column-mirroring observable in tests.
+   */
+  framePixelsOverride?: (number[] | undefined)[];
 }
 
 /** Builds a bare (no preamble) Explicit VR Little Endian NM multi-frame dataset for tests. */
@@ -130,7 +143,22 @@ export function buildSyntheticNmDicom(spec: SyntheticDicomSpec): ArrayBuffer {
     w.element(0x0054, 0x0052, "SQ", itemsWriter.toUint8Array());
   }
 
-  const frames = spec.frameValues.map((v) => new Array(spec.rows * spec.cols).fill(v));
+  if (spec.detectorInfo && spec.detectorInfo.length > 0) {
+    const itemsWriter = new DicomWriter();
+    for (const info of spec.detectorInfo) {
+      const itemContent = new DicomWriter();
+      if (info.startAngleDeg !== undefined) {
+        itemContent.element(0x0054, 0x0200, "DS", str(String(info.startAngleDeg)));
+      }
+      if (info.imageOrientationPatient) {
+        itemContent.element(0x0020, 0x0037, "DS", str(info.imageOrientationPatient.join("\\")));
+      }
+      itemsWriter.item(itemContent.toUint8Array());
+    }
+    w.element(0x0054, 0x0022, "SQ", itemsWriter.toUint8Array());
+  }
+
+  const frames = spec.frameValues.map((v, i) => spec.framePixelsOverride?.[i] ?? new Array(spec.rows * spec.cols).fill(v));
   w.element(0x7fe0, 0x0010, "OW", pixelData16(frames));
 
   return w.toUint8Array().buffer as ArrayBuffer;

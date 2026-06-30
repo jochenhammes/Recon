@@ -65,6 +65,64 @@ describe("parseSpectDicom", () => {
     expect(anglesInFrameOrder).toEqual([0, 0, 15, 15, 30, 30, 45, 45]);
   });
 
+  it("offsets each detector's angles by its own DetectorInformationSequence StartAngle", () => {
+    const rows = 2;
+    const cols = 2;
+    // Mirrors the real-world 180-degree-opposed dual-head case: both detectors share one
+    // rotation group and independently restart AngularViewVector at 1, so without per-detector
+    // StartAngle they would get identical angle sequences instead of ~180-degree-offset ones.
+    const detectorVector = [0, 0, 1, 1];
+    const angularViewVector = [1, 2, 1, 2];
+    const bytes = buildSyntheticNmDicom({
+      rows,
+      cols,
+      pixelSpacingMm: [4.8, 4.8],
+      detectorVector,
+      frameValues: detectorVector.map(() => 1),
+      numDetectors: 2,
+      rotationGroups: [{ startAngleDeg: -180, angularStepDeg: 10, direction: "CCW", framesInRotation: 2 }],
+      rotationVector: detectorVector.map(() => 1),
+      angularViewVector,
+      detectorInfo: [{ startAngleDeg: -180 }, { startAngleDeg: 0 }],
+    });
+
+    const set = parseSpectDicom(bytes, "synthetic-detector-offset.dcm");
+
+    const det0Angles = set.frames.filter((f) => f.detector === 0).map((f) => f.angleDeg);
+    const det1Angles = set.frames.filter((f) => f.detector === 1).map((f) => f.angleDeg);
+    expect(det0Angles).toEqual([180, 190]);
+    expect(det1Angles).toEqual([0, 10]);
+  });
+
+  it("mirrors pixel columns for a detector whose ImageOrientationPatient row-direction is flipped", () => {
+    const rows = 2;
+    const cols = 3;
+    const detectorVector = [0, 1];
+    // Detector 0: unmirrored row-direction (reference). Detector 1: flipped row-direction.
+    const detectorInfo = [
+      { imageOrientationPatient: [1, 0, 0, 0, 1, 0] as [number, number, number, number, number, number] },
+      { imageOrientationPatient: [-1, 0, 0, 0, 1, 0] as [number, number, number, number, number, number] },
+    ];
+    const det0Frame = [1, 2, 3, 4, 5, 6];
+    const det1Frame = [1, 2, 3, 4, 5, 6];
+    const bytes = buildSyntheticNmDicom({
+      rows,
+      cols,
+      pixelSpacingMm: [4.8, 4.8],
+      detectorVector,
+      frameValues: [0, 0],
+      numDetectors: 2,
+      detectorInfo,
+      framePixelsOverride: [det0Frame, det1Frame],
+    });
+
+    const set = parseSpectDicom(bytes, "synthetic-mirror.dcm");
+
+    expect(Array.from(set.frames[0].pixels)).toEqual(det0Frame);
+    // Detector 1's rows should be reversed: [1,2,3,4,5,6] -> [3,2,1,6,5,4].
+    expect(Array.from(set.frames[1].pixels)).toEqual([3, 2, 1, 6, 5, 4]);
+  });
+
   it("rejects single-frame files", () => {
     const bytes = buildSyntheticNmDicom({
       rows: 2,
