@@ -255,17 +255,32 @@ function computeFrameAngles(
     const rotationVector = rotationVectorRaw ?? new Array(numberOfFrames).fill(1);
     // Running view-index counter per (detector, rotation) group, used when AngularViewVector is absent.
     const groupCounters = new Map<string, number>();
+
+    // Some scanners populate DetectorInformationSequence.StartAngle with the shared gantry start
+    // position rather than each head's true mounting angle. When all detectors have the same
+    // StartAngle, these values carry no per-head information and the evenly-spaced fallback
+    // (d × 360°/N) must be used instead; otherwise both heads receive identical angle sequences,
+    // producing a 180°-rotated ghost of every structure in the FBP image.
+    const definedDetectorStartAngles = Array.from(
+      { length: numDetectors },
+      (_, i) => detectorInfos[i]?.startAngleDeg,
+    ).filter((a): a is number => a !== undefined);
+    const detectorInfosEncodeHeadPositions =
+      numDetectors < 2 ||
+      definedDetectorStartAngles.length < numDetectors ||
+      new Set(definedDetectorStartAngles.map((a) => Math.round(normalizeAngle(a)))).size > 1;
+
     const angles: number[] = new Array(numberOfFrames);
     for (let i = 0; i < numberOfFrames; i++) {
       const d = detectorVector[i];
       const rotationIndex1Based = rotationVector[i] ?? 1;
       const group = rotationGroups[rotationIndex1Based - 1] ?? rotationGroups[0];
-      // Per-detector StartAngle from DetectorInformationSequence takes precedence. Without it, fall
-      // back to evenly-spaced detector mounting positions (d × 360°/N), which is correct for
-      // standard N-head geometries (dual-head 180°-opposed, triple-head 120°, etc.). Using only
-      // the shared group startAngle for all detectors would assign identical angle sequences to
-      // both heads, causing every real voxel to ghost at its 180°-rotated position in the FBP image.
-      const startAngleDeg = detectorInfos[d]?.startAngleDeg ?? (group.startAngleDeg + d * (360 / numDetectors));
+      // Per-detector StartAngle from DetectorInformationSequence takes precedence — but only when
+      // the values actually differ across heads (i.e., they encode head positions). If all entries
+      // share the same angle, fall back to evenly-spaced offsets (d × 360°/N).
+      const startAngleDeg = detectorInfosEncodeHeadPositions
+        ? (detectorInfos[d]?.startAngleDeg ?? (group.startAngleDeg + d * (360 / numDetectors)))
+        : group.startAngleDeg + d * (360 / numDetectors);
       let viewIndex: number;
       if (angularViewVectorRaw && angularViewVectorRaw[i] !== undefined) {
         viewIndex = angularViewVectorRaw[i] - 1;

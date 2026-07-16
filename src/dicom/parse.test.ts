@@ -58,14 +58,49 @@ describe("parseSpectDicom", () => {
       rotationGroups: [{ startAngleDeg: 0, angularStepDeg: 15, direction: "CCW", framesInRotation: 4 }],
       rotationVector: detectorVector.map(() => 1),
       angularViewVector,
-      // Explicit per-detector start angles so this test stays focused on AngularViewVector mapping.
-      detectorInfo: [{ startAngleDeg: 0 }, { startAngleDeg: 0 }],
+      // Use distinct per-detector start angles so the code uses DetectorInformationSequence offsets
+      // (not the same-angle fallback) and the test stays focused on AngularViewVector step mapping.
+      detectorInfo: [{ startAngleDeg: 0 }, { startAngleDeg: 180 }],
     });
 
     const set = parseSpectDicom(bytes, "synthetic-rotation.dcm");
 
     const anglesInFrameOrder = set.frames.map((f) => f.angleDeg);
-    expect(anglesInFrameOrder).toEqual([0, 0, 15, 15, 30, 30, 45, 45]);
+    // det0 steps from 0°; det1 steps from 180°; both increment by 15° per view index.
+    expect(anglesInFrameOrder).toEqual([0, 180, 15, 195, 30, 210, 45, 225]);
+  });
+
+  it("ignores DetectorInformationSequence StartAngle when all detectors share the same value", () => {
+    // Real-world case: some vendors echo the shared gantry start angle into every detector's
+    // DetectorInformationSequence.StartAngle entry rather than each head's true mounting position.
+    // When all detectors have the same StartAngle, the values carry no head-position information
+    // and both heads end up assigned identical angle sequences → 180°-rotated ghost in FBP.
+    // The parser must detect this and apply the evenly-spaced fallback (d × 360°/N) instead.
+    const rows = 2;
+    const cols = 2;
+    const detectorVector = [0, 1, 0, 1, 0, 1];
+    const angularViewVector = [1, 1, 2, 2, 3, 3];
+    const bytes = buildSyntheticNmDicom({
+      rows,
+      cols,
+      pixelSpacingMm: [4.8, 4.8],
+      detectorVector,
+      frameValues: detectorVector.map(() => 1),
+      numDetectors: 2,
+      rotationGroups: [{ startAngleDeg: 0, angularStepDeg: 30, direction: "CCW", framesInRotation: 3 }],
+      rotationVector: detectorVector.map(() => 1),
+      angularViewVector,
+      // Both detectors have the same StartAngle (gantry echo, not head position).
+      detectorInfo: [{ startAngleDeg: 0 }, { startAngleDeg: 0 }],
+    });
+
+    const set = parseSpectDicom(bytes, "synthetic-same-startangle.dcm");
+
+    const det0Angles = set.frames.filter((f) => f.detector === 0).map((f) => f.angleDeg);
+    const det1Angles = set.frames.filter((f) => f.detector === 1).map((f) => f.angleDeg);
+    // Fallback: det0 → 0°+0=0°, det1 → 0°+180°=180°.
+    expect(det0Angles).toEqual([0, 30, 60]);
+    expect(det1Angles).toEqual([180, 210, 240]);
   });
 
   it("falls back to evenly-spaced detector offsets (360/N) when DetectorInformationSequence has no StartAngle", () => {

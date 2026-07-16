@@ -107,7 +107,11 @@ export function SliceCanvas({
           const dy = e.clientY - dragState.current.lastY;
           dragState.current.lastX = e.clientX;
           dragState.current.lastY = e.clientY;
-          onWindowLevelDrag?.(dx * 2, -dy * 2);
+          // Scale sensitivity to the current window width so that ~200 px of drag always spans
+          // the full current window range. This keeps coarse adjustment fast for wide windows
+          // and gives automatic fine control as the user narrows the window.
+          const scale = (windowMax - windowMin) / 200;
+          onWindowLevelDrag?.(dx * scale, -dy * scale);
         }
       }}
       onMouseUp={() => (dragState.current = null)}
