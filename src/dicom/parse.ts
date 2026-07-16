@@ -270,6 +270,12 @@ function computeFrameAngles(
       definedDetectorStartAngles.length < numDetectors ||
       new Set(definedDetectorStartAngles.map((a) => Math.round(normalizeAngle(a)))).size > 1;
 
+    console.log("[SPECT] rotationGroups:", JSON.stringify(rotationGroups));
+    console.log("[SPECT] definedDetectorStartAngles:", definedDetectorStartAngles);
+    console.log("[SPECT] detectorInfosEncodeHeadPositions:", detectorInfosEncodeHeadPositions);
+    console.log("[SPECT] angularViewVector (first 20):", angularViewVectorRaw?.slice(0, 20));
+    console.log("[SPECT] detectorVector (first 20):", detectorVector.slice(0, 20));
+
     const angles: number[] = new Array(numberOfFrames);
     for (let i = 0; i < numberOfFrames; i++) {
       const d = detectorVector[i];
@@ -291,6 +297,7 @@ function computeFrameAngles(
       }
       angles[i] = normalizeAngle(startAngleDeg + group.directionSign * group.angularStepDeg * viewIndex);
     }
+    console.log("[SPECT] computed angles (first 20):", angles.slice(0, 20).map((a) => +a.toFixed(1)));
     return angles;
   }
 
