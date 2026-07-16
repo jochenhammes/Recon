@@ -245,6 +245,7 @@ function computeFrameAngles(
   numberOfFrames: number,
   detectorVector: number[],
   detectorInfos: DetectorInfo[],
+  numDetectors: number,
 ): number[] {
   const rotationGroups = readRotationInformationSequence(dataSet);
   const rotationVectorRaw = readNumericArray(dataSet, TAG.RotationVector);
@@ -256,9 +257,15 @@ function computeFrameAngles(
     const groupCounters = new Map<string, number>();
     const angles: number[] = new Array(numberOfFrames);
     for (let i = 0; i < numberOfFrames; i++) {
+      const d = detectorVector[i];
       const rotationIndex1Based = rotationVector[i] ?? 1;
       const group = rotationGroups[rotationIndex1Based - 1] ?? rotationGroups[0];
-      const startAngleDeg = detectorInfos[detectorVector[i]]?.startAngleDeg ?? group.startAngleDeg;
+      // Per-detector StartAngle from DetectorInformationSequence takes precedence. Without it, fall
+      // back to evenly-spaced detector mounting positions (d × 360°/N), which is correct for
+      // standard N-head geometries (dual-head 180°-opposed, triple-head 120°, etc.). Using only
+      // the shared group startAngle for all detectors would assign identical angle sequences to
+      // both heads, causing every real voxel to ghost at its 180°-rotated position in the FBP image.
+      const startAngleDeg = detectorInfos[d]?.startAngleDeg ?? (group.startAngleDeg + d * (360 / numDetectors));
       let viewIndex: number;
       if (angularViewVectorRaw && angularViewVectorRaw[i] !== undefined) {
         viewIndex = angularViewVectorRaw[i] - 1;
@@ -282,7 +289,7 @@ function computeFrameAngles(
     const total = framesPerDetector.get(d) ?? numberOfFrames;
     const seen = seenPerDetector.get(d) ?? 0;
     seenPerDetector.set(d, seen + 1);
-    angles[i] = normalizeAngle((360 * seen) / total);
+    angles[i] = normalizeAngle(d * (360 / numDetectors) + (360 * seen) / total);
   }
   return angles;
 }
@@ -459,7 +466,7 @@ export function parseSpectDicom(arrayBuffer: ArrayBuffer, fileName: string): Spe
   const detectorInfos = readDetectorInformationSequence(dataSet);
   const columnFlips = detectorColumnFlips(detectorInfos, numDetectors);
 
-  const angles = computeFrameAngles(dataSet, numberOfFrames, detectorVector, detectorInfos);
+  const angles = computeFrameAngles(dataSet, numberOfFrames, detectorVector, detectorInfos, numDetectors);
   const pixelFrames = readPixelFrames(dataSet, byteArray, numberOfFrames, rows, cols);
 
   const frames: ProjectionFrame[] = pixelFrames.map((pixels, i) => ({
