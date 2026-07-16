@@ -203,10 +203,30 @@ function readDetectorInformationSequence(dataSet: DataSet): DetectorInfo[] {
  * shared sinogram. Mechanically opposed detector heads commonly face the patient from opposite
  * sides, so their row-direction (ImageOrientationPatient) is flipped relative to a reference head;
  * left unmirrored, this would merge geometrically inconsistent column conventions into one sinogram.
+ *
+ * Exception: for ~180°-opposed dual-head configurations (e.g. standard Siemens H-SPECT), the
+ * scanner stores pixel data in the patient frame with a consistent column direction across all
+ * heads regardless of their physical orientation. In that case the IOP row-directions are
+ * naturally opposite — but no flip is needed, because the Radon conjugate relation
+ * g(θ+180°, t) = g(θ, −t) keeps both heads geometrically consistent without mirroring.
+ * Applying a flip here would instead shift every Det-1 projection by 180°, causing the
+ * characteristic starburst / AP-ghost artifact in the FBP reconstruction.
  */
 function detectorColumnFlips(detectorInfos: DetectorInfo[], numDetectors: number): boolean[] {
-  const reference = detectorInfos[0]?.rowDirection;
   const flips: boolean[] = new Array(numDetectors).fill(false);
+
+  // Skip IOP-based flipping for ~180°-opposed heads: their data is already in the patient frame.
+  if (numDetectors >= 2) {
+    const startAngles = Array.from({ length: numDetectors }, (_, i) => detectorInfos[i]?.startAngleDeg);
+    if (startAngles.every((a): a is number => a !== undefined)) {
+      for (let d = 1; d < numDetectors; d++) {
+        const diff = normalizeAngle(startAngles[d] - startAngles[0]);
+        if (Math.abs(diff - 180) < 20) return flips;
+      }
+    }
+  }
+
+  const reference = detectorInfos[0]?.rowDirection;
   if (!reference) return flips;
   for (let d = 0; d < numDetectors; d++) {
     const rowDirection = detectorInfos[d]?.rowDirection;
