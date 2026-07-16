@@ -193,6 +193,46 @@ describe("parseSpectDicom", () => {
     expect(Array.from(set.frames[1].pixels)).toEqual([3, 2, 1, 6, 5, 4]);
   });
 
+  it("does NOT flip columns for ~180°-opposed heads despite opposite ImageOrientationPatient row-directions", () => {
+    // Regression test for the AP-ghost / starburst artifact:
+    // Siemens H-SPECT stores all frames in the patient frame (consistent column direction),
+    // but DetectorInformationSequence.ImageOrientationPatient reflects each head's physical
+    // orientation at start — naturally opposite for 180°-opposed heads. The IOP-based flip
+    // must be suppressed when startAngles are ~180° apart; the Radon conjugate relation
+    // g(θ+180°, t) = g(θ, −t) keeps the data geometrically consistent without mirroring.
+    const rows = 2;
+    const cols = 3;
+    const detectorVector = [0, 1];
+    const detectorInfo = [
+      {
+        startAngleDeg: 180,
+        imageOrientationPatient: [1, 0, 0, 0, 1, 0] as [number, number, number, number, number, number],
+      },
+      {
+        startAngleDeg: 0,
+        imageOrientationPatient: [-1, 0, 0, 0, 1, 0] as [number, number, number, number, number, number],
+      },
+    ];
+    const det0Frame = [1, 2, 3, 4, 5, 6];
+    const det1Frame = [7, 8, 9, 10, 11, 12];
+    const bytes = buildSyntheticNmDicom({
+      rows,
+      cols,
+      pixelSpacingMm: [4.8, 4.8],
+      detectorVector,
+      frameValues: [0, 0],
+      numDetectors: 2,
+      detectorInfo,
+      framePixelsOverride: [det0Frame, det1Frame],
+    });
+
+    const set = parseSpectDicom(bytes, "synthetic-180-opposed.dcm");
+
+    // Neither detector should be flipped: data is in patient frame despite opposite IOP.
+    expect(Array.from(set.frames[0].pixels)).toEqual(det0Frame);
+    expect(Array.from(set.frames[1].pixels)).toEqual(det1Frame);
+  });
+
   it("rejects single-frame files", () => {
     const bytes = buildSyntheticNmDicom({
       rows: 2,
