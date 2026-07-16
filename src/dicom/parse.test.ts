@@ -39,7 +39,8 @@ describe("parseSpectDicom", () => {
     const det0Angles = set.frames.filter((f) => f.detector === 0).map((f) => f.angleDeg);
     const det1Angles = set.frames.filter((f) => f.detector === 1).map((f) => f.angleDeg);
     expect(det0Angles).toEqual([0, 90, 180, 270]);
-    expect(det1Angles).toEqual([0, 90, 180, 270]);
+    // Detector 1 is offset by 360°/2 = 180° (evenly-spaced dual-head fallback).
+    expect(det1Angles).toEqual([180, 270, 0, 90]);
   });
 
   it("parses angles from RotationInformationSequence + AngularViewVector", () => {
@@ -57,12 +58,46 @@ describe("parseSpectDicom", () => {
       rotationGroups: [{ startAngleDeg: 0, angularStepDeg: 15, direction: "CCW", framesInRotation: 4 }],
       rotationVector: detectorVector.map(() => 1),
       angularViewVector,
+      // Explicit per-detector start angles so this test stays focused on AngularViewVector mapping.
+      detectorInfo: [{ startAngleDeg: 0 }, { startAngleDeg: 0 }],
     });
 
     const set = parseSpectDicom(bytes, "synthetic-rotation.dcm");
 
     const anglesInFrameOrder = set.frames.map((f) => f.angleDeg);
     expect(anglesInFrameOrder).toEqual([0, 0, 15, 15, 30, 30, 45, 45]);
+  });
+
+  it("falls back to evenly-spaced detector offsets (360/N) when DetectorInformationSequence has no StartAngle", () => {
+    // Reproduces the common real-world case: RotationInformationSequence is present, but
+    // DetectorInformationSequence is absent. Without the fallback offset, both detectors would
+    // receive identical angle sequences and the FBP would double-expose every voxel at its
+    // 180°-rotated mirror position (anterior-posterior ghost image).
+    const rows = 2;
+    const cols = 2;
+    const detectorVector = [0, 1, 0, 1, 0, 1];
+    const angularViewVector = [1, 1, 2, 2, 3, 3];
+    const bytes = buildSyntheticNmDicom({
+      rows,
+      cols,
+      pixelSpacingMm: [4.8, 4.8],
+      detectorVector,
+      frameValues: detectorVector.map(() => 1),
+      numDetectors: 2,
+      rotationGroups: [{ startAngleDeg: 0, angularStepDeg: 30, direction: "CCW", framesInRotation: 3 }],
+      rotationVector: detectorVector.map(() => 1),
+      angularViewVector,
+      // No detectorInfo supplied → no per-detector StartAngle in DetectorInformationSequence.
+    });
+
+    const set = parseSpectDicom(bytes, "synthetic-no-detectorinfo.dcm");
+
+    const det0Angles = set.frames.filter((f) => f.detector === 0).map((f) => f.angleDeg);
+    const det1Angles = set.frames.filter((f) => f.detector === 1).map((f) => f.angleDeg);
+    // Detector 0: 0°, 30°, 60° (from group start).
+    expect(det0Angles).toEqual([0, 30, 60]);
+    // Detector 1: group start + 180° fallback offset → 180°, 210°, 240°.
+    expect(det1Angles).toEqual([180, 210, 240]);
   });
 
   it("offsets each detector's angles by its own DetectorInformationSequence StartAngle", () => {
