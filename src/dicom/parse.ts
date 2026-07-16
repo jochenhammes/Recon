@@ -275,6 +275,16 @@ function computeFrameAngles(
     console.log("[SPECT] detectorInfosEncodeHeadPositions:", detectorInfosEncodeHeadPositions);
     console.log("[SPECT] angularViewVector (first 20):", angularViewVectorRaw?.slice(0, 20));
     console.log("[SPECT] detectorVector (first 20):", detectorVector.slice(0, 20));
+    // Log the boundary between detector blocks so we can verify angularViewVector handling.
+    const boundaryStart = Math.max(0, Math.floor(numberOfFrames / numDetectors) - 3);
+    console.log(
+      `[SPECT] detectorVector frames ${boundaryStart}-${boundaryStart + 7}:`,
+      detectorVector.slice(boundaryStart, boundaryStart + 8),
+    );
+    console.log(
+      `[SPECT] angularViewVector frames ${boundaryStart}-${boundaryStart + 7}:`,
+      angularViewVectorRaw?.slice(boundaryStart, boundaryStart + 8),
+    );
 
     const angles: number[] = new Array(numberOfFrames);
     for (let i = 0; i < numberOfFrames; i++) {
@@ -298,6 +308,11 @@ function computeFrameAngles(
       angles[i] = normalizeAngle(startAngleDeg + group.directionSign * group.angularStepDeg * viewIndex);
     }
     console.log("[SPECT] computed angles (first 20):", angles.slice(0, 20).map((a) => +a.toFixed(1)));
+    // Log the first few angles of every detector head so we can confirm head-specific coverage.
+    for (let d = 0; d < numDetectors; d++) {
+      const headAngles = angles.map((a, i) => (detectorVector[i] === d ? a : null)).filter((a) => a !== null);
+      console.log(`[SPECT] Det ${d} angles (first 5):`, headAngles.slice(0, 5).map((a) => +a!.toFixed(1)));
+    }
     return angles;
   }
 
@@ -487,6 +502,8 @@ export function parseSpectDicom(arrayBuffer: ArrayBuffer, fileName: string): Spe
 
   const detectorInfos = readDetectorInformationSequence(dataSet);
   const columnFlips = detectorColumnFlips(detectorInfos, numDetectors);
+  console.log("[SPECT] detectorInfos rowDirections:", detectorInfos.map((d) => d.rowDirection ?? null));
+  console.log("[SPECT] columnFlips:", columnFlips);
 
   const angles = computeFrameAngles(dataSet, numberOfFrames, detectorVector, detectorInfos, numDetectors);
   const pixelFrames = readPixelFrames(dataSet, byteArray, numberOfFrames, rows, cols);
