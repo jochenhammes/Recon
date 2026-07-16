@@ -29,6 +29,19 @@ export function ReconControls({ projectionSet, busy, progress, onStart, onCancel
   const minAngle = Math.min(...projectionSet.frames.map((f) => f.angleDeg));
   const maxAngle = Math.max(...projectionSet.frames.map((f) => f.angleDeg));
 
+  const detectorSummaries = Array.from({ length: projectionSet.numDetectors }, (_, d) => {
+    const frames = projectionSet.frames.filter((f) => f.detector === d);
+    const angles = frames.map((f) => f.angleDeg);
+    const uniqueAngles = new Set(angles.map((a) => Math.round(a)));
+    return {
+      d,
+      count: frames.length,
+      unique: uniqueAngles.size,
+      min: angles.length ? Math.min(...angles) : 0,
+      max: angles.length ? Math.max(...angles) : 0,
+    };
+  });
+
   return (
     <div className="recon-controls">
       <h2>Akquisition</h2>
@@ -42,6 +55,15 @@ export function ReconControls({ projectionSet, busy, progress, onStart, onCancel
         <dt>Winkelbereich</dt>
         <dd>
           {minAngle.toFixed(1)}° – {maxAngle.toFixed(1)}°
+        </dd>
+        <dt>Winkel je Kopf</dt>
+        <dd>
+          {detectorSummaries.map((s) => (
+            <div key={s.d}>
+              Kopf {s.d + 1}: {s.min.toFixed(0)}°–{s.max.toFixed(0)}°
+              {s.unique !== s.count && <span style={{ color: "orange" }}> ({s.unique} eindeutig / {s.count} frames)</span>}
+            </div>
+          ))}
         </dd>
         <dt>Bildgröße</dt>
         <dd>
