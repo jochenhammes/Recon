@@ -12,11 +12,13 @@ export interface ReconControlsProps {
 }
 
 const FILTERS: { value: RampFilterType; label: string }[] = [
-  { value: "ramp", label: "Ram-Lak (ungefiltert, scharf)" },
+  { value: "ramp", label: "Ram-Lak (scharf, rauschreich)" },
   { value: "shepp-logan", label: "Shepp-Logan" },
   { value: "cosine", label: "Cosine" },
   { value: "hamming", label: "Hamming" },
-  { value: "hann", label: "Hann (glatt, rauscharm)" },
+  { value: "hann", label: "Hann (glatt)" },
+  { value: "hann-half", label: "Hann ×0,5 (sehr weich)" },
+  { value: "butterworth", label: "Butterworth (extra weich)" },
 ];
 
 export function ReconControls({ projectionSet, busy, progress, onStart, onCancel }: ReconControlsProps) {

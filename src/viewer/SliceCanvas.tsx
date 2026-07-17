@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import type { ColorLut } from "./volume";
 import { windowLevelToRgba } from "./volume";
 
 export interface SliceCanvasProps {
@@ -9,6 +10,7 @@ export interface SliceCanvasProps {
   pixelAspectRatio?: number;
   windowMin: number;
   windowMax: number;
+  colorLut?: ColorLut;
   crosshairCol?: number;
   crosshairRow?: number;
   onCrosshairChange?: (col: number, row: number) => void;
@@ -25,6 +27,7 @@ export function SliceCanvas({
   pixelAspectRatio = 1,
   windowMin,
   windowMax,
+  colorLut = "gray",
   crosshairCol,
   crosshairRow,
   onCrosshairChange,
@@ -45,7 +48,7 @@ export function SliceCanvas({
     offscreen.width = width;
     offscreen.height = height;
     const offCtx = offscreen.getContext("2d")!;
-    const rgba = windowLevelToRgba(data, windowMin, windowMax);
+    const rgba = windowLevelToRgba(data, windowMin, windowMax, colorLut);
     offCtx.putImageData(new ImageData(rgba, width, height), 0, 0);
 
     const canvas = canvasRef.current;
@@ -69,7 +72,7 @@ export function SliceCanvas({
       ctx.lineTo(canvasW, py + 0.5);
       ctx.stroke();
     }
-  }, [data, width, height, windowMin, windowMax, crosshairCol, crosshairRow, canvasW, canvasH]);
+  }, [data, width, height, windowMin, windowMax, colorLut, crosshairCol, crosshairRow, canvasW, canvasH]);
 
   function toDataCoords(clientX: number, clientY: number): [number, number] {
     const canvas = canvasRef.current!;

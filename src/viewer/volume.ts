@@ -123,11 +123,64 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
 }
 
-/** Maps a float slice buffer to an 8-bit grayscale ImageData-ready Uint8ClampedArray (RGBA). */
+export type ColorLut = "gray" | "inverted" | "rainbow" | "kidney";
+
+function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
+  const c = v * s;
+  const hp = h / 60;
+  const x = c * (1 - Math.abs((hp % 2) - 1));
+  const m = v - c;
+  let r1 = 0, g1 = 0, b1 = 0;
+  const sector = Math.floor(hp) % 6;
+  if (sector === 0) { r1 = c; g1 = x; }
+  else if (sector === 1) { r1 = x; g1 = c; }
+  else if (sector === 2) { g1 = c; b1 = x; }
+  else if (sector === 3) { g1 = x; b1 = c; }
+  else if (sector === 4) { r1 = x; b1 = c; }
+  else { r1 = c; b1 = x; }
+  return [Math.round((r1 + m) * 255), Math.round((g1 + m) * 255), Math.round((b1 + m) * 255)];
+}
+
+function buildRainbowLut(): Uint8Array {
+  const t = new Uint8Array(256 * 3);
+  for (let i = 0; i < 256; i++) {
+    const h = ((255 - i) / 255) * 240;
+    const [r, g, b] = hsvToRgb(h, 1, 1);
+    t[i * 3] = r; t[i * 3 + 1] = g; t[i * 3 + 2] = b;
+  }
+  return t;
+}
+
+function buildKidneyLut(): Uint8Array {
+  // Hot-body: black → red → yellow → white.
+  const stops: [number, number, number, number][] = [
+    [0, 0, 0, 0], [85, 255, 0, 0], [170, 255, 255, 0], [255, 255, 255, 255],
+  ];
+  const t = new Uint8Array(256 * 3);
+  for (let i = 0; i < 256; i++) {
+    let k = stops.length - 2;
+    for (let s = 0; s < stops.length - 1; s++) {
+      if (i <= stops[s + 1][0]) { k = s; break; }
+    }
+    const [v0, r0, g0, b0] = stops[k];
+    const [v1, r1, g1, b1] = stops[k + 1];
+    const tf = (i - v0) / (v1 - v0);
+    t[i * 3] = Math.round(r0 + tf * (r1 - r0));
+    t[i * 3 + 1] = Math.round(g0 + tf * (g1 - g0));
+    t[i * 3 + 2] = Math.round(b0 + tf * (b1 - b0));
+  }
+  return t;
+}
+
+const RAINBOW_LUT = buildRainbowLut();
+const KIDNEY_LUT = buildKidneyLut();
+
+/** Maps a float slice buffer to RGBA (ImageData-ready) using window/level and an optional color LUT. */
 export function windowLevelToRgba(
   slice: Float32Array,
   windowMin: number,
   windowMax: number,
+  colorLut: ColorLut = "gray",
 ): Uint8ClampedArray<ArrayBuffer> {
   const out = new Uint8ClampedArray(slice.length * 4);
   const range = Math.max(windowMax - windowMin, 1e-6);
@@ -135,9 +188,16 @@ export function windowLevelToRgba(
     const norm = clamp((slice[i] - windowMin) / range, 0, 1);
     const v = Math.round(norm * 255);
     const o = i * 4;
-    out[o] = v;
-    out[o + 1] = v;
-    out[o + 2] = v;
+    if (colorLut === "inverted") {
+      const iv = 255 - v;
+      out[o] = iv; out[o + 1] = iv; out[o + 2] = iv;
+    } else if (colorLut === "rainbow") {
+      out[o] = RAINBOW_LUT[v * 3]; out[o + 1] = RAINBOW_LUT[v * 3 + 1]; out[o + 2] = RAINBOW_LUT[v * 3 + 2];
+    } else if (colorLut === "kidney") {
+      out[o] = KIDNEY_LUT[v * 3]; out[o + 1] = KIDNEY_LUT[v * 3 + 1]; out[o + 2] = KIDNEY_LUT[v * 3 + 2];
+    } else {
+      out[o] = v; out[o + 1] = v; out[o + 2] = v;
+    }
     out[o + 3] = 255;
   }
   return out;
