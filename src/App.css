@@ -165,6 +165,24 @@
   text-align: center;
 }
 
+/* Upload separator */
+
+.upload-separator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.upload-separator::before,
+.upload-separator::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
 /* Export panel */
 
 .export-panel {
@@ -198,6 +216,17 @@
   align-items: center;
   gap: 16px;
   font-size: 13px;
+}
+
+.lut-select {
+  font: inherit;
+  font-size: 13px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  cursor: pointer;
 }
 
 .viewer-hint {

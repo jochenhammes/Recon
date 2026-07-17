@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { SliceCanvas } from "./SliceCanvas";
 import { MipCanvas } from "./MipCanvas";
-import type { Volume3D } from "./volume";
+import type { ColorLut, Volume3D } from "./volume";
 
 export interface FourPanelViewerProps {
   volume: Volume3D;
@@ -25,6 +25,7 @@ export function FourPanelViewer({ volume }: FourPanelViewerProps) {
   }, [volume]);
   const [windowMin, setWindowMin] = useState(defaultWindow.min);
   const [windowMax, setWindowMax] = useState(defaultWindow.max);
+  const [colorLut, setColorLut] = useState<ColorLut>("gray");
 
   function clampCursor(next: Partial<Cursor>): Cursor {
     return {
@@ -58,6 +59,16 @@ export function FourPanelViewer({ volume }: FourPanelViewerProps) {
           Fenster: {(windowMax - windowMin).toFixed(1)} &nbsp; Level: {((windowMin + windowMax) / 2).toFixed(1)}
         </span>
         <button onClick={resetWindowLevel}>W/L zurücksetzen</button>
+        <select
+          className="lut-select"
+          value={colorLut}
+          onChange={(e) => setColorLut(e.target.value as ColorLut)}
+        >
+          <option value="gray">Grau</option>
+          <option value="inverted">Invertiert</option>
+          <option value="rainbow">Regenbogen</option>
+          <option value="kidney">Kidney</option>
+        </select>
         <span className="viewer-hint">
           Linksklick/Ziehen: Fadenkreuz · Rechtsklick/Ziehen (oder Alt): Fenster/Level · Mausrad: Slice
         </span>
@@ -72,6 +83,7 @@ export function FourPanelViewer({ volume }: FourPanelViewerProps) {
             pixelAspectRatio={spacingY / spacingX}
             windowMin={windowMin}
             windowMax={windowMax}
+            colorLut={colorLut}
             crosshairCol={cursor.x}
             crosshairRow={cursor.y}
             onCrosshairChange={(col, row) => setCursor(clampCursor({ x: col, y: row }))}
@@ -90,6 +102,7 @@ export function FourPanelViewer({ volume }: FourPanelViewerProps) {
             pixelAspectRatio={spacingZ / spacingY}
             windowMin={windowMin}
             windowMax={windowMax}
+            colorLut={colorLut}
             crosshairCol={cursor.y}
             crosshairRow={cursor.z}
             onCrosshairChange={(col, row) => setCursor(clampCursor({ y: col, z: row }))}
@@ -108,6 +121,7 @@ export function FourPanelViewer({ volume }: FourPanelViewerProps) {
             pixelAspectRatio={spacingZ / spacingX}
             windowMin={windowMin}
             windowMax={windowMax}
+            colorLut={colorLut}
             crosshairCol={cursor.x}
             crosshairRow={cursor.z}
             onCrosshairChange={(col, row) => setCursor(clampCursor({ x: col, z: row }))}
@@ -115,7 +129,7 @@ export function FourPanelViewer({ volume }: FourPanelViewerProps) {
             onWindowLevelDrag={adjustWindowLevel}
           />
         </div>
-        <MipCanvas volume={volume} windowMin={windowMin} windowMax={windowMax} onWindowLevelDrag={adjustWindowLevel} />
+        <MipCanvas volume={volume} windowMin={windowMin} windowMax={windowMax} colorLut={colorLut} onWindowLevelDrag={adjustWindowLevel} />
       </div>
     </div>
   );

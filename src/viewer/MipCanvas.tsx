@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SliceCanvas } from "./SliceCanvas";
-import type { Volume3D } from "./volume";
+import type { ColorLut, Volume3D } from "./volume";
 
 export interface MipCanvasProps {
   volume: Volume3D;
   windowMin: number;
   windowMax: number;
+  colorLut?: ColorLut;
   onWindowLevelDrag?: (deltaWindow: number, deltaLevel: number) => void;
 }
 
-export function MipCanvas({ volume, windowMin, windowMax, onWindowLevelDrag }: MipCanvasProps) {
+export function MipCanvas({ volume, windowMin, windowMax, colorLut, onWindowLevelDrag }: MipCanvasProps) {
   const [azimuthDeg, setAzimuthDeg] = useState(0);
   const [autoRotate, setAutoRotate] = useState(false);
   const rafRef = useRef<number | null>(null);
@@ -50,6 +51,7 @@ export function MipCanvas({ volume, windowMin, windowMax, onWindowLevelDrag }: M
         pixelAspectRatio={pixelAspectRatio}
         windowMin={windowMin}
         windowMax={windowMax}
+        colorLut={colorLut}
         onScrollSlice={(dir) => {
           setAutoRotate(false);
           setAzimuthDeg((a) => (a + dir * 5 + 360) % 360);

@@ -52,7 +52,7 @@ export function nextPow2(n: number): number {
   return p;
 }
 
-export type RampFilterType = "ramp" | "shepp-logan" | "cosine" | "hamming" | "hann";
+export type RampFilterType = "ramp" | "shepp-logan" | "cosine" | "hamming" | "hann" | "hann-half" | "butterworth";
 
 /**
  * Builds the frequency-domain ramp filter response |f| * window(f), sampled at `size` FFT bins
@@ -81,6 +81,14 @@ export function buildRampFilterKernel(size: number, filterType: RampFilterType):
         break;
       case "hann":
         w = 0.5 + 0.5 * Math.cos(2 * Math.PI * f);
+        break;
+      case "hann-half":
+        // Hann window cut at half Nyquist (fc=0.25): much stronger noise suppression.
+        w = af <= 0.25 ? 0.5 + 0.5 * Math.cos(Math.PI * af / 0.25) : 0;
+        break;
+      case "butterworth":
+        // Butterworth low-pass, order 5, cutoff at 0.175 (35 % of Nyquist).
+        w = 1 / (1 + Math.pow(af / 0.175, 10));
         break;
     }
     kernel[k] = af * w;

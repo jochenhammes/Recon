@@ -5,7 +5,7 @@ import { buildNiftiFile } from "../export/niftiWriter";
 
 export interface ExportPanelProps {
   volume: Volume3D;
-  reconParams: ReconParams;
+  reconParams?: ReconParams;
   sourceFileName: string;
 }
 
@@ -15,9 +15,12 @@ const FILTER_LABELS: Record<string, string> = {
   cosine: "Cosine",
   hamming: "Hamming",
   hann: "Hann",
+  "hann-half": "Hann ×0,5",
+  butterworth: "Butterworth",
 };
 
-function describeRecon(params: ReconParams): string {
+function describeRecon(params: ReconParams | undefined): string {
+  if (!params) return "SPECT-Rekonstruktion";
   return params.algorithm === "fbp"
     ? `FBP (${FILTER_LABELS[params.filterType] ?? params.filterType})`
     : `OSEM (${params.numSubsets} Subsets, ${params.numIterations} Iterationen)`;
