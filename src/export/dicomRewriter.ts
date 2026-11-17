@@ -165,3 +165,21 @@ export function formatDS(v: number): string {
   }
   return v.toExponential(6);
 }
+
+/** Encodes one element (header + value) for use inside a sequence item. */
+export function encodeElementBytes(group: number, element: number, ov: ValueOverride, explicit: boolean): Uint8Array {
+  return encodeElement(tagKey(group, element), ov, explicit);
+}
+
+/** SQ value with defined-length items, each item given as its concatenated encoded elements. */
+export function sequenceValue(items: Uint8Array[]): ValueOverride {
+  return {
+    vr: "SQ",
+    value: concatBytes(items.map((content) => concatBytes([u16le(0xfffe), u16le(0xe000), u32le(content.length), content]))),
+  };
+}
+
+/** Multi-valued US element value. */
+export function usArrayValue(values: number[]): ValueOverride {
+  return { vr: "US", value: concatBytes(values.map((v) => u16le(v))) };
+}

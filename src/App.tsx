@@ -518,7 +518,18 @@ function App() {
         </>
       ),
     },
-    { id: "export", label: "Export", icon: Download, disabled: !dataset, content: dataset && <ExportPanel dataset={dataset} /> },
+    {
+      id: "export",
+      label: "Export",
+      icon: Download,
+      disabled: !dataset,
+      content: dataset && (
+        <ExportPanel
+          dataset={dataset}
+          fusion={functional && anatomical && functionalW2v ? { functional: functional.dataset, anatomical: anatomical.dataset, functionalW2v } : undefined}
+        />
+      ),
+    },
   ];
 
   const roles = (["functional", "anatomical"] as Role[]).filter((r) => slots[r]);

@@ -31,7 +31,7 @@ export interface EditedDicomResult {
   warnings: string[];
 }
 
-const T = {
+export const T = {
   MediaStorageSopInstanceUid: tagKey(0x0002, 0x0003),
   TransferSyntaxUid: tagKey(0x0002, 0x0010),
   ImageType: tagKey(0x0008, 0x0008),
@@ -119,7 +119,7 @@ function sameStoredEncoding(a: EncodedPixels, b: EncodedPixels): boolean {
 }
 
 /** Linear window covering the full range of (finite) real values. */
-function realWindow(data: Float32Array): { center: number; width: number } {
+export function realWindow(data: Float32Array): { center: number; width: number } {
   let min = Infinity;
   let max = -Infinity;
   for (let i = 0; i < data.length; i++) {
@@ -133,7 +133,7 @@ function realWindow(data: Float32Array): { center: number; width: number } {
 }
 
 /** US/SS value for the pixel-value range tags, whose VR follows PixelRepresentation. */
-function pixelValue(v: number, pixelRepresentation: number): { vr: string; value: Uint8Array } {
+export function pixelValue(v: number, pixelRepresentation: number): { vr: string; value: Uint8Array } {
   const value = new Uint8Array(2);
   const dv = new DataView(value.buffer);
   if (pixelRepresentation === 1) dv.setInt16(0, v, true);

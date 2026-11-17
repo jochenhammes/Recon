@@ -109,6 +109,34 @@ export function Viewer(props: ViewerProps) {
     );
 
   const others = GRID_ORDER.filter((k) => k !== focusView);
+  const layoutRef = useRef<HTMLDivElement>(null);
+
+  /** Saves the visible views (as rendered, incl. overlays) as one PNG. */
+  function screenshot() {
+    const root = layoutRef.current;
+    if (!root) return;
+    const dpr = window.devicePixelRatio || 1;
+    const rootRect = root.getBoundingClientRect();
+    const out = document.createElement("canvas");
+    out.width = Math.round(rootRect.width * dpr);
+    out.height = Math.round(rootRect.height * dpr);
+    const ctx = out.getContext("2d")!;
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, out.width, out.height);
+    root.querySelectorAll("canvas").forEach((c) => {
+      const r = c.getBoundingClientRect();
+      ctx.drawImage(c, Math.round((r.left - rootRect.left) * dpr), Math.round((r.top - rootRect.top) * dpr), Math.round(r.width * dpr), Math.round(r.height * dpr));
+    });
+    out.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `recon-studio-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }, "image/png");
+  }
   const statusPoint = hover ?? cursor;
 
   return (
@@ -139,12 +167,15 @@ export function Viewer(props: ViewerProps) {
         <button onClick={() => setTransforms({ axial: IDENTITY_TRANSFORM, coronal: IDENTITY_TRANSFORM, sagittal: IDENTITY_TRANSFORM, mip: IDENTITY_TRANSFORM })}>
           Zoom zurücksetzen
         </button>
+        <button onClick={screenshot} title="Aktuelle Ansicht als PNG speichern">
+          Screenshot
+        </button>
         {props.toolbar}
         <span className="viewer-hint">
           Klick: Fadenkreuz · Mausrad: Schicht · Strg+Mausrad: Zoom · Rechts ziehen: Fenster · Shift/Mitte ziehen: verschieben · Doppelklick: maximieren
         </span>
       </div>
-      <div className={`viewer-layout layout-${layout}`}>
+      <div ref={layoutRef} className={`viewer-layout layout-${layout}`}>
         {layout === "grid" && GRID_ORDER.map(renderView)}
         {layout === "single" && renderView(focusView)}
         {layout === "focus" && (
