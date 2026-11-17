@@ -2,6 +2,19 @@ import * as dicomParser from "dicom-parser";
 import { Volume3D } from "./volume";
 import type { DicomPixelEncoding, DicomSourceFile, NiftiSourceInfo, VolumeSource } from "../dataset/types";
 import { PixelDecodeError, decodePixelFrames, describeParseError } from "../dicom/pixelDecode";
+import {
+  type Vec3,
+  type VolumeGeometry,
+  add,
+  cross,
+  dot,
+  geometryFromDicom,
+  geometryFromNiftiQform,
+  geometryFromNiftiSform,
+  identityGeometry,
+  normalize,
+  scale,
+} from "../core/geometry";
 
 export class VolumeLoadError extends Error {
   constructor(message: string) {
@@ -145,7 +158,23 @@ export function parseNifti1(buffer: ArrayBuffer): { volume: Volume3D; nifti: Nif
     sclSlope,
     sclInter,
   };
-  return { volume: new Volume3D(data, nz, ny, nx, [dz, dy, dx]), nifti };
+  return { volume: new Volume3D(data, nz, ny, nx, [dz, dy, dx], readNiftiGeometry(view, littleEndian, [dx, dy, dz])), nifti };
+}
+
+/** sform (preferred) or qform geometry; axis-aligned pixdim fallback if neither is set. */
+function readNiftiGeometry(view: DataView, le: boolean, pixdim: Vec3): VolumeGeometry {
+  const qformCode = view.getInt16(252, le);
+  const sformCode = view.getInt16(254, le);
+  if (sformCode > 0) {
+    const srow: number[] = [];
+    for (let i = 0; i < 12; i++) srow.push(view.getFloat32(280 + i * 4, le));
+    if (srow.every(Number.isFinite) && srow.some((v, i) => i % 4 !== 3 && v !== 0)) return geometryFromNiftiSform(srow);
+  }
+  if (qformCode > 0) {
+    const f = (o: number) => view.getFloat32(o, le);
+    return geometryFromNiftiQform(f(256), f(260), f(264), [f(268), f(272), f(276)], pixdim, f(76));
+  }
+  return identityGeometry(pixdim);
 }
 
 // ─── DICOM ───────────────────────────────────────────────────────────────────
@@ -157,6 +186,12 @@ interface ParsedDicomFile {
   rows: number;
   cols: number;
   spacing: [number, number, number];
+  pixelSpacing: [number, number];
+  /** ImageOrientationPatient (6 values) if known. */
+  iop?: number[];
+  /** ImagePositionPatient of each frame, if known. */
+  positions?: Vec3[];
+  frameOfReferenceUid?: string;
   instanceNumber: number;
   sliceLocation: number;
   frames: Float32Array[];
@@ -166,10 +201,20 @@ async function loadDicomVolume(files: File[]): Promise<LoadedVolume> {
   if (files.length === 0) throw new VolumeLoadError("Keine Dateien ausgewählt.");
   const parsed = await Promise.all(files.map(parseDicomFile));
 
+  // Sort by position along the slice normal when patient coordinates are known, else by
+  // InstanceNumber / SliceLocation.
+  const iop = parsed[0].iop;
+  const withPositions = iop && parsed.every((p) => p.positions && p.positions.length > 0);
   if (parsed.length > 1) {
-    parsed.sort((a, b) =>
-      a.instanceNumber !== b.instanceNumber ? a.instanceNumber - b.instanceNumber : a.sliceLocation - b.sliceLocation,
-    );
+    if (withPositions) {
+      const normal = cross([iop[0], iop[1], iop[2]], [iop[3], iop[4], iop[5]]);
+      const key = (p: ParsedDicomFile) => dot(p.positions![0], normal);
+      parsed.sort((a, b) => key(a) - key(b) || a.instanceNumber - b.instanceNumber);
+    } else {
+      parsed.sort((a, b) =>
+        a.instanceNumber !== b.instanceNumber ? a.instanceNumber - b.instanceNumber : a.sliceLocation - b.sliceLocation,
+      );
+    }
   }
   const { rows, cols } = parsed[0];
   if (!parsed.every((p) => p.rows === rows && p.cols === cols))
@@ -189,7 +234,16 @@ async function loadDicomVolume(files: File[]): Promise<LoadedVolume> {
     }
   }
 
-  const volume = new Volume3D(data, nz, rows, cols, parsed[0].spacing);
+  const geometry = withPositions
+    ? geometryFromDicom(
+        iop,
+        parsed[0].pixelSpacing,
+        parsed.flatMap((p) => p.positions!),
+        parsed[0].spacing[0],
+        parsed[0].frameOfReferenceUid,
+      )
+    : undefined;
+  const volume = new Volume3D(data, nz, rows, cols, parsed[0].spacing, geometry);
   return {
     volume,
     source: { kind: "dicom", layout: parsed.length > 1 ? "series" : "multiframe", files: parsed.map((p) => p.file) },
@@ -256,11 +310,18 @@ async function parseDicomFile(file: File): Promise<ParsedDicomFile> {
   }
   if (encoding.bitsStored < bitsAllocated) maskStoredBits(frames, encoding);
 
+  const spacing = readDicomSpacing(dataSet);
+  const pixelSpacing: [number, number] = [spacing[1], spacing[2]];
+  const iop = readOrientation(dataSet);
   return {
     file: { fileName: file.name, bytes, dataSet, transferSyntax, zStart: 0, nFrames, encoding },
     rows,
     cols,
-    spacing: readDicomSpacing(dataSet),
+    spacing,
+    pixelSpacing,
+    iop,
+    positions: iop ? readFramePositions(dataSet, nFrames, iop, spacing[0]) : undefined,
+    frameOfReferenceUid: dataSet.string("x00200052")?.split(String.fromCharCode(0)).join("").trim() || undefined,
     instanceNumber: parseInt(dataSet.string("x00200013") ?? "0", 10) || 0,
     sliceLocation: parseFloat(dataSet.string("x00201041") ?? "0") || 0,
     frames,
@@ -278,6 +339,48 @@ function maskStoredBits(frames: Float32Array[], enc: DicomPixelEncoding): void {
       frame[i] = v;
     }
   }
+}
+
+function parseNumbers(s: string | undefined): number[] | undefined {
+  if (!s) return undefined;
+  const values = s.split("\\").map((v) => parseFloat(v));
+  return values.every(Number.isFinite) ? values : undefined;
+}
+
+function firstItem(dataSet: dicomParser.DataSet, tag: string): dicomParser.DataSet | undefined {
+  return dataSet.elements[tag]?.items?.[0]?.dataSet;
+}
+
+/** ImageOrientationPatient: top level, Shared Functional Groups, or NM Detector Information. */
+function readOrientation(dataSet: dicomParser.DataSet): number[] | undefined {
+  const candidates = [
+    dataSet,
+    firstItem(firstItem(dataSet, "x52009229") ?? dataSet, "x00209116"),
+    firstItem(dataSet, "x00540022"),
+  ];
+  for (const ds of candidates) {
+    const v = ds && parseNumbers(ds.string("x00200037"));
+    if (v && v.length === 6) return v;
+  }
+  return undefined;
+}
+
+/**
+ * ImagePositionPatient of every frame: per-frame functional groups if present, otherwise the
+ * top-level (or NM Detector Information) position of the first frame, with further frames stepped
+ * along row × column by the slice spacing (NM reconstructed multi-frame convention).
+ */
+function readFramePositions(dataSet: dicomParser.DataSet, nFrames: number, iop: number[], sliceSpacing: number): Vec3[] | undefined {
+  const perFrame = dataSet.elements["x52009230"]?.items;
+  if (perFrame && perFrame.length === nFrames) {
+    const positions = perFrame.map((it) => parseNumbers(firstItem(it.dataSet!, "x00209113")?.string("x00200032")));
+    if (positions.every((p) => p && p.length === 3)) return positions as Vec3[];
+  }
+  const first = parseNumbers(dataSet.string("x00200032")) ?? parseNumbers(firstItem(dataSet, "x00540022")?.string("x00200032"));
+  if (!first || first.length !== 3) return undefined;
+  const normal = normalize(cross([iop[0], iop[1], iop[2]], [iop[3], iop[4], iop[5]]));
+  const p0: Vec3 = [first[0], first[1], first[2]];
+  return Array.from({ length: nFrames }, (_, f) => add(p0, scale(normal, f * sliceSpacing)));
 }
 
 function readDicomSpacing(dataSet: dicomParser.DataSet): [number, number, number] {

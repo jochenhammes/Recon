@@ -1,5 +1,6 @@
 import type { Volume3D } from "../viewer/volume";
 import type { NiftiSourceInfo } from "../dataset/types";
+import { niftiQformFromGeometry, niftiSformFromGeometry } from "../core/geometry";
 
 const HEADER_SIZE = 348;
 const EXTENSION_SIZE = 4;
@@ -11,7 +12,7 @@ const NIFTI_UNITS_MM = 2;
 /**
  * Builds a single-file NIfTI-1 (.nii) volume from a reconstructed Volume3D.
  * Voxel data is written as float32 with no patient/identity information: only
- * dimensions, voxel spacing (mm) and a simple diagonal scanner-anat affine are stored.
+ * dimensions, voxel spacing (mm) and the patient-space orientation (sform/qform) are stored.
  */
 export function buildNiftiFile(volume: Volume3D): Uint8Array<ArrayBuffer> {
   const { nx, ny, nz, data, voxelSpacingMm } = volume;
@@ -46,26 +47,26 @@ export function buildNiftiFile(volume: Volume3D): Uint8Array<ArrayBuffer> {
   dv.setFloat32(112, 1, true); // scl_slope
   dv.setFloat32(116, 0, true); // scl_inter
 
-  writeAscii(dv, 148, 80, "Recon SPECT reconstruction (anonymized)");
+  writeAscii(dv, 148, 80, "Recon Studio export (anonymized)");
 
-  dv.setInt16(252, 0, true); // qform_code (no quaternion orientation tracked)
-  dv.setInt16(254, 1, true); // sform_code (scanner-anat)
-
-  // Diagonal affine: no patient-coordinate orientation/origin is tracked by this app.
-  dv.setFloat32(280, spacingX, true);
-  dv.setFloat32(284, 0, true);
-  dv.setFloat32(288, 0, true);
-  dv.setFloat32(292, 0, true);
-
-  dv.setFloat32(296, 0, true);
-  dv.setFloat32(300, spacingY, true);
-  dv.setFloat32(304, 0, true);
-  dv.setFloat32(308, 0, true);
-
-  dv.setFloat32(312, 0, true);
-  dv.setFloat32(316, 0, true);
-  dv.setFloat32(320, spacingZ, true);
-  dv.setFloat32(324, 0, true);
+  // Orientation: sform from the volume's patient geometry (LPS → RAS); qform as well if the axes
+  // are orthogonal. Code 1 = scanner-based anatomical coordinates.
+  const srow = niftiSformFromGeometry(volume.geometry);
+  for (let i = 0; i < 12; i++) dv.setFloat32(280 + i * 4, srow[i], true);
+  dv.setInt16(254, 1, true); // sform_code
+  const q = niftiQformFromGeometry(volume.geometry);
+  if (q) {
+    dv.setInt16(252, 1, true); // qform_code
+    dv.setFloat32(76, q.qfac, true); // pixdim[0] = qfac
+    dv.setFloat32(256, q.b, true);
+    dv.setFloat32(260, q.c, true);
+    dv.setFloat32(264, q.d, true);
+    dv.setFloat32(268, q.offset[0], true);
+    dv.setFloat32(272, q.offset[1], true);
+    dv.setFloat32(276, q.offset[2], true);
+  } else {
+    dv.setInt16(252, 0, true);
+  }
 
   dv.setUint8(123, NIFTI_UNITS_MM); // xyzt_units (spatial = mm, temporal = unknown)
 

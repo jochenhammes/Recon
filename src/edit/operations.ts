@@ -1,4 +1,4 @@
-import { Volume3D } from "../viewer/volume";
+import type { Volume3D } from "../viewer/volume";
 
 /** A single volume edit. Discriminated union so further operations can be added later. */
 export type EditOp = { type: "thresholdReplace"; threshold: number; value: number };
@@ -41,7 +41,7 @@ function thresholdReplace(volume: Volume3D, threshold: number, value: number): E
       affected++;
     }
   }
-  return { volume: new Volume3D(out, volume.nz, volume.ny, volume.nx, volume.voxelSpacingMm), affected };
+  return { volume: volume.withData(out), affected };
 }
 
 /** Display scaling for edit descriptions, e.g. SUV = raw × factor. */

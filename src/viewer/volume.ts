@@ -1,20 +1,46 @@
 import { quickselect } from "../analysis/stats";
+import { type VolumeGeometry, identityGeometry } from "../core/geometry";
 
-/** Reconstructed 3D volume, slice-major: data[(z * ny + y) * nx + x]. */
+/**
+ * 3D volume, slice-major: data[(z * ny + y) * nx + x], with its position in patient space.
+ * Index axes: x = column, y = row, z = slice (see VolumeGeometry).
+ */
 export class Volume3D {
   readonly nz: number;
   readonly ny: number;
   readonly nx: number;
   readonly data: Float32Array;
+  /** [spacingZ, spacingY, spacingX] in mm (kept for compatibility; mirrors geometry.spacing). */
   readonly voxelSpacingMm: [number, number, number];
+  readonly geometry: VolumeGeometry;
 
-  constructor(data: Float32Array, nz: number, ny: number, nx: number, voxelSpacingMm: [number, number, number]) {
+  constructor(
+    data: Float32Array,
+    nz: number,
+    ny: number,
+    nx: number,
+    voxelSpacingMm: [number, number, number],
+    geometry?: VolumeGeometry,
+  ) {
     if (data.length !== nz * ny * nx) throw new Error("Volume3D: data length mismatch");
     this.data = data;
     this.nz = nz;
     this.ny = ny;
     this.nx = nx;
-    this.voxelSpacingMm = voxelSpacingMm;
+    this.geometry = geometry ?? identityGeometry([voxelSpacingMm[2], voxelSpacingMm[1], voxelSpacingMm[0]]);
+    const [sx, sy, sz] = this.geometry.spacing;
+    this.voxelSpacingMm = [sz, sy, sx];
+  }
+
+  /** Same dimensions and geometry, new voxel data. */
+  withData(data: Float32Array): Volume3D {
+    return new Volume3D(data, this.nz, this.ny, this.nx, this.voxelSpacingMm, this.geometry);
+  }
+
+  /** True if patient-space coordinates are known (not just the identity fallback). */
+  get hasPatientGeometry(): boolean {
+    const g = this.geometry;
+    return g.origin.some((v) => v !== 0) || g.axes[0][0] !== 1 || g.axes[1][1] !== 1 || g.axes[2][2] !== 1;
   }
 
   get(z: number, y: number, x: number): number {
