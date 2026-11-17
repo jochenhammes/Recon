@@ -13,7 +13,14 @@ export function modalityLabel(source: VolumeSource | undefined): string {
 
 /** Label for chips and lists: the modality, or "T1-Vorlage"/"PET-Vorlage" for templates. */
 export function datasetModality(d: LoadedDataset): string {
-  return d.template ? `${d.template.kind}-Vorlage` : modalityLabel(d.source);
+  if (d.template) return `${d.template.kind}-Vorlage`;
+  if (d.derivedFrom) return modalityLabel(d.derivedFrom.source);
+  return modalityLabel(d.source);
+}
+
+/** Source that defines units/SUV (the original for datasets derived into a standard space). */
+export function unitSource(d: LoadedDataset): VolumeSource {
+  return d.derivedFrom?.source ?? d.source;
 }
 
 /** True for anatomical modalities that serve as the fusion base (CT, MR). */

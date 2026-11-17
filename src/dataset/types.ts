@@ -56,6 +56,8 @@ export interface LoadedDataset {
   headerEdits: HeaderEdit[];
   /** Set when the dataset is a standard-space template (e.g. MNI T1). */
   template?: TemplateInfo;
+  /** Set for datasets resampled into a standard space: name, original source (for SUV/units) and space. */
+  derivedFrom?: { name: string; source: VolumeSource; space: string };
   source: VolumeSource;
   displayName: string;
 }

@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, Crosshair, Download, Eye, FileCode2, FolderOpen, Wand2 } from "lucide-react";
+import { BarChart3, Brain, Crosshair, Download, Eye, FileCode2, FolderOpen, Wand2 } from "lucide-react";
+import { NormalizationPanel, type NormMethod, type Regularization } from "./ui/NormalizationPanel";
+import { type Normalization, describeCoregProgress, fieldFromAffine, pullbackPositions } from "./normalization/model";
+import { runResample } from "./resample/runner";
+import type { Interpolation } from "./resample/resample";
 import { CoregPanel, type CoregSettings } from "./ui/CoregPanel";
 import { type RegistrationRun, runCoregistration } from "./registration/runner";
 import type { CoregProgress, CoregResult } from "./registration/coregister";
@@ -8,7 +12,7 @@ import { AppShell, type ShellTab } from "./ui/AppShell";
 import { DatasetInfo } from "./ui/DatasetInfo";
 import { LayerSettings, type WindowPreset } from "./ui/ViewSettingsPanel";
 import { RegistrationPanel } from "./ui/RegistrationPanel";
-import { CT_PRESETS, datasetModality, defaultDisplay, isAnatomical, rawUnitLabel, suvForSource } from "./dataset/describe";
+import { CT_PRESETS, datasetModality, defaultDisplay, isAnatomical, modalityLabel, rawUnitLabel, suvForSource, unitSource } from "./dataset/describe";
 import { BUNDLED_MNI, loadBundledMni } from "./normalization/templates";
 import { AnalysisPanel } from "./components/AnalysisPanel";
 import { type BrushState, FilterSection, GeometrySection, HistorySection, ValueSection, VoiSection, type VoiTool } from "./components/EditTools";
@@ -114,6 +118,19 @@ function App() {
   const [coregPending, setCoregPending] = useState<{ entryId: string; previous: Mat4; result: CoregResult } | null>(null);
   const [coregError, setCoregError] = useState<string | null>(null);
   const coregRun = useRef<RegistrationRun | null>(null);
+  const [normTemplateId, setNormTemplateId] = useState<string | null>(null);
+  const [normSubjectId, setNormSubjectId] = useState<string | null>(null);
+  const [normMethod, setNormMethod] = useState<NormMethod>("affine");
+  const [normRegularization, setNormRegularization] = useState<Regularization>("medium");
+  const [normUseMask, setNormUseMask] = useState(true);
+  const [normSubjectKindOverride, setNormSubjectKindOverride] = useState<"T1" | "PET" | null>(null);
+  const [normalization, setNormalization] = useState<Normalization | null>(null);
+  const [normRunning, setNormRunning] = useState(false);
+  const [normProgress, setNormProgress] = useState<{ stage: string; detail: string; fraction: number } | null>(null);
+  const [normError, setNormError] = useState<string | null>(null);
+  const [transferBusy, setTransferBusy] = useState(false);
+  const [transferStatus, setTransferStatus] = useState<string | null>(null);
+  const normRun = useRef<{ cancel: () => void } | null>(null);
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     try {
       return localStorage.getItem("recon-studio-theme") === "light" ? "light" : "dark";
@@ -146,14 +163,14 @@ function App() {
   const sourceKey = entries.map((e) => e.id).join("|");
   const suvById = useMemo(() => {
     const m = new Map<string, SuvResult | null>();
-    for (const e of entries) m.set(e.id, suvForSource(e.dataset.source));
+    for (const e of entries) m.set(e.id, suvForSource(unitSource(e.dataset)));
     return m;
   }, [sourceKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const unitFor = (e: Entry | undefined) => {
     if (!e) return { scale: 1, label: "" };
     const suv = suvById.get(e.id);
     if (unitMode === "suv" && suv?.ok) return { scale: suv.info.factor, label: "SUV" };
-    return { scale: 1, label: rawUnitLabel(e.dataset.source) };
+    return { scale: 1, label: rawUnitLabel(unitSource(e.dataset)) };
   };
   const activeSuv = active ? (suvById.get(active.id) ?? null) : null;
   const { scale, label: unitLabel } = unitFor(active);
@@ -531,6 +548,103 @@ function App() {
     }
   }
 
+  // ── Spatial normalization (standard space) ──
+  const templateEntries = entries.filter((e) => e.dataset.template);
+  const normTemplate = byId(normTemplateId)?.dataset.template ? byId(normTemplateId) : templateEntries[0];
+  const subjectCandidates = entries.filter((e) => !e.dataset.template && !e.dataset.derivedFrom);
+  const normSubject =
+    byId(normSubjectId) && !byId(normSubjectId)!.dataset.template ? byId(normSubjectId) : (subjectCandidates.find((e) => modalityLabel(e.dataset.source) === "MR") ?? subjectCandidates[0]);
+  const guessedKind: "T1" | "PET" = normSubject && ["MR", "NIfTI"].includes(modalityLabel(normSubject.dataset.source)) ? "T1" : "PET";
+  const subjectKind = normSubjectKindOverride ?? guessedKind;
+  const sameContrast = !!normTemplate?.dataset.template && normTemplate.dataset.template.kind === subjectKind;
+  const normCost = sameContrast ? "ncc" : "nmi";
+  const normFor = normalization && normSubject && normalization.subjectId === normSubject.id ? normalization : null;
+
+  function startNormalization() {
+    const T = normTemplate;
+    const S = normSubject;
+    if (!T || !S || normRunning) return;
+    setNormError(null);
+    setNormProgress(null);
+    setNormRunning(true);
+    const mask = normUseMask ? (T.dataset.template?.mask ?? undefined) : undefined;
+    const run = runCoregistration(
+      T.dataset.current,
+      S.dataset.current,
+      { dof: 12, cost: normCost, levels: [8, 4, 2], coarseSearch: true, initial: IDENTITY_MAT4, fixedMask: mask ?? undefined },
+      (p) => setNormProgress(describeCoregProgress(p)),
+    );
+    normRun.current = run;
+    run.promise
+      .then(async (r) => {
+        const grid = { nx: T.dataset.current.nx, ny: T.dataset.current.ny, nz: T.dataset.current.nz, geometry: T.dataset.current.geometry };
+        const n: Normalization = {
+          subjectId: S.id,
+          templateName: T.dataset.template?.name ?? T.dataset.displayName,
+          grid,
+          affine: r.matrix,
+          field: fieldFromAffine(grid, r.matrix),
+          kind: "affine",
+          cost: { name: r.cost.toUpperCase(), before: -r.before, after: -r.after },
+        };
+        setNormalization(n);
+        // Quality check: show the normalized subject on the template right away.
+        await transferToStandardSpace(n, [S.id], "linear", T);
+      })
+      .catch((e) => {
+        if (!(e instanceof DOMException && e.name === "AbortError")) setNormError(`Normalisierung fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
+      })
+      .finally(() => {
+        setNormRunning(false);
+        normRun.current = null;
+      });
+  }
+
+  /**
+   * Resamples datasets into the template space through the subject's deformation and adds them as new
+   * datasets; the template becomes the reference and the first transferred non-anatomical dataset the overlay.
+   */
+  async function transferToStandardSpace(n: Normalization, ids: string[], method: Interpolation, templateEntry = normTemplate) {
+    const subject = byId(n.subjectId);
+    if (!subject || !templateEntry) return;
+    setTransferBusy(true);
+    setTransferStatus(null);
+    try {
+      // Subject native → reference world: positions for every template voxel.
+      const points = pullbackPositions(n, subject.matrix);
+      const T = templateEntry.dataset.current;
+      const created: Entry[] = [];
+      for (const [i, id] of ids.entries()) {
+        const e = byId(id);
+        const w2v = e && w2vById.get(id);
+        if (!e || !w2v) continue;
+        setTransferStatus(`${i + 1}/${ids.length}: ${datasetModality(e.dataset)} wird übertragen …`);
+        const data = await runResample(e.dataset.current, w2v, points, method, (f) => setTransferStatus(`${i + 1}/${ids.length}: ${datasetModality(e.dataset)} ${Math.round(f * 100)} %`));
+        const vol = T.withData(data);
+        const source = templateEntry.dataset.source.kind === "nifti" ? templateEntry.dataset.source : ({ kind: "reconstruction" } as const);
+        const d = createDataset(vol, source, `${e.dataset.displayName} · ${n.templateName}`);
+        const derived: LoadedDataset = { ...d, derivedFrom: { name: e.dataset.displayName, source: unitSource(e.dataset), space: n.templateName } };
+        created.push({ id: `ds${nextEntryId++}`, dataset: derived, display: { ...e.display, opacity: 1, visible: true }, matrix: templateEntry.matrix });
+      }
+      // Switch the display to the template space.
+      const inv = invert4(templateEntry.matrix);
+      setEntries((prev) => [...prev.map((x) => ({ ...x, matrix: x.id === templateEntry.id ? IDENTITY_MAT4 : multiply4(inv, x.matrix) })), ...created.map((c) => ({ ...c, matrix: IDENTITY_MAT4 }))]);
+      setReferenceId(templateEntry.id);
+      const overlayEntry = created.find((c) => !isAnatomical(unitSource(c.dataset))) ?? created[0];
+      if (overlayEntry) {
+        setOverlayId(overlayEntry.id);
+        setEntries((prev) => prev.map((x) => (x.id === overlayEntry.id ? { ...x, display: overlayDisplay(x) } : x)));
+      }
+      setCursor(null);
+      setTransferStatus(`${created.length} Datensatz/Datensätze im Standardraum angelegt (${T.nx} × ${T.ny} × ${T.nz}).`);
+    } catch (e) {
+      setTransferStatus(null);
+      setNormError(`Übertragung fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setTransferBusy(false);
+    }
+  }
+
   // ── Panels ──
   const presetsFor = (e: Entry): WindowPreset[] => {
     const v = e.dataset.current;
@@ -702,10 +816,48 @@ function App() {
     </>
   );
 
+  const normalizationTab = (
+    <NormalizationPanel
+      templates={templateEntries.map((e) => ({ id: e.id, label: e.dataset.template!.name }))}
+      templateId={normTemplate?.id ?? null}
+      onTemplateChange={setNormTemplateId}
+      onLoadMni={() => void addBundledTemplate()}
+      mniLoading={templateBusy}
+      subjects={subjectCandidates.map((e) => ({ id: e.id, label: `${datasetModality(e.dataset)} · ${e.dataset.displayName}` }))}
+      subjectId={normSubject?.id ?? null}
+      onSubjectChange={(id) => {
+        setNormSubjectId(id);
+        setNormSubjectKindOverride(null);
+      }}
+      subjectKind={subjectKind}
+      onSubjectKindChange={setNormSubjectKindOverride}
+      method={sameContrast ? normMethod : "affine"}
+      onMethodChange={setNormMethod}
+      nonlinearAvailable={sameContrast && false}
+      regularization={normRegularization}
+      onRegularizationChange={setNormRegularization}
+      useMask={normUseMask}
+      onUseMaskChange={setNormUseMask}
+      maskAvailable={!!normTemplate?.dataset.template?.mask}
+      costLabel={normCost === "ncc" ? "Kreuzkorrelation (gleicher Kontrast)" : "Normalisierte Mutual Information (unterschiedlicher Kontrast)"}
+      running={normRunning}
+      progress={normProgress}
+      onStart={startNormalization}
+      onCancel={() => normRun.current?.cancel()}
+      normalization={normFor}
+      transferCandidates={entries.filter((e) => !e.dataset.template && !e.dataset.derivedFrom).map((e) => ({ id: e.id, label: `${datasetModality(e.dataset)} · ${e.dataset.displayName}` }))}
+      onTransfer={(ids, method) => normFor && void transferToStandardSpace(normFor, ids, method)}
+      transferStatus={transferStatus}
+      transferBusy={transferBusy}
+      error={normError}
+    />
+  );
+
   const tabs: ShellTab[] = [
     { id: "data", label: "Daten", icon: FolderOpen, content: dataTab, badge: entries.length > 1 ? entries.length : undefined },
     { id: "view", label: "Ansicht", icon: Eye, disabled: layers.length === 0, content: viewTab },
     { id: "registration", label: "Registrierung", shortLabel: "Registr.", icon: Crosshair, disabled: entries.length < 2, content: registrationTab },
+    { id: "normalization", label: "Standardraum", shortLabel: "MNI", icon: Brain, disabled: entries.filter((e) => !e.dataset.template).length === 0, content: normalizationTab },
     {
       id: "analysis",
       label: "Analyse",

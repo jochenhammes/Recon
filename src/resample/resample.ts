@@ -210,3 +210,69 @@ export function resampleInto(source: VoxelGrid, w2v: WorldToVoxel, target: Targe
   }
   return out;
 }
+
+/**
+ * Samples `source` at arbitrary world positions (xyz interleaved, e.g. a deformation pulled back into
+ * the reference world); `w2v` maps those world positions to source voxels. Outside → 0.
+ */
+export function resampleAtPoints(source: VoxelGrid, w2v: WorldToVoxel, points: Float32Array, method: Interpolation = "linear", onProgress?: (fraction: number) => void): Float32Array {
+  const n = points.length / 3;
+  const out = new Float32Array(n);
+  const sx = source.nx, sy = source.ny, sz = source.nz;
+  const slice = sx * sy;
+  const data = method === "bspline" ? bsplineCoefficients(source) : source.data;
+  const m = w2v.m;
+  const [ox, oy, oz] = w2v.origin;
+  const wx = new Float64Array(4), wy = new Float64Array(4), wz = new Float64Array(4);
+  const ix = new Int32Array(4), iy = new Int32Array(4), iz = new Int32Array(4);
+  const chunk = Math.max(1, Math.floor(n / 50));
+  for (let p = 0; p < n; p++) {
+    const px = points[3 * p] - ox, py = points[3 * p + 1] - oy, pz = points[3 * p + 2] - oz;
+    const x = m[0] * px + m[1] * py + m[2] * pz;
+    const y = m[3] * px + m[4] * py + m[5] * pz;
+    const z = m[6] * px + m[7] * py + m[8] * pz;
+    if (p % chunk === 0) onProgress?.(p / n);
+    if (!(x >= -0.5 && y >= -0.5 && z >= -0.5 && x <= sx - 0.5 && y <= sy - 0.5 && z <= sz - 0.5)) continue;
+    let v: number;
+    if (method === "nearest") {
+      v = data[Math.min(sz - 1, Math.max(0, Math.round(z))) * slice + Math.min(sy - 1, Math.max(0, Math.round(y))) * sx + Math.min(sx - 1, Math.max(0, Math.round(x)))];
+    } else if (method === "linear") {
+      const cx = x < 0 ? 0 : x > sx - 1 ? sx - 1 : x;
+      const cy = y < 0 ? 0 : y > sy - 1 ? sy - 1 : y;
+      const cz = z < 0 ? 0 : z > sz - 1 ? sz - 1 : z;
+      const x0 = Math.floor(cx), y0 = Math.floor(cy), z0 = Math.floor(cz);
+      const x1 = x0 < sx - 1 ? x0 + 1 : x0, y1 = y0 < sy - 1 ? y0 + 1 : y0, z1 = z0 < sz - 1 ? z0 + 1 : z0;
+      const fx = cx - x0, fy = cy - y0, fz = cz - z0;
+      const b00 = z0 * slice + y0 * sx, b01 = z0 * slice + y1 * sx, b10 = z1 * slice + y0 * sx, b11 = z1 * slice + y1 * sx;
+      const c00 = data[b00 + x0] + (data[b00 + x1] - data[b00 + x0]) * fx;
+      const c01 = data[b01 + x0] + (data[b01 + x1] - data[b01 + x0]) * fx;
+      const c10 = data[b10 + x0] + (data[b10 + x1] - data[b10 + x0]) * fx;
+      const c11 = data[b11 + x0] + (data[b11 + x1] - data[b11 + x0]) * fx;
+      const c0 = c00 + (c01 - c00) * fy;
+      const c1 = c10 + (c11 - c10) * fy;
+      v = c0 + (c1 - c0) * fz;
+    } else {
+      const fx = Math.floor(x), fy = Math.floor(y), fz = Math.floor(z);
+      bsplineWeights(x - fx, wx);
+      bsplineWeights(y - fy, wy);
+      bsplineWeights(z - fz, wz);
+      for (let t = 0; t < 4; t++) {
+        ix[t] = mirror(fx - 1 + t, sx);
+        iy[t] = mirror(fy - 1 + t, sy) * sx;
+        iz[t] = mirror(fz - 1 + t, sz) * slice;
+      }
+      v = 0;
+      for (let c = 0; c < 4; c++) {
+        let sumY = 0;
+        for (let b = 0; b < 4; b++) {
+          const base = iz[c] + iy[b];
+          sumY += wy[b] * (wx[0] * data[base + ix[0]] + wx[1] * data[base + ix[1]] + wx[2] * data[base + ix[2]] + wx[3] * data[base + ix[3]]);
+        }
+        v += wz[c] * sumY;
+      }
+    }
+    out[p] = v === v ? v : 0;
+  }
+  onProgress?.(1);
+  return out;
+}

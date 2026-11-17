@@ -1,11 +1,20 @@
 import type { WorldToVoxel } from "../core/geometry";
 import type { Volume3D } from "../viewer/volume";
 import type { ResampleJob } from "../workers/resample.worker";
-import { type Interpolation, type TargetGrid, resampleInto } from "./resample";
+import { type Interpolation, type TargetGrid, resampleAtPoints, resampleInto } from "./resample";
 
-/** Resamples in a worker (synchronous fallback without workers). */
-export function runResample(source: Volume3D, w2v: WorldToVoxel, target: TargetGrid, method: Interpolation, onProgress?: (f: number) => void): Promise<Float32Array> {
-  if (typeof Worker === "undefined") return Promise.resolve().then(() => resampleInto(source, w2v, target, method, onProgress));
+/** Resamples onto a grid (or at explicit world positions) in a worker; synchronous fallback without workers. */
+export function runResample(
+  source: Volume3D,
+  w2v: WorldToVoxel,
+  target: TargetGrid | Float32Array,
+  method: Interpolation,
+  onProgress?: (f: number) => void,
+): Promise<Float32Array> {
+  const points = target instanceof Float32Array ? target : undefined;
+  const grid = target instanceof Float32Array ? undefined : target;
+  if (typeof Worker === "undefined")
+    return Promise.resolve().then(() => (points ? resampleAtPoints(source, w2v, points, method, onProgress) : resampleInto(source, w2v, grid!, method, onProgress)));
   const worker = new Worker(new URL("../workers/resample.worker.ts", import.meta.url), { type: "module" });
   return new Promise((resolve, reject) => {
     worker.onmessage = (e: MessageEvent<{ type: string; fraction?: number; data?: Float32Array; error?: string }>) => {
@@ -23,7 +32,7 @@ export function runResample(source: Volume3D, w2v: WorldToVoxel, target: TargetG
       worker.terminate();
       reject(new Error(e.message || "Resampling fehlgeschlagen."));
     };
-    const job: ResampleJob = { source: { nx: source.nx, ny: source.ny, nz: source.nz, data: source.data, geometry: source.geometry }, w2v, target, method };
+    const job: ResampleJob = { source: { nx: source.nx, ny: source.ny, nz: source.nz, data: source.data, geometry: source.geometry }, w2v, target: grid, points, method };
     worker.postMessage(job);
   });
 }

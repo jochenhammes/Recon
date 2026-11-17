@@ -34,6 +34,8 @@ export interface CoregOptions {
   initial: Mat4;
   /** Max. number of sample points per level. */
   maxSamples?: number;
+  /** Optional mask on the fixed image grid (> 0.5 = use): only these regions are sampled. */
+  fixedMask?: Float32Array;
 }
 
 export interface CoregProgress {
@@ -132,7 +134,7 @@ function trilinear(vol: Volume3D, x: number, y: number, z: number): number {
 }
 
 /** Regular grid of `sep` mm over the fixed image with random jitter (as in SPM spm_coreg). */
-function sampleFixed(fixed: Volume3D, sep: number, maxSamples: number, seed: number): SampleSet {
+function sampleFixed(fixed: Volume3D, sep: number, maxSamples: number, seed: number, mask?: Volume3D): SampleSet {
   const g = fixed.geometry;
   const stride = g.spacing.map((s) => Math.max(1, sep / s)) as Vec3;
   const counts = [fixed.nx, fixed.ny, fixed.nz].map((n, a) => Math.max(1, Math.floor((n - 1) / stride[a]) + 1));
@@ -151,7 +153,8 @@ function sampleFixed(fixed: Volume3D, sep: number, maxSamples: number, seed: num
         const v = trilinear(fixed, x, y, z);
         if (!(v === v)) continue;
         // Thin out empty background so it does not dominate the histogram.
-        if (v < 1 && rand() > 0.25) continue;
+        if (mask && !(trilinear(mask, x, y, z) > 0.5)) continue;
+        if (!mask && v < 1 && rand() > 0.25) continue;
         const w = voxelToWorld(g, x, y, z);
         pos.push(w[0], w[1], w[2]);
         values.push(v);
@@ -288,6 +291,7 @@ export function coregister(
   shouldStop?: () => boolean,
 ): CoregResult {
   const fixed = scaleTo255(fixedImg);
+  const maskVolume = opts.fixedMask && opts.fixedMask.length === fixed.data.length ? fixed.withData(opts.fixedMask) : undefined;
   const moving = scaleTo255(movingImg);
   const center = voxelToWorld(moving.geometry, (moving.nx - 1) / 2, (moving.ny - 1) / 2, (moving.nz - 1) / 2);
   const levels = opts.levels.length ? opts.levels : DEFAULT_LEVELS;
@@ -300,8 +304,10 @@ export function coregister(
   for (let li = 0; li < levels.length; li++) {
     const sep = levels[li];
     const fixedL = levelImage(fixed, sep);
+    // The mask follows the fixed image's downsampling (area-weighted, thresholded at 0.5 when sampled).
+    const maskL = maskVolume ? (fixedL.geometry === fixed.geometry ? maskVolume : resampleVolume(maskVolume, fixedL.geometry.spacing)) : undefined;
     const movingL = levelImage(moving, sep);
-    const samples = sampleFixed(fixedL, sep, maxSamples, 1234 + li);
+    const samples = sampleFixed(fixedL, sep, maxSamples, 1234 + li, maskL);
     const evaluator = new CostEvaluator(samples, movingL, opts.cost);
     const report = (stage: string, iteration: number, cost: number) => onProgress?.({ level: li + 1, levels: levels.length, stage, iteration, cost });
 
