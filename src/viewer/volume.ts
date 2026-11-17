@@ -203,6 +203,22 @@ function buildKidneyLut(): Uint8Array {
 
 const RAINBOW_LUT = buildRainbowLut();
 const KIDNEY_LUT = buildKidneyLut();
+const GRAY_LUT = Uint8Array.from({ length: 256 * 3 }, (_, i) => Math.floor(i / 3));
+const INVERTED_LUT = Uint8Array.from({ length: 256 * 3 }, (_, i) => 255 - Math.floor(i / 3));
+
+/** 256-entry RGB table (r, g, b interleaved) for a color LUT. */
+export function lutTable(lut: ColorLut): Uint8Array {
+  switch (lut) {
+    case "rainbow":
+      return RAINBOW_LUT;
+    case "kidney":
+      return KIDNEY_LUT;
+    case "inverted":
+      return INVERTED_LUT;
+    default:
+      return GRAY_LUT;
+  }
+}
 
 /** Maps a float slice buffer to RGBA (ImageData-ready) using window/level and an optional color LUT. */
 export function windowLevelToRgba(

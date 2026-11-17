@@ -16,7 +16,10 @@ import { buildSinogram } from "./recon/sinogram";
 import type { ReconParams } from "./recon/volume";
 import { reconstructVolume } from "./workers/workerPool";
 import { Volume3D } from "./viewer/volume";
-import { FourPanelViewer } from "./viewer/FourPanelViewer";
+import { Viewer } from "./viewer/Viewer";
+import type { LayerDisplay, LayoutKind, ViewKind, ViewerLayer } from "./viewer/types";
+import type { ColorLut } from "./viewer/volume";
+import { type Vec3, worldToVoxelTransform } from "./core/geometry";
 import type { SpectProjectionSet } from "./dicom/types";
 import "./App.css";
 
@@ -26,6 +29,10 @@ function App() {
   const [threshold, setThreshold] = useState("");
   const [newValue, setNewValue] = useState("0");
   const [unitMode, setUnitMode] = useState<UnitMode>("raw");
+  const [cursor, setCursor] = useState<Vec3 | null>(null);
+  const [layout, setLayout] = useState<LayoutKind>("grid");
+  const [focusView, setFocusView] = useState<ViewKind>("axial");
+  const [display, setDisplay] = useState<LayerDisplay | null>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -42,8 +49,20 @@ function App() {
   const scale = unitMode === "suv" && suv?.ok ? suv.info.factor : 1;
   const unitLabel = unitMode === "suv" && suv?.ok ? "SUV" : rawUnit;
 
+  const unit = useMemo(() => ({ scale, label: unitLabel }), [scale, unitLabel]);
+  const w2v = useMemo(() => (volume ? worldToVoxelTransform(volume.geometry) : null), [volume]);
+  const layers = useMemo<ViewerLayer[]>(
+    () =>
+      volume && w2v && display
+        ? [{ id: "functional", label: modalityLabel(dataset?.source) ?? "Volumen", volume, w2v, display, unit }]
+        : [],
+    [volume, w2v, display, unit, dataset?.source],
+  );
+
   function showDataset(next: LoadedDataset) {
     setDataset(next);
+    setCursor(null);
+    setDisplay(defaultDisplay(next.current));
     const s = computeStats(next.current.data);
     const nextSuv = suvForSource(next.source);
     const nextScale = nextSuv?.ok ? nextSuv.info.factor : 1;
@@ -148,8 +167,31 @@ function App() {
           {error && <div className="error-banner">{error}</div>}
         </aside>
         <main className="app-main">
-          {volume ? (
-            <FourPanelViewer volume={volume} />
+          {layers.length > 0 && display ? (
+            <Viewer
+              layers={layers}
+              activeLayerId="functional"
+              cursor={cursor}
+              onCursorChange={setCursor}
+              onWindowChange={(_, window) => setDisplay({ ...display, window })}
+              layout={layout}
+              focusView={focusView}
+              onLayoutChange={(l, f) => {
+                setLayout(l);
+                setFocusView(f);
+              }}
+              toolbar={
+                <>
+                  <select value={display.lut} onChange={(e) => setDisplay({ ...display, lut: e.target.value as ColorLut })} aria-label="Farbtabelle">
+                    <option value="gray">Grau</option>
+                    <option value="inverted">Invertiert</option>
+                    <option value="rainbow">Regenbogen</option>
+                    <option value="kidney">Hot</option>
+                  </select>
+                  <button onClick={() => volume && setDisplay({ ...display, window: defaultDisplay(volume).window })}>Fenster zurücksetzen</button>
+                </>
+              }
+            />
           ) : (
             <div className="empty-state">
               {projectionSet
@@ -189,6 +231,21 @@ function App() {
       </div>
     </div>
   );
+}
+
+function modalityLabel(source: VolumeSource | undefined): string | undefined {
+  if (!source) return undefined;
+  if (source.kind === "reconstruction") return "SPECT";
+  if (source.kind === "nifti") return "NIfTI";
+  return source.files[0].dataSet.string("x00080060")?.trim() || "DICOM";
+}
+
+/** Initial window: from 0 (or the minimum, if negative) to the 99.5th percentile. */
+function defaultDisplay(volume: Volume3D): LayerDisplay {
+  const hi = volume.percentile(99.5);
+  let lo = 0;
+  for (let i = 0; i < volume.data.length; i += 97) if (volume.data[i] < lo) lo = volume.data[i];
+  return { window: [lo, hi > lo ? hi : lo + 1], lut: "gray", opacity: 1, visible: true };
 }
 
 function suvForSource(source: VolumeSource): SuvResult | null {

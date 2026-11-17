@@ -1,7 +1,8 @@
 .app-root {
   display: flex;
   flex-direction: column;
-  min-height: 100svh;
+  height: 100svh;
+  overflow: hidden;
 }
 
 .app-header {
@@ -13,6 +14,7 @@
   display: flex;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .app-sidebar {
@@ -30,9 +32,9 @@
   flex: 1;
   min-width: 0;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
-  padding: 20px;
+  padding: 0;
 }
 
 .empty-state {
@@ -203,88 +205,7 @@
 
 /* Viewer */
 
-.viewer-root {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 100%;
-  height: 100%;
-}
 
-.viewer-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  font-size: 13px;
-}
-
-.lut-select {
-  font: inherit;
-  font-size: 13px;
-  padding: 3px 6px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text-h);
-  cursor: pointer;
-}
-
-.viewer-hint {
-  color: var(--text);
-  margin-left: auto;
-  font-size: 12px;
-}
-
-.viewer-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-rows: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  flex: 1;
-  min-height: 0;
-}
-
-.slice-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  background: var(--panel-bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px;
-  min-height: 0;
-}
-
-.slice-panel-label {
-  font-size: 12px;
-  color: var(--text);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.slice-canvas {
-  background: #000;
-  border-radius: 4px;
-  cursor: crosshair;
-}
-
-.mip-rotate-btn {
-  font: inherit;
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 4px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text-h);
-  cursor: pointer;
-}
-
-.mip-slider {
-  width: 100%;
-  max-width: 280px;
-}
 
 /* Analysis / edit tools (right column) */
 
@@ -444,4 +365,169 @@
 .unit-switch .tool-hint {
   margin: 6px 0 0;
   font-size: 12px;
+}
+
+/* Viewer */
+
+.viewer-root {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: #0b0c10;
+  color: #c9ccd6;
+}
+
+.viewer-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #23252e;
+  font-size: 13px;
+}
+
+.viewer-toolbar button,
+.viewer-toolbar select {
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  border: 1px solid #343744;
+  background: #171920;
+  color: #d8dbe4;
+  cursor: pointer;
+}
+
+.viewer-toolbar .segmented {
+  display: inline-flex;
+}
+
+.viewer-toolbar .segmented button {
+  border-radius: 0;
+  margin-left: -1px;
+}
+
+.viewer-toolbar .segmented button:first-child {
+  border-radius: 5px 0 0 5px;
+}
+
+.viewer-toolbar .segmented button:last-child {
+  border-radius: 0 5px 5px 0;
+}
+
+.viewer-toolbar .segmented button.active {
+  background: #3b2a5c;
+  border-color: #7c5cc4;
+  color: #fff;
+}
+
+.viewer-hint {
+  font-size: 11px;
+  color: #7d8191;
+  margin-left: auto;
+}
+
+.viewer-layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  gap: 2px;
+  background: #23252e;
+}
+
+.viewer-layout.layout-grid {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.viewer-layout.layout-single {
+  grid-template: 1fr / 1fr;
+}
+
+.viewer-layout.layout-focus {
+  grid-template-columns: 3fr 1fr;
+}
+
+.focus-main,
+.focus-side {
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.focus-side {
+  grid-template-rows: repeat(3, 1fr);
+}
+
+.view-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: #000;
+}
+
+.view-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: #a3a7b6;
+  background: #111218;
+}
+
+.view-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.view-pos {
+  color: #6d7182;
+}
+
+.view-canvas-wrap {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.view-canvas {
+  position: absolute;
+  inset: 0;
+  cursor: crosshair;
+  display: block;
+}
+
+.mini-btn {
+  font: inherit;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid #343744;
+  background: #171920;
+  color: #d8dbe4;
+  cursor: pointer;
+}
+
+.mip-slider {
+  width: 90px;
+  accent-color: #9b7be0;
+}
+
+.viewer-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  border-top: 1px solid #23252e;
+  color: #a3a7b6;
 }
