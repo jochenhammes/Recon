@@ -4,8 +4,10 @@ import { formatCount, formatValue } from "./format";
 
 export interface HistogramProps {
   data: Float32Array;
-  /** Optional value to mark with a vertical line (e.g. the edit threshold). */
+  /** Optional value (raw units) to mark with a vertical line (e.g. the edit threshold). */
   marker?: number;
+  /** Labels show raw value × scale (e.g. SUV). */
+  scale?: number;
 }
 
 const WIDTH = 300;
@@ -15,7 +17,8 @@ const PAD_RIGHT = 4;
 const PAD_TOP = 6;
 const PAD_BOTTOM = 18;
 
-export function Histogram({ data, marker }: HistogramProps) {
+export function Histogram({ data, marker, scale: valueScale = 1 }: HistogramProps) {
+  const fv = (x: number) => formatValue(x * valueScale);
   const [bins, setBins] = useState(128);
   const [logScale, setLogScale] = useState(true);
   const [excludeZero, setExcludeZero] = useState(false);
@@ -90,15 +93,15 @@ export function Histogram({ data, marker }: HistogramProps) {
           <line x1={xOf(marker)} x2={xOf(marker)} y1={PAD_TOP} y2={PAD_TOP + plotH} className="histogram-marker" />
         )}
         <text x={PAD_LEFT} y={HEIGHT - 4} className="histogram-label" textAnchor="start">
-          {formatValue(lo)}
+          {fv(lo)}
         </text>
         <text x={WIDTH - PAD_RIGHT} y={HEIGHT - 4} className="histogram-label" textAnchor="end">
-          {formatValue(hi)}
+          {fv(hi)}
         </text>
       </svg>
       <div className="histogram-readout">
         {hovered !== null
-          ? `[${formatValue(hist.edges[hovered])} … ${formatValue(hist.edges[hovered + 1])}${hovered === hist.counts.length - 1 ? "]" : ")"}: ${formatCount(hist.counts[hovered])} Voxel`
+          ? `[${fv(hist.edges[hovered])} … ${fv(hist.edges[hovered + 1])}${hovered === hist.counts.length - 1 ? "]" : ")"}: ${formatCount(hist.counts[hovered])} Voxel`
           : `max. ${formatCount(maxCount)} Voxel pro Bin${logScale ? " (log. Skala)" : ""}`}
       </div>
     </div>

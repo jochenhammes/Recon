@@ -2,6 +2,9 @@ import { useMemo, useRef, useState } from "react";
 import { AnalysisPanel } from "./components/AnalysisPanel";
 import { EditPanel } from "./components/EditPanel";
 import { computeStats } from "./analysis/stats";
+import { type SuvResult, computeSuv } from "./analysis/suv";
+import type { VolumeSource } from "./dataset/types";
+import { type UnitMode, formatInput, parseInput } from "./components/format";
 import { type LoadedDataset, createDataset } from "./dataset/types";
 import { type EditOp, applyEdit } from "./edit/operations";
 import type { LoadedVolume } from "./viewer/volumeLoader";
@@ -21,6 +24,8 @@ function App() {
   const [projectionSet, setProjectionSet] = useState<SpectProjectionSet | null>(null);
   const [dataset, setDataset] = useState<LoadedDataset | null>(null);
   const [threshold, setThreshold] = useState("");
+  const [newValue, setNewValue] = useState("0");
+  const [unitMode, setUnitMode] = useState<UnitMode>("raw");
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,10 +36,32 @@ function App() {
   const volume = dataset?.current ?? null;
   const stats = useMemo(() => (volume ? computeStats(volume.data) : null), [volume]);
 
+  const source = dataset?.source;
+  const suv = useMemo(() => (source ? suvForSource(source) : null), [source]);
+  const rawUnit = dataset ? rawUnitLabel(dataset.source) : "";
+  const scale = unitMode === "suv" && suv?.ok ? suv.info.factor : 1;
+  const unitLabel = unitMode === "suv" && suv?.ok ? "SUV" : rawUnit;
+
   function showDataset(next: LoadedDataset) {
     setDataset(next);
     const s = computeStats(next.current.data);
-    setThreshold(Number.isFinite(s.max) ? String(s.max) : "0");
+    const nextSuv = suvForSource(next.source);
+    const nextScale = nextSuv?.ok ? nextSuv.info.factor : 1;
+    setUnitMode(nextSuv?.ok ? "suv" : "raw");
+    setThreshold(Number.isFinite(s.max) ? formatInput(s.max * nextScale) : "0");
+    setNewValue("0");
+  }
+
+  function handleUnitModeChange(mode: UnitMode) {
+    if (mode === unitMode || !suv?.ok) return;
+    const factor = mode === "suv" ? suv.info.factor : 1 / suv.info.factor;
+    const convert = (text: string) => {
+      const v = parseInput(text);
+      return Number.isFinite(v) ? formatInput(v * factor) : text;
+    };
+    setThreshold(convert(threshold));
+    setNewValue(convert(newValue));
+    setUnitMode(mode);
   }
 
   function handleLoaded(set: SpectProjectionSet) {
@@ -133,13 +160,26 @@ function App() {
         </main>
         {dataset && volume && stats && (
           <aside className="app-tools">
-            <AnalysisPanel volume={volume} stats={stats} marker={Number(threshold.replace(",", "."))} />
+            <AnalysisPanel
+              volume={volume}
+              stats={stats}
+              marker={parseInput(threshold) / scale}
+              scale={scale}
+              unitLabel={unitLabel}
+              unitMode={unitMode}
+              suv={suv}
+              onUnitModeChange={handleUnitModeChange}
+            />
             <EditPanel
               volume={volume}
               stats={stats}
               edits={dataset.edits}
+              scale={scale}
+              unitLabel={unitLabel}
               threshold={threshold}
               onThresholdChange={setThreshold}
+              value={newValue}
+              onValueChange={setNewValue}
               onApply={handleApplyEdit}
               onUndo={handleUndo}
               onReset={handleReset}
@@ -149,6 +189,16 @@ function App() {
       </div>
     </div>
   );
+}
+
+function suvForSource(source: VolumeSource): SuvResult | null {
+  return source.kind === "dicom" ? computeSuv(source.files[0].dataSet) : null;
+}
+
+function rawUnitLabel(source: VolumeSource): string {
+  if (source.kind !== "dicom") return "";
+  const units = source.files[0].dataSet.string("x00541001")?.trim();
+  return units === "BQML" ? "Bq/ml" : (units ?? "");
 }
 
 export default App;

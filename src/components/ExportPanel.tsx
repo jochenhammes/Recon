@@ -57,7 +57,7 @@ export function ExportPanel({ dataset }: ExportPanelProps) {
   const edited = edits.length > 0;
   const baseName = dataset.displayName.replace(/\.nii(\.gz)?$/i, "").replace(/\.[^./\\]+$/, "") || "volume";
   const suffix = source.kind === "reconstruction" ? (edited ? "_recon_edited" : "_recon") : edited ? "_edited" : "_export";
-  const editDescription = edits.map(describeEdit).join("; ");
+  const editDescription = edits.map((e) => describeEdit(e)).join("; ");
 
   function run(action: () => string[]) {
     setError(null);

@@ -44,9 +44,20 @@ function thresholdReplace(volume: Volume3D, threshold: number, value: number): E
   return { volume: new Volume3D(out, volume.nz, volume.ny, volume.nx, volume.voxelSpacingMm), affected };
 }
 
-export function describeEdit(op: EditOp): string {
+/** Display scaling for edit descriptions, e.g. SUV = raw × factor. */
+export interface DisplayUnit {
+  scale: number;
+  label: string;
+}
+
+function fmt(v: number): string {
+  return String(Number(v.toPrecision(6)));
+}
+
+export function describeEdit(op: EditOp, unit: DisplayUnit = { scale: 1, label: "" }): string {
+  const u = unit.label ? ` ${unit.label}` : "";
   switch (op.type) {
     case "thresholdReplace":
-      return `Werte >= ${op.threshold} auf ${op.value} gesetzt`;
+      return `Werte >= ${fmt(op.threshold * unit.scale)}${u} auf ${fmt(op.value * unit.scale)}${u} gesetzt`;
   }
 }

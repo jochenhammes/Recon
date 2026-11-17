@@ -12,3 +12,15 @@ export function formatValue(v: number): string {
 export function formatCount(n: number): string {
   return intFmt.format(n);
 }
+
+export type UnitMode = "raw" | "suv";
+
+/** Parses a number typed with either decimal separator; NaN for empty/invalid input. */
+export function parseInput(s: string): number {
+  return s.trim() === "" ? NaN : Number(s.trim().replace(",", "."));
+}
+
+/** Formats a value for an input field (dot decimal, 6 significant digits). */
+export function formatInput(v: number): string {
+  return String(Number(v.toPrecision(6)));
+}

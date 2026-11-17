@@ -92,6 +92,14 @@ export function buildEditedDicomFiles(volume: Volume3D, source: DicomSource, opt
     const name = anon ? `IM${String(i + 1).padStart(5, "0")}.dcm` : uniqueName(file.fileName, usedNames);
     return { name, bytes: rewriteDicom(file, overrides) };
   });
+  const snapped = encodedFiles.filter((e) => e.snapped);
+  if (snapped.length > 0) {
+    const maxError = Math.max(...snapped.map((e) => e.maxError));
+    warnings.unshift(
+      `Neuer Wert in ${snapped.length} von ${encodedFiles.length} Datei(en) auf das Original-Werteraster gerundet ` +
+        `(max. Abweichung ${formatDS(maxError)}); Skalierung unverändert.`,
+    );
+  }
   return { files, warnings };
 }
 

@@ -26,7 +26,8 @@ export function computeStats(data: ArrayLike<number>): VolumeStats {
   }
   if (finite === 0) return { count: n, nonFinite: n, min: NaN, max: NaN, mean: NaN, median: NaN };
 
-  const values = new Float64Array(finite);
+  // Float32 copy: the data is float32 anyway, and this halves memory for large volumes.
+  const values = new Float32Array(finite);
   let k = 0;
   for (let i = 0; i < n; i++) {
     const v = data[i];
@@ -48,7 +49,7 @@ export function computeStats(data: ArrayLike<number>): VolumeStats {
 }
 
 /** In-place Hoare-style selection: returns the k-th smallest value (0-based) in O(n) average. */
-function quickselect(a: Float64Array, k: number): number {
+export function quickselect(a: Float32Array | Float64Array, k: number): number {
   let lo = 0;
   let hi = a.length - 1;
   while (lo < hi) {

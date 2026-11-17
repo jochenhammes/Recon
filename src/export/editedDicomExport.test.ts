@@ -203,6 +203,30 @@ describe("buildEditedDicomFiles (header-preserving export)", () => {
     for (let i = 0; i < 9; i++) expect(reloaded.volume.data[i]).toBe(loaded.volume.data[i]);
   });
 
+  it("rounds an off-grid value to the original grid instead of rescaling", async () => {
+    const withSlope = buildPart10({ rows: 2, cols: 3, frames: 2, pixels, slope: 0.37, intercept: 0 });
+    const { loaded, result, reloaded } = await exportRoundTrip([asFile(withSlope, "a.dcm")], 30, 10);
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain("auf das Original-Werteraster gerundet");
+    const ds = dicomParser.parseDicom(result.files[0].bytes);
+    expect(ds.string("x00281053")).toBe("0.37");
+    expect(ds.string("x00281052")).toBe("0");
+    reloaded.volume.data.forEach((v, i) => {
+      if (loaded.volume.data[i] >= 30) expect(Math.abs(v - 10)).toBeLessThanOrEqual(0.185 + 1e-6);
+      else expect(v).toBe(loaded.volume.data[i]);
+    });
+  });
+
+  it("keeps intercept 0 when rescaling is unavoidable", async () => {
+    const withSlope = buildPart10({ rows: 2, cols: 3, frames: 2, pixels, slope: 0.5, intercept: 0 });
+    const { result, reloaded } = await exportRoundTrip([asFile(withSlope, "a.dcm")], 50, 100000.5);
+    const ds = dicomParser.parseDicom(result.files[0].bytes);
+    expect(ds.string("x00281052")).toBe("0");
+    const slope = parseFloat(ds.string("x00281053")!);
+    expect(slope * 65535).toBeGreaterThanOrEqual(100000.5);
+    expect(Math.abs(reloaded.volume.data[11] - 100000.5)).toBeLessThanOrEqual(slope / 2 + 1e-3);
+  });
+
   it("rescales and warns when the new value cannot be stored with the original encoding", async () => {
     const { result, reloaded } = await exportRoundTrip([asFile(original, "a.dcm")], 100, -7.5);
     expect(result.warnings).toHaveLength(1);

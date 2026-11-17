@@ -7,6 +7,11 @@ export interface EncodedPixels {
   encoding: DicomPixelEncoding;
   /** True if slope/intercept/bit depth differ from the original encoding. */
   rescaled: boolean;
+  /**
+   * True if the original encoding was kept but some values were off its quantization grid and were
+   * rounded to the nearest representable value (error ≤ slope / 2, see maxError).
+   */
+  snapped: boolean;
   /** Largest absolute difference between a real value and its encoded representation. */
   maxError: number;
   /** Smallest/largest stored (pre-rescale) sample value actually written. */
@@ -23,9 +28,10 @@ function storedRange(bitsStored: number, pixelRepresentation: number): [number, 
 
 /**
  * Encodes real voxel values for one DICOM file. The original encoding (bit depth, signedness,
- * slope, intercept) is kept whenever every value lies on its quantization grid and inside the
- * stored range; unchanged voxels then round-trip bit-exactly. Otherwise a new slope/intercept is
- * derived (8-bit data is widened to 16 bit) and `rescaled` is set.
+ * slope, intercept) is kept whenever every value lies inside the stored range; unchanged voxels then
+ * round-trip bit-exactly and values off the quantization grid (e.g. an edit's replacement value) are
+ * rounded to the nearest grid value (`snapped`). Only if values exceed the stored range is a new
+ * slope/intercept derived (8-bit data is widened to 16 bit) and `rescaled` set.
  */
 export function encodePixels(values: Float32Array, original: DicomPixelEncoding): EncodedPixels {
   let min = Infinity;
@@ -38,8 +44,16 @@ export function encodePixels(values: Float32Array, original: DicomPixelEncoding)
   }
   if (!Number.isFinite(min)) min = max = 0;
 
-  if (fitsEncoding(values, original)) {
-    return { bytes: writeSamples(values, original), encoding: original, rescaled: false, maxError: maxEncodingError(values, original), ...storedMinMax(values, original) };
+  const fit = fitsEncoding(values, original);
+  if (fit !== "out-of-range") {
+    return {
+      bytes: writeSamples(values, original),
+      encoding: original,
+      rescaled: false,
+      snapped: fit === "snapped",
+      maxError: maxEncodingError(values, original),
+      ...storedMinMax(values, original),
+    };
   }
 
   const bitsAllocated = original.bitsAllocated === 8 ? 16 : original.bitsAllocated;
@@ -53,6 +67,11 @@ export function encodePixels(values: Float32Array, original: DicomPixelEncoding)
   if (allIntegers(values) && max - min <= hi - lo) {
     slope = 1;
     intercept = min >= lo && max <= hi ? 0 : min - lo;
+  } else if (original.intercept === 0 && (min >= 0 || lo < 0)) {
+    // Keep intercept 0 (mandatory for PET, and what most viewers expect) and only adapt the slope.
+    const needed = Math.max(max > 0 ? max / hi : 0, min < 0 ? min / lo : 0);
+    slope = needed > 0 ? parseFloat(formatDS(needed * (1 + 1e-9))) : 1;
+    intercept = 0;
   } else {
     // Slope/intercept are stored as 16-char decimal strings; quantize them up front so the stored
     // samples are computed against exactly the values a reader will parse back. Rounding the slope
@@ -68,7 +87,7 @@ export function encodePixels(values: Float32Array, original: DicomPixelEncoding)
     intercept,
     hasRescaleTags: original.hasRescaleTags || slope !== 1 || intercept !== 0,
   };
-  return { bytes: writeSamples(values, encoding), encoding, rescaled: true, maxError: maxEncodingError(values, encoding), ...storedMinMax(values, encoding) };
+  return { bytes: writeSamples(values, encoding), encoding, rescaled: true, snapped: false, maxError: maxEncodingError(values, encoding), ...storedMinMax(values, encoding) };
 }
 
 function allIntegers(values: Float32Array): boolean {
@@ -76,19 +95,20 @@ function allIntegers(values: Float32Array): boolean {
   return true;
 }
 
-function fitsEncoding(values: Float32Array, enc: DicomPixelEncoding): boolean {
+function fitsEncoding(values: Float32Array, enc: DicomPixelEncoding): "exact" | "snapped" | "out-of-range" {
   const [lo, hi] = storedRange(enc.bitsStored, enc.pixelRepresentation);
+  let snapped = false;
   for (let i = 0; i < values.length; i++) {
     const v = values[i];
-    if (!Number.isFinite(v)) return false;
+    if (!Number.isFinite(v)) return "out-of-range";
     const q = (v - enc.intercept) / enc.slope;
     const r = Math.round(q);
-    if (r < lo || r > hi) return false;
+    if (r < lo || r > hi) return "out-of-range";
     // Loaded values are float32(stored * slope + intercept); accept an exact float32 round-trip too,
     // since for large stored values float32 rounding can exceed the fixed tolerance.
-    if (Math.abs(q - r) > GRID_TOLERANCE && Math.fround(r * enc.slope + enc.intercept) !== v) return false;
+    if (Math.abs(q - r) > GRID_TOLERANCE && Math.fround(r * enc.slope + enc.intercept) !== v) snapped = true;
   }
-  return true;
+  return snapped ? "snapped" : "exact";
 }
 
 function toStored(v: number, enc: DicomPixelEncoding, lo: number, hi: number): number {

@@ -1,3 +1,5 @@
+import { quickselect } from "../analysis/stats";
+
 /** Reconstructed 3D volume, slice-major: data[(z * ny + y) * nx + x]. */
 export class Volume3D {
   readonly nz: number;
@@ -92,9 +94,10 @@ export class Volume3D {
   }
 
   percentile(p: number): number {
-    const sorted = Float32Array.from(this.data).sort();
-    const idx = clamp(Math.floor((p / 100) * (sorted.length - 1)), 0, sorted.length - 1);
-    return sorted[idx];
+    // Selection instead of a full sort: O(n) on a copy (the selection reorders it).
+    const copy = Float32Array.from(this.data);
+    const idx = clamp(Math.floor((p / 100) * (copy.length - 1)), 0, copy.length - 1);
+    return quickselect(copy, idx);
   }
 
   max(): number {
