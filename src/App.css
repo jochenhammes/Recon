@@ -1098,3 +1098,44 @@
 .template-attribution a {
   color: var(--accent-strong);
 }
+
+/* Atlas / SUVR region table */
+.region-table-wrap {
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-top: 8px;
+}
+.region-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.region-table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-2);
+  color: var(--text-h);
+  text-align: right;
+  font-weight: 600;
+  padding: 5px 6px;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+.region-table td {
+  text-align: right;
+  padding: 3px 6px;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+.region-table th:first-child,
+.region-table td:first-child {
+  text-align: left;
+  white-space: normal;
+}
+.region-table tr.reference-row td {
+  color: var(--accent-strong);
+  background: var(--accent-bg);
+}

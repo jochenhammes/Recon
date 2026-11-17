@@ -8,6 +8,7 @@ const LUT_OPTIONS: { value: ColorLut; label: string }[] = [
   { value: "inverted", label: "Invertiert" },
   { value: "kidney", label: "Hot (Schwarz–Rot–Gelb–Weiß)" },
   { value: "rainbow", label: "Regenbogen" },
+  { value: "labels", label: "Atlas-Regionen (Farbtabelle)" },
 ];
 
 export interface WindowPreset {

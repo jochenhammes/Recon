@@ -4,6 +4,7 @@ import type { Volume3D } from "../viewer/volume";
 import type { EditOp } from "../edit/operations";
 import type { HeaderEdit } from "../header/headerModel";
 import type { TemplateInfo } from "../normalization/templates";
+import type { AtlasInfo } from "../atlas/atlas";
 
 /** How stored DICOM sample values map to real values: real = stored * slope + intercept. */
 export interface DicomPixelEncoding {
@@ -56,8 +57,10 @@ export interface LoadedDataset {
   headerEdits: HeaderEdit[];
   /** Set when the dataset is a standard-space template (e.g. MNI T1). */
   template?: TemplateInfo;
+  /** Set when the dataset is a label atlas (region indices). */
+  atlas?: AtlasInfo;
   /** Set for datasets resampled into a standard space: name, original source (for SUV/units) and space. */
-  derivedFrom?: { name: string; source: VolumeSource; space: string };
+  derivedFrom?: { name: string; source: VolumeSource; space: string; /** Overrides the modality label (e.g. "SUVR"). */ label?: string };
   source: VolumeSource;
   displayName: string;
 }

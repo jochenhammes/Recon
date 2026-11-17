@@ -23,7 +23,7 @@ export const BUNDLED_MNI = {
     "ICBM 152 Nonlinear Asymmetrical 2009c (Fonov et al. 2009/2011), © 1993–2004 Louis Collins, McConnell Brain Imaging Centre, MNI, McGill University; via TemplateFlow.",
 };
 
-async function fetchNifti(url: string) {
+export async function fetchNifti(url: string) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Vorlage konnte nicht geladen werden (${res.status}).`);
   let buffer = await res.arrayBuffer();

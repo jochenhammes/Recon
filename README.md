@@ -1,7 +1,8 @@
 # Recon Studio
 
 Browserbasierte Werkbank für nuklearmedizinische Bilddaten: SPECT-Rohdaten rekonstruieren, PET-, SPECT-,
-CT- und MRT-Volumen ansehen, analysieren, bearbeiten, coregistrieren, fusionieren und als DICOM oder NIfTI exportieren.
+CT- und MRT-Volumen ansehen, analysieren, bearbeiten, coregistrieren, fusionieren, in den MNI-Standardraum
+normalisieren, regional (SUVR) auswerten und als DICOM oder NIfTI exportieren.
 Alles läuft clientseitig im Browser (Web Worker), es gibt keinen Server – die Daten verlassen den Rechner nicht.
 
 ## Funktionen
@@ -36,6 +37,27 @@ Alles läuft clientseitig im Browser (Web Worker), es gibt keinen Server – die
   ±30°) für Daten aus verschiedenen Untersuchungen. Läuft im Web Worker mit Fortschritt und Abbruch; Ergebnis
   übernehmen oder verwerfen.
 - **Manuelle Feinkorrektur** (Verschiebung/Drehung), Transformationsmatrix als JSON speichern und laden.
+
+### Standardraum (MNI), Atlas und SUVR
+- **Vorlagen**: MNI ICBM 152 2009c (asymmetrisch, T1, 2 mm, mit Hirnmaske) wird mitgeliefert und bei Bedarf geladen;
+  eigene Vorlagen (T1 oder Tracer-PET) können als NIfTI geladen werden.
+- **Räumliche Normalisierung** eines Subjekts (meist das T1-MRT, ohne MRT direkt das PET):
+  - affin (12 Parameter) mit der Coregistrierungs-Engine (Kreuzkorrelation bei gleichem Kontrast, sonst NMI;
+    Grobsuche, optional nur Hirnmaske);
+  - **nichtlinear** nach SPM „Normalise“ (Ashburner & Friston 1999): glatte Verformung aus 3D-Kosinus-Basisfunktionen
+    (Grenzwellenlänge 30 mm), Summe der quadrierten Differenzen mit Intensitätsskalierung, Biegeenergie-Regularisierung
+    (leicht/mittel/stark), Levenberg-Marquardt; Prüfung auf Faltungen (Jacobi-Determinante). Nur bei gleichem Kontrast
+    von Subjekt und Vorlage (T1↔T1, PET↔PET-Vorlage).
+- **Übertragung**: Das Ergebnis ist ein Rückwärts-Verformungsfeld (Vorlagenvoxel → Subjekt-mm). Jeder Datensatz, der mit
+  dem Subjekt coregistriert ist (z. B. PET → T1), wird über seine Matrix und dieses Feld in den Standardraum resampelt
+  und als neuer Datensatz angelegt – so wird die MRT-Normalisierung auf das PET übertragen.
+- **SPM/CAT12**: Verformungsfelder `y_*.nii` (5D, RAS) importieren (z. B. aus CAT12 – auch auf eigenem Raster wie
+  1,5 mm) und die in der App berechnete Normalisierung als `y_*.nii` exportieren; Plausibilitätsprüfung (Feld muss
+  in das Bild des Subjekts zeigen, erkennt falsches Subjekt oder inverse `iy_`-Felder).
+- **Atlas & SUVR**: mitgelieferter CerebrA-Atlas (102 Regionen, CC0) oder eigener Atlas (Labelbild + Tabelle als
+  TXT/CSV/TSV, FSL-/FreeSurfer-LUT oder ITK-SNAP). Regionale Statistik (Volumen, Mittel, Median, SD, Min/Max),
+  Referenzregion (Kleinhirnrinde, Kleinhirn gesamt, Pons/Hirnstamm, ganzes Gehirn oder eigene Auswahl), SUVR-Tabelle
+  als CSV und **SUVR-Bild** (exportierbar wie jeder Datensatz); Atlas als farbiges Overlay (Farbtabelle „Atlas-Regionen“).
 
 ### Analyse
 - Anzahl Bildpunkte, Minimum, Mittelwert, Median, Maximum, Histogramm (Bins, log. Skala, ohne Nullwerte).
@@ -92,6 +114,9 @@ Ein Push auf `main` veröffentlicht die App über GitHub Pages.
 - `src/core/` – Patientengeometrie (LPS), Voxel↔Welt-Transformationen, DICOM-/NIfTI-Orientierung, affines
   Transformationsmodell (12 Parameter, Matrix, JSON)
 - `src/registration/` – Coregistrierung (Kostenfunktionen, Powell/Brent, Mehrstufen-Ablauf, Worker-Runner)
+- `src/normalization/` – Vorlagen, Normalisierungsmodell (Rückwärtsfeld), DCT-Basis und nichtlineare Schätzung,
+  SPM/CAT12-`y_*.nii`-Import/Export
+- `src/atlas/` – Atlanten, Labeltabellen, Regionalstatistik und SUVR
 - `src/resample/` – Interpolation (NN/trilinear/B-Spline), Resampling in Zielraster, eigene Matrix-/Voxelgrößen
 - `src/dicom/` – DICOM-Parsing (Rohdaten), Pixel-Dekodierung inkl. JPEG Lossless
 - `src/recon/` – Sinogramm, FFT/Rampenfilter, FBP, OSEM
@@ -101,5 +126,14 @@ Ein Push auf `main` veröffentlicht die App über GitHub Pages.
 - `src/edit/` – Bearbeitungsoperationen, VOI, Filter, Geometrie-Operationen, Worker-Runner
 - `src/header/` – Tag-Wörterbuch, Header-Modell, Validierung
 - `src/export/` – header-erhaltender DICOM-Rewriter, Vorlagen-Writer, Anonymisierung, Pixel-Kodierung, NIfTI, ZIP
-- `src/workers/` – Worker für Rekonstruktion, Bearbeitung, Coregistrierung und Resampling
+- `src/workers/` – Worker für Rekonstruktion, Bearbeitung, Coregistrierung, Normalisierung und Resampling
 - `src/ui/`, `src/components/` – Oberfläche (Shell, Panels)
+
+## Mitgelieferte Daten und Lizenzen
+
+- `public/templates/`: MNI ICBM 152 Nonlinear Asymmetrical 2009c (Fonov et al. 2009/2011), © 1993–2004 Louis Collins,
+  McConnell Brain Imaging Centre, MNI, McGill University – Weitergabe mit Copyright-Hinweis erlaubt
+  (`LICENSE-MNI152NLin2009cAsym.txt`); bezogen über TemplateFlow.
+- `public/atlases/`: CerebrA (Manera et al. 2020, Scientific Data 7:237), CC0 1.0; ursprünglich auf der symmetrischen
+  2009c-Vorlage (1 mm) erstellt und für Recon Studio per Mehrheitsentscheid auf das 2-mm-Raster der asymmetrischen
+  Vorlage übertragen.

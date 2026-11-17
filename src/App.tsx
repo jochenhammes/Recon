@@ -5,9 +5,11 @@ import { type Normalization, REGULARIZATION_WEIGHT, sameGrid, describeCoregProgr
 import { DEFAULT_WARP } from "./normalization/warp";
 import { buildDeformationField, fieldCoverage, parseDeformationField } from "./normalization/yfield";
 import { DeformationFieldCard } from "./ui/DeformationFieldCard";
+import { AtlasPanel, type RegionResult } from "./ui/AtlasPanel";
+import { atlasFromLabels, loadBundledAtlas, parseLabelTable, regionStats } from "./atlas/atlas";
 import { runWarp } from "./normalization/warpRunner";
 import { runResample } from "./resample/runner";
-import type { Interpolation } from "./resample/resample";
+import { type Interpolation, resampleAtPoints } from "./resample/resample";
 import { CoregPanel, type CoregSettings } from "./ui/CoregPanel";
 import { type RegistrationRun, runCoregistration } from "./registration/runner";
 import type { CoregProgress, CoregResult } from "./registration/coregister";
@@ -27,7 +29,7 @@ import type { SuvResult } from "./analysis/suv";
 import { type UnitMode, formatInput, parseInput } from "./components/format";
 import { type LoadedDataset, createDataset } from "./dataset/types";
 import { type EditOp, type VoiAction, changesGrid, countAffected } from "./edit/operations";
-import { type LoadedVolume, decompressGzip } from "./viewer/volumeLoader";
+import { type LoadedVolume, decompressGzip, loadVolumeFromFiles } from "./viewer/volumeLoader";
 import { UploadPanel } from "./components/UploadPanel";
 import { VolumeUploadPanel } from "./components/VolumeUploadPanel";
 import { ReconControls } from "./components/ReconControls";
@@ -43,6 +45,7 @@ import {
   IDENTITY_MAT4,
   IDENTITY_PARAMS,
   type Mat4,
+  applyMat4,
   invert4,
   isRigid,
   type TransformFile,
@@ -241,8 +244,9 @@ function App() {
 
   function addDataset(next: LoadedDataset) {
     const entry: Entry = { id: `ds${nextEntryId++}`, dataset: next, display: defaultDisplay(next.current, next.source), matrix: IDENTITY_MAT4 };
-    if (next.template && reference) {
-      // Templates are added without changing reference, overlay or active dataset.
+    if (next.atlas) entry.display = { window: [0, 255], lut: "labels", opacity: 0.45, visible: true };
+    if ((next.template || next.atlas) && reference) {
+      // Templates and atlases are added without changing reference, overlay or active dataset.
       setEntries([...entries, entry]);
       return;
     }
@@ -328,6 +332,8 @@ function App() {
   }
 
   const [templateBusy, setTemplateBusy] = useState(false);
+  const [atlasBusy, setAtlasBusy] = useState(false);
+  const [atlasError, setAtlasError] = useState<string | null>(null);
 
   async function addBundledTemplate() {
     setTemplateBusy(true);
@@ -556,7 +562,7 @@ function App() {
   // ── Spatial normalization (standard space) ──
   const templateEntries = entries.filter((e) => e.dataset.template);
   const normTemplate = byId(normTemplateId)?.dataset.template ? byId(normTemplateId) : templateEntries[0];
-  const subjectCandidates = entries.filter((e) => !e.dataset.template && !e.dataset.derivedFrom);
+  const subjectCandidates = entries.filter((e) => !e.dataset.template && !e.dataset.derivedFrom && !e.dataset.atlas);
   const normSubject =
     byId(normSubjectId) && !byId(normSubjectId)!.dataset.template ? byId(normSubjectId) : (subjectCandidates.find((e) => modalityLabel(e.dataset.source) === "MR") ?? subjectCandidates[0]);
   const guessedKind: "T1" | "PET" = normSubject && ["MR", "NIfTI"].includes(modalityLabel(normSubject.dataset.source)) ? "T1" : "PET";
@@ -628,6 +634,78 @@ function App() {
         setNormRunning(false);
         normRun.current = null;
       });
+  }
+
+  // ── Atlas / SUVR ──
+  async function addBundledAtlas() {
+    setAtlasBusy(true);
+    setAtlasError(null);
+    try {
+      addDataset(await loadBundledAtlas());
+    } catch (e) {
+      setAtlasError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAtlasBusy(false);
+    }
+  }
+
+  async function addOwnAtlas(files: File[]) {
+    setAtlasError(null);
+    const image = files.find((f) => /\.nii(\.gz)?$/i.test(f.name));
+    const table = files.find((f) => f !== image);
+    if (!image) {
+      setAtlasError("Bitte das Labelbild (NIfTI) mit auswählen.");
+      return;
+    }
+    try {
+      const loaded = await loadVolumeFromFiles([image]);
+      const labels = table ? parseLabelTable(await table.text()) : undefined;
+      if (table && !labels?.size) throw new Error(`In „${table.name}“ wurden keine Labels erkannt.`);
+      const d = createDataset(loaded.volume, loaded.source, image.name);
+      addDataset({ ...d, atlas: atlasFromLabels(loaded.volume.data, image.name.replace(/\.nii(\.gz)?$/i, ""), labels) });
+    } catch (e) {
+      setAtlasError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  /** Atlas labels on the voxel grid of a dataset (nearest neighbour through the display registration). */
+  function atlasLabelsFor(atlasEntry: Entry, target: Entry): Float32Array {
+    const a = atlasEntry.dataset.current;
+    const v = target.dataset.current;
+    if (sameGrid({ nx: a.nx, ny: a.ny, nz: a.nz, geometry: a.geometry }, v) && atlasEntry.matrix.every((x, i) => Math.abs(x - target.matrix[i]) < 1e-9)) return a.data;
+    const w2v = w2vById.get(atlasEntry.id);
+    if (!w2v) throw new Error("Atlas ist nicht im Viewer verfügbar.");
+    const pts = new Float32Array(v.nx * v.ny * v.nz * 3);
+    for (let k = 0, o = 0; k < v.nz; k++)
+      for (let j = 0; j < v.ny; j++)
+        for (let i = 0; i < v.nx; i++, o += 3) pts.set(applyMat4(target.matrix, voxelToWorld(v.geometry, i, j, k)), o);
+    return resampleAtPoints(a, w2v, pts, "nearest");
+  }
+
+  function computeRegions(atlasId: string, targetId: string): RegionResult {
+    const A = byId(atlasId);
+    const E = byId(targetId);
+    if (!A?.dataset.atlas || !E) throw new Error("Atlas oder Datensatz nicht gefunden.");
+    const v = E.dataset.current;
+    const labels = atlasLabelsFor(A, E);
+    const [sx, sy, sz] = v.geometry.spacing;
+    const stats = regionStats(v.data, labels, A.dataset.atlas, (sx * sy * sz) / 1000);
+    if (!stats.length) throw new Error("Keine Atlasregion überlappt mit dem Datensatz – liegt er im Standardraum des Atlas?");
+    return { stats, unit: rawUnitLabel(unitSource(E.dataset)), datasetLabel: E.dataset.displayName };
+  }
+
+  function createSuvrImage(targetId: string, refMean: number, refLabel: string) {
+    const E = byId(targetId);
+    if (!E || !(refMean > 0)) return;
+    const v = E.dataset.current;
+    const data = new Float32Array(v.data.length);
+    for (let i = 0; i < data.length; i++) data[i] = v.data[i] / refMean;
+    const d = createDataset(v.withData(data), E.dataset.source, `${E.dataset.displayName} · SUVR`);
+    const derived: LoadedDataset = { ...d, derivedFrom: { name: `${E.dataset.displayName} (SUVR, Referenz: ${refLabel})`, source: { kind: "reconstruction" }, space: E.dataset.derivedFrom?.space ?? "nativ", label: "SUVR" } };
+    const id = `ds${nextEntryId++}`;
+    setEntries((prev) => [...prev, { id, dataset: derived, display: { window: [0, 3], lut: "kidney", opacity: 0.6, visible: true }, matrix: E.matrix }]);
+    setOverlayId(id);
+    setActiveId(id);
   }
 
   /** Imports an SPM / CAT12 y_*.nii as the normalization of the selected subject. */
@@ -940,7 +1018,7 @@ function App() {
       onStart={startNormalization}
       onCancel={() => normRun.current?.cancel()}
       normalization={normFor}
-      transferCandidates={entries.filter((e) => !e.dataset.template && !e.dataset.derivedFrom).map((e) => ({ id: e.id, label: `${datasetModality(e.dataset)} · ${e.dataset.displayName}` }))}
+      transferCandidates={subjectCandidates.map((e) => ({ id: e.id, label: `${datasetModality(e.dataset)} · ${e.dataset.displayName}` }))}
       onTransfer={(ids, method) => normFor && void transferToStandardSpace(normFor, ids, method)}
       transferStatus={transferStatus}
       transferBusy={transferBusy}
@@ -953,6 +1031,17 @@ function App() {
         onImport={(f) => void importDeformationField(f)}
         onExport={exportDeformationField}
         status={fieldStatus}
+      />
+      <AtlasPanel
+        atlases={entries.filter((e) => e.dataset.atlas).map((e) => ({ id: e.id, label: e.dataset.atlas!.name, atlas: e.dataset.atlas! }))}
+        onLoadBundled={() => void addBundledAtlas()}
+        bundledLoading={atlasBusy}
+        onLoadOwn={(f) => void addOwnAtlas(f)}
+        targets={entries.filter((e) => !e.dataset.template && !e.dataset.atlas).map((e) => ({ id: e.id, label: `${datasetModality(e.dataset)} · ${e.dataset.displayName}` }))}
+        defaultTargetId={entries.findLast((e) => e.dataset.derivedFrom && !e.dataset.derivedFrom.label && !isAnatomical(unitSource(e.dataset)))?.id ?? null}
+        compute={computeRegions}
+        onCreateSuvrImage={createSuvrImage}
+        error={atlasError}
       />
     </NormalizationPanel>
   );

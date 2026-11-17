@@ -114,7 +114,7 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
 }
 
-export type ColorLut = "gray" | "inverted" | "rainbow" | "kidney" | "voi";
+export type ColorLut = "gray" | "inverted" | "rainbow" | "kidney" | "voi" | "labels";
 
 function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
   const c = v * s;
@@ -167,6 +167,12 @@ const RAINBOW_LUT = buildRainbowLut();
 const KIDNEY_LUT = buildKidneyLut();
 const GRAY_LUT = Uint8Array.from({ length: 256 * 3 }, (_, i) => Math.floor(i / 3));
 const INVERTED_LUT = Uint8Array.from({ length: 256 * 3 }, (_, i) => 255 - Math.floor(i / 3));
+/** Distinct colors for label atlases (index = label with window [0, 255]); golden-angle hues. */
+const LABEL_LUT = (() => {
+  const t = new Uint8Array(256 * 3);
+  for (let i = 1; i < 256; i++) t.set(hsvToRgb((i * 137.508) % 360, i % 2 ? 0.75 : 0.55, i % 3 ? 1 : 0.8), i * 3);
+  return t;
+})();
 const VOI_LUT = Uint8Array.from({ length: 256 * 3 }, (_, i) => [40, 230, 140][i % 3]);
 
 /** 256-entry RGB table (r, g, b interleaved) for a color LUT. */
@@ -180,6 +186,8 @@ export function lutTable(lut: ColorLut): Uint8Array {
       return INVERTED_LUT;
     case "voi":
       return VOI_LUT;
+    case "labels":
+      return LABEL_LUT;
     default:
       return GRAY_LUT;
   }
