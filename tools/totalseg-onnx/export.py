@@ -104,9 +104,11 @@ class Conv3dAs2d(torch.nn.Module):
         if self.pd:
             x = torch.nn.functional.pad(x, (0, 0, 0, 0, self.pd, self.pd))
         do = (d + 2 * self.pd - self.kd) // self.sd + 1
+        # One transpose to (n, depth, c, h, w); the depth slices are then contiguous (no copy per offset).
+        xt = x.transpose(1, 2)
         out = None
         for k, conv in enumerate(self.convs):
-            xs = x[:, :, k : k + self.sd * (do - 1) + 1 : self.sd].transpose(1, 2).reshape(n * do, ci, h, w)
+            xs = xt[:, k : k + self.sd * (do - 1) + 1 : self.sd].reshape(n * do, ci, h, w)
             y = conv(xs)
             out = y if out is None else out + y
         ho, wo = out.shape[-2:]
@@ -124,7 +126,8 @@ def replace_conv3d(module: torch.nn.Module) -> int:
     return count
 
 
-AS_2D = "--no-2d" not in sys.argv
+# Opt-in: faster 2-D kernels on WebGPU, but ~3x the peak memory (tabs were killed in Safari) – off by default.
+AS_2D = "--2d" in sys.argv
 if AS_2D:
     print("replaced Conv3d by 2-D convolutions:", replace_conv3d(net))
 
@@ -139,7 +142,7 @@ class TopKHead(torch.nn.Module):
     block's top-k and log-sum-exp are merged into running results, so no tensor of all C logits exists.
     Only ReduceMax/Equal/Where/Exp/Log/ReduceSum/Concat are used (WebGPU has no TopK)."""
 
-    BLOCK = 30
+    BLOCK = int(next((a.split("=")[1] for a in sys.argv if a.startswith("--block=")), 10))
 
     def __init__(self, net, classes):
         super().__init__()
@@ -174,7 +177,10 @@ class TopKHead(torch.nn.Module):
         feat = self.net(x)
         run_v = run_i = lse = None
         for conv, a in zip(self.blocks, self.offsets):
-            logits = conv(feat)
+            # Data dependency on the previous block forces sequential execution: otherwise the runtime may run all
+            # block convolutions first and hold every logits block at once (peak memory as with full logits).
+            src = feat if run_v is None else feat + 0.0 * (run_v[-1] + run_i[-1] + lse)[:, :, :1, :1, :1]
+            logits = conv(src)
             m = logits.amax(1, keepdim=True)
             block_lse = m + torch.log(torch.exp(logits - m).sum(1, keepdim=True))
             v, i = self._topk(logits, getattr(self, f"cls{a}"))
