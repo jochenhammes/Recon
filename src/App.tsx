@@ -359,23 +359,34 @@ function App() {
     setNewValue("0");
   }
 
+  // Mirror of the state relevant for adding datasets, so several datasets can be added in one go
+  // (e.g. all series of an upload) without each call seeing stale state.
+  const live = useRef({ entries, referenceId: reference?.id ?? null, activeId: active?.id ?? null });
+  live.current = { entries, referenceId: reference?.id ?? null, activeId: active?.id ?? null };
+
   function addDataset(next: LoadedDataset): Entry {
+    const L = live.current;
     const entry: Entry = { id: `ds${nextEntryId++}`, dataset: next, display: defaultDisplay(next.current, next.source), matrix: IDENTITY_MAT4 };
     if (next.atlas) entry.display = { window: [0, 255], lut: "labels", opacity: 0.45, visible: true, nearest: true };
-    if ((next.template || next.atlas) && reference) {
+    const ref = L.entries.find((e) => e.id === L.referenceId);
+    const act = L.entries.find((e) => e.id === L.activeId);
+    if ((next.template || next.atlas) && ref) {
       // Templates and atlases are added without changing reference, overlay or active dataset.
       setEntries((prev) => [...prev, entry]);
+      live.current = { ...L, entries: [...L.entries, entry] };
       return entry;
     }
     const anatomical = isAnatomical(next.source) || next.template?.kind === "T1";
-    const ref = reference;
-    let list = [...entries, entry];
+    let list = [...L.entries, entry];
+    let referenceId = L.referenceId;
     if (!ref) {
+      referenceId = entry.id;
       setReferenceId(entry.id);
       setOverlayIds([]);
     } else if (anatomical && !isAnatomical(ref.dataset.source)) {
       // CT/MR becomes the display base; the previous reference is shown on top.
       list = list.map((e) => (e.id === ref.id ? { ...e, display: overlayDisplay(e) } : e));
+      referenceId = entry.id;
       setReferenceId(entry.id);
       addOverlay(ref.id);
     } else {
@@ -385,14 +396,17 @@ function App() {
     setEntries(list);
     setCursor(null);
     // A CT/MR added for fusion does not take over analysis/editing from an existing PET/SPECT.
-    const becomesActive = !active || !anatomical || isAnatomical(active.dataset.source);
+    const becomesActive = !act || !anatomical || isAnatomical(act.dataset.source);
+    let activeId = L.activeId;
     if (becomesActive) {
+      activeId = entry.id;
       setActiveId(entry.id);
       setVoi(null);
       const suv = suvForSource(next.source);
       if (!anatomical) setUnitMode(suv?.ok ? "suv" : "raw");
       resetEditInputs(next, !anatomical && suv?.ok ? suv.info.factor : 1);
     }
+    live.current = { entries: list, referenceId, activeId };
     return entry;
   }
 
@@ -1540,7 +1554,7 @@ function App() {
             Lizenz
           </a>
         </p>
-        <VolumeUploadPanel title="Eigene T1-Vorlage (NIfTI)" description="z. B. aus SPM oder CAT12." onLoaded={(l, n) => addOwnTemplate(l, n, "T1")} />
+        <VolumeUploadPanel single title="Eigene T1-Vorlage (NIfTI)" description="z. B. aus SPM oder CAT12." onLoaded={(l, n) => addOwnTemplate(l, n, "T1")} />
         <label className="field">
           Eigene PET-Vorlage (NIfTI; 4D = adaptive Vorlage: amyloid-negativ, amyloid-positiv)
           <input

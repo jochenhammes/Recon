@@ -1,15 +1,18 @@
 import { useRef, useState } from "react";
-import { type LoadedVolume, VolumeLoadError, loadVolumeFromFiles } from "../viewer/volumeLoader";
+import { type LoadedVolume, VolumeLoadError, loadVolumeFromFiles, loadVolumesFromFiles } from "../viewer/volumeLoader";
 import { droppedFiles } from "./droppedFiles";
 
 export interface VolumeUploadPanelProps {
   onLoaded: (loaded: LoadedVolume, fileName: string) => void;
   title?: string;
   description?: string;
+  /** Load only one volume (largest series) instead of every series in the selection. */
+  single?: boolean;
 }
 
-export function VolumeUploadPanel({ onLoaded, title = "Volumen laden", description }: VolumeUploadPanelProps) {
+export function VolumeUploadPanel({ onLoaded, title = "Volumen laden", description, single }: VolumeUploadPanelProps) {
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -19,12 +22,22 @@ export function VolumeUploadPanel({ onLoaded, title = "Volumen laden", descripti
     if (!fileList || fileList.length === 0) return;
     setBusy(true);
     setError(null);
+    setInfo(null);
     try {
       // Hidden files (macOS .DS_Store, ._* resource forks) are never image data.
       const files = Array.from(fileList).filter((f) => !f.name.startsWith("."));
+      const folder = (files[0] as File & { webkitRelativePath?: string }).webkitRelativePath?.split("/")[0];
+      if (!single) {
+        // Every series becomes its own dataset; unreadable files are ignored.
+        const { items, skipped } = await loadVolumesFromFiles(files);
+        if (!items.length) throw new VolumeLoadError(`Keine lesbaren Bilddaten gefunden${skipped.length ? ` (${skipped.length} Datei(en) ignoriert)` : ""}.`);
+        for (const it of items) onLoaded(it.loaded, items.length === 1 && folder ? `${folder} · ${it.name}` : it.name);
+        if (items.length > 1 || skipped.length)
+          setInfo(`${items.length} ${items.length === 1 ? "Datensatz" : "Datensätze (Serien)"} geladen${skipped.length ? `, ${skipped.length} nicht lesbare Datei(en) ignoriert` : ""}.`);
+        return;
+      }
       const loaded = await loadVolumeFromFiles(files);
       const count = loaded.source.kind === "dicom" ? loaded.source.files.length : files.length;
-      const folder = (files[0] as File & { webkitRelativePath?: string }).webkitRelativePath?.split("/")[0];
       const name = count === 1 && files.length === 1 ? files[0].name : folder ? `${folder} (${count} Dateien)` : `${count} Dateien`;
       onLoaded(loaded, name);
     } catch (e) {
@@ -73,6 +86,7 @@ export function VolumeUploadPanel({ onLoaded, title = "Volumen laden", descripti
           e.target.value = "";
         }}
       />
+      {info && <p className="tool-hint">{info}</p>}
       {error && <div className="error-banner">{error}</div>}
     </div>
   );

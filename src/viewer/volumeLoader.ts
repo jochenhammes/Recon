@@ -28,6 +28,68 @@ export interface LoadedVolume {
   source: VolumeSource;
 }
 
+export interface LoadedItem {
+  loaded: LoadedVolume;
+  /** Display name: series description / file name with number of files. */
+  name: string;
+}
+
+export interface MultiLoadResult {
+  items: LoadedItem[];
+  /** Files (or series) that could not be read and were ignored. */
+  skipped: string[];
+}
+
+const isIgnorable = (f: File) => f.name.startsWith(".") || f.name.toUpperCase() === "DICOMDIR";
+
+/**
+ * Loads everything in a selection: every NIfTI file and every DICOM series (grouped by Series Instance
+ * UID, image size and orientation; multi-frame files separately) becomes its own volume. Unreadable files
+ * and series that cannot be assembled are skipped and reported; the rest loads normally.
+ */
+export async function loadVolumesFromFiles(input: File[]): Promise<MultiLoadResult> {
+  const files = input.filter((f) => !isIgnorable(f));
+  const items: LoadedItem[] = [];
+  const skipped: string[] = [];
+  for (const f of files.filter((x) => /\.nii(\.gz)?$/i.test(x.name))) {
+    try {
+      items.push({ loaded: await loadNiftiFile(f), name: f.name });
+    } catch {
+      skipped.push(f.name);
+    }
+  }
+  const dicomFiles = files.filter((x) => !/\.nii(\.gz)?$/i.test(x.name));
+  const results = await Promise.allSettled(dicomFiles.map(parseDicomFile));
+  const ok: ParsedDicomFile[] = [];
+  results.forEach((r, i) => (r.status === "fulfilled" ? ok.push(r.value) : skipped.push(dicomFiles[i].name)));
+  const groups = new Map<string, ParsedDicomFile[]>();
+  for (const p of ok) {
+    const ds = p.file.dataSet;
+    const uid = ds.string("x0020000e")?.trim() ?? "";
+    const iop = p.iop ? p.iop.map((v) => v.toFixed(2)).join(",") : "";
+    const key = [uid, p.rows, p.cols, iop, p.frames.length > 1 ? p.file.fileName : ""].join("|");
+    const g = groups.get(key);
+    if (g) g.push(p);
+    else groups.set(key, [p]);
+  }
+  const series: (LoadedItem & { number: number })[] = [];
+  for (const g of groups.values()) {
+    try {
+      const loaded = buildDicomVolume(g);
+      const ds = g[0].file.dataSet;
+      const desc = ds.string("x0008103e")?.trim();
+      const number = parseInt(ds.string("x00200011") ?? "", 10);
+      const base = desc || (g.length === 1 ? g[0].file.fileName : "Serie");
+      series.push({ loaded, name: g.length > 1 ? `${base} (${g.length} Dateien)` : base, number: Number.isFinite(number) ? number : 1e9 });
+    } catch {
+      skipped.push(`Serie mit ${g.length} Datei(en)`);
+    }
+  }
+  series.sort((a, b) => a.number - b.number);
+  items.push(...series.map(({ loaded, name }) => ({ loaded, name })));
+  return { items, skipped };
+}
+
 /** Loads one or more files as a 3D volume. Supports NIfTI (.nii, .nii.gz) and DICOM. */
 export async function loadVolumeFromFiles(files: File[]): Promise<LoadedVolume> {
   if (files.length === 0) throw new VolumeLoadError("Keine Dateien ausgewählt.");
@@ -244,8 +306,11 @@ async function loadDicomVolume(input: File[]): Promise<LoadedVolume> {
     if (g) g.push(p);
     else bySeries.set(uid, [p]);
   }
-  const parsed = [...bySeries.values()].sort((a, b) => b.length - a.length)[0];
+  return buildDicomVolume([...bySeries.values()].sort((a, b) => b.length - a.length)[0]);
+}
 
+/** Builds one volume from the parsed files of a single series (sorted along the slice normal). */
+function buildDicomVolume(parsed: ParsedDicomFile[]): LoadedVolume {
   // Sort by position along the slice normal when patient coordinates are known, else by
   // InstanceNumber / SliceLocation.
   const iop = parsed[0].iop;
