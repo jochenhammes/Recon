@@ -1290,3 +1290,44 @@ tr.excluded-row td {
 .tag-field input {
   font-size: 12px;
 }
+
+/* Long dataset/file names (no spaces): never widen the side panel. */
+.side-panel-body {
+  overflow-x: hidden;
+}
+.side-panel-body > *,
+.card {
+  min-width: 0;
+  max-width: 100%;
+}
+.card h3,
+.card .hint,
+.card .tool-hint,
+.field,
+.checkbox-field {
+  overflow-wrap: anywhere;
+}
+.layer-head h3 {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.layer-head > :not(h3) {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.field select,
+.field input {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  text-overflow: ellipsis;
+}
+.chip-name {
+  max-width: 260px;
+}
+
+.card button {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
