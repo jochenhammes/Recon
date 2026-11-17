@@ -5,6 +5,8 @@ import type { ReactNode } from "react";
 export interface ShellTab {
   id: string;
   label: string;
+  /** Shorter label for the navigation rail (defaults to `label`). */
+  shortLabel?: string;
   icon: LucideIcon;
   content: ReactNode;
   disabled?: boolean;
@@ -69,7 +71,7 @@ export function AppShell(props: AppShellProps) {
                 }}
               >
                 <Icon size={20} strokeWidth={1.7} />
-                <span>{t.label}</span>
+                <span>{t.shortLabel ?? t.label}</span>
                 {t.badge !== undefined && t.badge !== 0 && <em className="nav-badge">{t.badge}</em>}
               </button>
             );

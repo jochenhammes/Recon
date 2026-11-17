@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, Download, Eye, FileCode2, FolderOpen, Wand2 } from "lucide-react";
+import { BarChart3, Crosshair, Download, Eye, FileCode2, FolderOpen, Wand2 } from "lucide-react";
+import { CoregPanel, type CoregSettings } from "./ui/CoregPanel";
+import { type RegistrationRun, runCoregistration } from "./registration/runner";
+import type { CoregProgress, CoregResult } from "./registration/coregister";
 import { HeaderPanel } from "./ui/HeaderPanel";
 import { AppShell, type ShellTab } from "./ui/AppShell";
 import { DatasetInfo } from "./ui/DatasetInfo";
@@ -33,9 +36,11 @@ import {
   type Mat4,
   invert4,
   isRigid,
+  type TransformFile,
   matrixFromParams,
   multiply4,
   paramsFromMatrix,
+  parseTransformFile,
   transformedWorldToVoxel,
 } from "./core/transform";
 import type { SpectProjectionSet } from "./dicom/types";
@@ -101,6 +106,13 @@ function App() {
   const [boxSize, setBoxSize] = useState<Vec3>([40, 40, 40]);
   const [brush, setBrush] = useState<BrushState>({ active: false, radius: 8, erase: false });
   const abortRef = useRef<AbortController | null>(null);
+  const [movingId, setMovingId] = useState<string | null>(null);
+  const [coregSettings, setCoregSettings] = useState<CoregSettings>({ dof: 6, cost: "auto", levels: [8, 4, 2], coarseSearch: false });
+  const [coregProgress, setCoregProgress] = useState<CoregProgress | null>(null);
+  const [coregRunning, setCoregRunning] = useState(false);
+  const [coregPending, setCoregPending] = useState<{ entryId: string; previous: Mat4; result: CoregResult } | null>(null);
+  const [coregError, setCoregError] = useState<string | null>(null);
+  const coregRun = useRef<RegistrationRun | null>(null);
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     try {
       return localStorage.getItem("recon-studio-theme") === "light" ? "light" : "dark";
@@ -415,6 +427,85 @@ function App() {
     abortRef.current?.abort();
   }
 
+  // ── Coregistration: moving dataset → reference ──
+  const movingCandidates = entries.filter((e) => e.id !== reference?.id);
+  const moving = byId(movingId) && movingId !== reference?.id ? byId(movingId) : (overlay ?? movingCandidates[0]);
+  const autoCost = moving && reference && modalityLabel(moving.dataset.source) === modalityLabel(reference.dataset.source) ? "ncc" : "nmi";
+
+  function selectMoving(id: string) {
+    setMovingId(id);
+    makeOverlay(id);
+  }
+
+  function startCoregistration() {
+    if (!moving || !reference || coregRunning) return;
+    setCoregError(null);
+    setCoregProgress(null);
+    setCoregRunning(true);
+    makeOverlay(moving.id);
+    const previous = moving.matrix;
+    const run = runCoregistration(
+      reference.dataset.current,
+      moving.dataset.current,
+      { ...coregSettings, cost: coregSettings.cost === "auto" ? autoCost : coregSettings.cost, initial: previous },
+      setCoregProgress,
+    );
+    coregRun.current = run;
+    run.promise
+      .then((result) => {
+        updateEntry(moving.id, { matrix: result.matrix });
+        setCoregPending({ entryId: moving.id, previous, result });
+      })
+      .catch((e) => {
+        if (!(e instanceof DOMException && e.name === "AbortError")) setCoregError(`Coregistrierung fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
+      })
+      .finally(() => {
+        setCoregRunning(false);
+        coregRun.current = null;
+      });
+  }
+
+  function discardCoregistration() {
+    if (coregPending) updateEntry(coregPending.entryId, { matrix: coregPending.previous });
+    setCoregPending(null);
+  }
+
+  function saveMatrix() {
+    if (!moving || !reference) return;
+    const center = centerOf(moving.dataset.current);
+    const file: TransformFile = {
+      format: "recon-studio-transform",
+      version: 1,
+      matrix: moving.matrix,
+      params: paramsFromMatrix(moving.matrix, center) ?? IDENTITY_PARAMS,
+      center,
+      moving: { name: moving.dataset.displayName, frameOfReferenceUid: moving.dataset.current.geometry.frameOfReferenceUid },
+      reference: { name: reference.dataset.displayName, frameOfReferenceUid: reference.dataset.current.geometry.frameOfReferenceUid },
+      method: coregPending?.entryId === moving.id ? `${coregSettings.dof === 6 ? "rigide" : "affin"}, ${coregPending.result.cost}` : undefined,
+      cost: coregPending?.entryId === moving.id ? { name: coregPending.result.cost, before: coregPending.result.before, after: coregPending.result.after } : undefined,
+      created: new Date().toISOString(),
+    };
+    const blob = new Blob([JSON.stringify(file, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${moving.dataset.displayName.replace(/[^A-Za-z0-9_.-]+/g, "_")}_to_${reference.dataset.displayName.replace(/[^A-Za-z0-9_.-]+/g, "_")}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function loadMatrix(f: File) {
+    if (!moving) return;
+    try {
+      const t = parseTransformFile(await f.text());
+      updateEntry(moving.id, { matrix: t.matrix });
+      setCoregPending(null);
+      setCoregError(null);
+    } catch (e) {
+      setCoregError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
   // ── Panels ──
   const presetsFor = (e: Entry): WindowPreset[] => {
     const v = e.dataset.current;
@@ -426,18 +517,18 @@ function App() {
     ];
   };
 
-  // Manual registration of the overlay relative to the reference (rigid parameters about its center).
-  const overlayCenter = overlay ? centerOf(overlay.dataset.current) : null;
-  const overlayParams = overlay && overlayCenter ? (paramsFromMatrix(overlay.matrix, overlayCenter) ?? IDENTITY_PARAMS) : IDENTITY_PARAMS;
+  // Manual registration of the moving dataset relative to the reference (parameters about its center).
+  const movingCenter = moving ? centerOf(moving.dataset.current) : null;
+  const movingParams = moving && movingCenter ? (paramsFromMatrix(moving.matrix, movingCenter) ?? IDENTITY_PARAMS) : IDENTITY_PARAMS;
 
   let frameNote: string | undefined;
-  if (overlay && reference) {
-    const a = overlay.dataset.current.geometry.frameOfReferenceUid;
+  if (moving && reference) {
+    const a = moving.dataset.current.geometry.frameOfReferenceUid;
     const b = reference.dataset.current.geometry.frameOfReferenceUid;
-    if (!overlay.dataset.current.hasPatientGeometry || !reference.dataset.current.hasPatientGeometry)
+    if (!moving.dataset.current.hasPatientGeometry || !reference.dataset.current.hasPatientGeometry)
       frameNote = "Für mindestens einen Datensatz sind keine Patientenkoordinaten bekannt – die Ausrichtung muss manuell erfolgen.";
     else if (a && b && a !== b)
-      frameNote = "Unterschiedliche Frame-of-Reference-UIDs: Die Datensätze stammen evtl. aus verschiedenen Untersuchungen – Ausrichtung prüfen.";
+      frameNote = "Unterschiedliche Frame-of-Reference-UIDs: Die Datensätze stammen evtl. aus verschiedenen Untersuchungen – Grobsuche empfohlen.";
   }
 
   const roleBadges = (e: Entry) => (
@@ -515,21 +606,6 @@ function App() {
     <>
       {overlay && layerSettings(overlay, true)}
       {reference && layerSettings(reference, false)}
-      {overlay && overlayCenter && (
-        <RegistrationPanel
-          title={`Registrierung ${modalityLabel(overlay.dataset.source)} → ${modalityLabel(reference?.dataset.source)}`}
-          params={overlayParams}
-          onChange={(p) => updateEntry(overlay.id, { matrix: matrixFromParams(p, overlayCenter) })}
-          frameNote={frameNote}
-        >
-          {!isRigid(overlayParams) && (
-            <p className="tool-hint">
-              Affine Anteile: Skalierung {[overlayParams.sx, overlayParams.sy, overlayParams.sz].map((v) => v.toFixed(3)).join(" / ")}, Scherung{" "}
-              {[overlayParams.hxy, overlayParams.hxz, overlayParams.hyz].map((v) => v.toFixed(3)).join(" / ")}
-            </p>
-          )}
-        </RegistrationPanel>
-      )}
     </>
   );
 
@@ -538,9 +614,54 @@ function App() {
       ? { functional: overlay.dataset, anatomical: reference.dataset, functionalW2v: w2vById.get(overlay.id)! }
       : undefined;
 
+  const registrationTab = reference && moving && movingCenter && (
+    <>
+      <CoregPanel
+        movingOptions={movingCandidates.map((e) => ({ id: e.id, label: `${modalityLabel(e.dataset.source)} · ${e.dataset.displayName}` }))}
+        movingId={moving.id}
+        onMovingChange={selectMoving}
+        referenceLabel={`${modalityLabel(reference.dataset.source)} · ${reference.dataset.displayName}`}
+        autoCost={autoCost}
+        settings={coregSettings}
+        onSettingsChange={setCoregSettings}
+        running={coregRunning}
+        progress={coregProgress}
+        onStart={startCoregistration}
+        onCancel={() => coregRun.current?.cancel()}
+        pending={coregPending?.entryId === moving.id ? coregPending.result : null}
+        onAccept={() => setCoregPending(null)}
+        onDiscard={discardCoregistration}
+        onResetToScanner={() => {
+          updateEntry(moving.id, { matrix: IDENTITY_MAT4 });
+          setCoregPending(null);
+        }}
+        onSaveMatrix={saveMatrix}
+        onLoadMatrix={(f) => void loadMatrix(f)}
+        frameNote={frameNote}
+        error={coregError}
+      />
+      <RegistrationPanel
+        title={`Manuelle Korrektur ${modalityLabel(moving.dataset.source)} → ${modalityLabel(reference.dataset.source)}`}
+        params={movingParams}
+        onChange={(p) => {
+          updateEntry(moving.id, { matrix: matrixFromParams(p, movingCenter) });
+          setCoregPending(null);
+        }}
+      >
+        {!isRigid(movingParams) && (
+          <p className="tool-hint">
+            Affine Anteile: Skalierung {[movingParams.sx, movingParams.sy, movingParams.sz].map((v) => v.toFixed(3)).join(" / ")}, Scherung{" "}
+            {[movingParams.hxy, movingParams.hxz, movingParams.hyz].map((v) => v.toFixed(3)).join(" / ")}
+          </p>
+        )}
+      </RegistrationPanel>
+    </>
+  );
+
   const tabs: ShellTab[] = [
     { id: "data", label: "Daten", icon: FolderOpen, content: dataTab, badge: entries.length > 1 ? entries.length : undefined },
     { id: "view", label: "Ansicht", icon: Eye, disabled: layers.length === 0, content: viewTab },
+    { id: "registration", label: "Registrierung", shortLabel: "Registr.", icon: Crosshair, disabled: entries.length < 2, content: registrationTab },
     {
       id: "analysis",
       label: "Analyse",

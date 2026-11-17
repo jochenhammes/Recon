@@ -51,8 +51,8 @@ export function RegistrationPanel({ params, onChange, frameNote, title, children
     <section className="card">
       <h3>{title}</h3>
       {frameNote && <p className="hint">{frameNote}</p>}
-      {TRANSLATIONS.map(([k, l]) => row(k, l, 60, 0.5, "mm"))}
-      {ROTATIONS.map(([k, l]) => row(k, l, 20, 0.5, "°"))}
+      {TRANSLATIONS.map(([k, l]) => row(k, l, Math.max(60, Math.ceil(Math.abs(params[k]) / 20) * 20 + 20), 0.5, "mm"))}
+      {ROTATIONS.map(([k, l]) => row(k, l, Math.max(20, Math.ceil(Math.abs(params[k]) / 10) * 10 + 10), 0.5, "°"))}
       {children}
       <button className="secondary-btn" onClick={() => onChange(IDENTITY_PARAMS)}>
         Registrierung zurücksetzen
