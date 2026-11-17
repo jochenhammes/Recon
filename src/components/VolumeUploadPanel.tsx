@@ -1,9 +1,8 @@
 import { useRef, useState } from "react";
-import type { Volume3D } from "../viewer/volume";
-import { VolumeLoadError, loadVolumeFromFiles } from "../viewer/volumeLoader";
+import { type LoadedVolume, VolumeLoadError, loadVolumeFromFiles } from "../viewer/volumeLoader";
 
 export interface VolumeUploadPanelProps {
-  onLoaded: (volume: Volume3D, fileName: string) => void;
+  onLoaded: (loaded: LoadedVolume, fileName: string) => void;
 }
 
 export function VolumeUploadPanel({ onLoaded }: VolumeUploadPanelProps) {
@@ -17,9 +16,9 @@ export function VolumeUploadPanel({ onLoaded }: VolumeUploadPanelProps) {
     setError(null);
     try {
       const files = Array.from(fileList);
-      const volume = await loadVolumeFromFiles(files);
+      const loaded = await loadVolumeFromFiles(files);
       const name = files.length === 1 ? files[0].name : `${files.length} Dateien`;
-      onLoaded(volume, name);
+      onLoaded(loaded, name);
     } catch (e) {
       setError(e instanceof VolumeLoadError ? e.message : `Unerwarteter Fehler: ${String(e)}`);
     } finally {

@@ -1,5 +1,7 @@
 import * as dicomParser from "dicom-parser";
 import { Volume3D } from "./volume";
+import type { DicomPixelEncoding, DicomSourceFile, NiftiSourceInfo, VolumeSource } from "../dataset/types";
+import { PixelDecodeError, decodePixelFrames, describeParseError } from "../dicom/pixelDecode";
 
 export class VolumeLoadError extends Error {
   constructor(message: string) {
@@ -8,8 +10,13 @@ export class VolumeLoadError extends Error {
   }
 }
 
+export interface LoadedVolume {
+  volume: Volume3D;
+  source: VolumeSource;
+}
+
 /** Loads one or more files as a 3D volume. Supports NIfTI (.nii, .nii.gz) and DICOM. */
-export async function loadVolumeFromFiles(files: File[]): Promise<Volume3D> {
+export async function loadVolumeFromFiles(files: File[]): Promise<LoadedVolume> {
   if (files.length === 0) throw new VolumeLoadError("Keine Dateien ausgewählt.");
 
   const niftiFiles = files.filter((f) => /\.nii(\.gz)?$/i.test(f.name));
@@ -26,10 +33,11 @@ export async function loadVolumeFromFiles(files: File[]): Promise<Volume3D> {
 
 // ─── NIfTI ───────────────────────────────────────────────────────────────────
 
-async function loadNiftiFile(file: File): Promise<Volume3D> {
+async function loadNiftiFile(file: File): Promise<LoadedVolume> {
   let buffer = await file.arrayBuffer();
   if (/\.gz$/i.test(file.name)) buffer = await decompressGzip(buffer);
-  return parseNifti1(buffer);
+  const { volume, nifti } = parseNifti1(buffer);
+  return { volume, source: { kind: "nifti", fileName: file.name, nifti } };
 }
 
 async function decompressGzip(buffer: ArrayBuffer): Promise<ArrayBuffer> {
@@ -52,7 +60,7 @@ async function decompressGzip(buffer: ArrayBuffer): Promise<ArrayBuffer> {
   return result.buffer as ArrayBuffer;
 }
 
-function parseNifti1(buffer: ArrayBuffer): Volume3D {
+export function parseNifti1(buffer: ArrayBuffer): { volume: Volume3D; nifti: NiftiSourceInfo } {
   if (buffer.byteLength < 352)
     throw new VolumeLoadError("Datei zu klein für einen NIfTI-1-Header.");
   const view = new DataView(buffer);
@@ -130,119 +138,146 @@ function parseNifti1(buffer: ArrayBuffer): Volume3D {
     for (let i = 0; i < n; i++) data[i] = data[i] * sclSlope + sclInter;
   }
 
-  return new Volume3D(data, nz, ny, nx, [dz, dy, dx]);
+  const nifti: NiftiSourceInfo = {
+    headerBytes: new Uint8Array(buffer.slice(0, voxOffset)),
+    littleEndian,
+    datatype,
+    sclSlope,
+    sclInter,
+  };
+  return { volume: new Volume3D(data, nz, ny, nx, [dz, dy, dx]), nifti };
 }
 
 // ─── DICOM ───────────────────────────────────────────────────────────────────
 
-async function loadDicomVolume(files: File[]): Promise<Volume3D> {
-  if (files.length === 0) throw new VolumeLoadError("Keine Dateien ausgewählt.");
-  if (files.length === 1) return loadSingleDicom(files[0]);
-  return loadDicomSeries(files);
+const EXPLICIT_VR_LE = "1.2.840.10008.1.2.1";
+
+interface ParsedDicomFile {
+  file: DicomSourceFile;
+  rows: number;
+  cols: number;
+  spacing: [number, number, number];
+  instanceNumber: number;
+  sliceLocation: number;
+  frames: Float32Array[];
 }
 
-async function loadSingleDicom(file: File): Promise<Volume3D> {
+async function loadDicomVolume(files: File[]): Promise<LoadedVolume> {
+  if (files.length === 0) throw new VolumeLoadError("Keine Dateien ausgewählt.");
+  const parsed = await Promise.all(files.map(parseDicomFile));
+
+  if (parsed.length > 1) {
+    parsed.sort((a, b) =>
+      a.instanceNumber !== b.instanceNumber ? a.instanceNumber - b.instanceNumber : a.sliceLocation - b.sliceLocation,
+    );
+  }
+  const { rows, cols } = parsed[0];
+  if (!parsed.every((p) => p.rows === rows && p.cols === cols))
+    throw new VolumeLoadError("DICOM-Serie: inkonsistente Bildgrößen.");
+
+  const nz = parsed.reduce((sum, p) => sum + p.frames.length, 0);
+  const sliceSize = rows * cols;
+  const data = new Float32Array(nz * sliceSize);
+  let z = 0;
+  for (const p of parsed) {
+    p.file.zStart = z;
+    const { slope, intercept } = p.file.encoding;
+    for (const frame of p.frames) {
+      const base = z * sliceSize;
+      for (let i = 0; i < sliceSize; i++) data[base + i] = frame[i] * slope + intercept;
+      z++;
+    }
+  }
+
+  const volume = new Volume3D(data, nz, rows, cols, parsed[0].spacing);
+  return {
+    volume,
+    source: { kind: "dicom", layout: parsed.length > 1 ? "series" : "multiframe", files: parsed.map((p) => p.file) },
+  };
+}
+
+/** Parses a Part10 file, falling back to a bare Explicit VR Little Endian dataset (no preamble). */
+export function parseDicomBytes(bytes: Uint8Array): dicomParser.DataSet {
+  try {
+    return dicomParser.parseDicom(bytes);
+  } catch (e) {
+    const message = describeParseError(e);
+    if (message.includes("DICM prefix not found") || message.includes("attempt to read past end of buffer")) {
+      return dicomParser.parseDicom(bytes, { TransferSyntaxUID: EXPLICIT_VR_LE });
+    }
+    throw e;
+  }
+}
+
+async function parseDicomFile(file: File): Promise<ParsedDicomFile> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   let dataSet: dicomParser.DataSet;
   try {
-    dataSet = dicomParser.parseDicom(bytes);
+    dataSet = parseDicomBytes(bytes);
   } catch (e) {
-    throw new VolumeLoadError(`DICOM-Parser-Fehler: ${String(e)}`);
+    throw new VolumeLoadError(`DICOM-Parser-Fehler in ${file.name}: ${describeParseError(e)}`);
   }
+
+  const transferSyntax = dataSet.string("x00020010")?.trim() || undefined;
+  if (transferSyntax === "1.2.840.10008.1.2.2" || transferSyntax === "1.2.840.10008.1.2.1.99")
+    throw new VolumeLoadError(`${file.name}: Transfer Syntax ${transferSyntax} (Big Endian/Deflate) wird nicht unterstützt.`);
+  if (dataSet.elements["x7fe00008"] || dataSet.elements["x7fe00009"])
+    throw new VolumeLoadError(`${file.name}: Float-PixelData wird nicht unterstützt.`);
 
   const rows = dataSet.uint16("x00280010") ?? 0;
   const cols = dataSet.uint16("x00280011") ?? 0;
-  const nFrames = parseInt(dataSet.string("x00280008") ?? "1", 10);
-  if (!rows || !cols || !nFrames)
-    throw new VolumeLoadError("DICOM: Bildgröße oder Frame-Anzahl nicht lesbar.");
+  const nFrames = parseInt(dataSet.string("x00280008") ?? "1", 10) || 1;
+  if (!rows || !cols) throw new VolumeLoadError(`DICOM: Bildgröße nicht lesbar in ${file.name}.`);
+  if ((dataSet.uint16("x00280002") ?? 1) !== 1)
+    throw new VolumeLoadError(`${file.name}: Nur Graustufenbilder (SamplesPerPixel = 1) werden unterstützt.`);
 
   const bitsAllocated = dataSet.uint16("x00280100") ?? 16;
-  const pixelRep = dataSet.uint16("x00280103") ?? 0;
-  const slope = parseFloat(dataSet.string("x00281053") ?? "1") || 1;
-  const intercept = parseFloat(dataSet.string("x00281052") ?? "0") || 0;
-  const [spacingZ, spacingRow, spacingCol] = readDicomSpacing(dataSet);
+  const encoding: DicomPixelEncoding = {
+    bitsAllocated,
+    bitsStored: dataSet.uint16("x00280101") ?? bitsAllocated,
+    pixelRepresentation: dataSet.uint16("x00280103") ?? 0,
+    slope: parseFloat(dataSet.string("x00281053") ?? "1") || 1,
+    intercept: parseFloat(dataSet.string("x00281052") ?? "0") || 0,
+    hasRescaleTags: !!dataSet.elements["x00281053"] || !!dataSet.elements["x00281052"],
+  };
 
-  const pixelEl = dataSet.elements["x7fe00010"];
-  if (!pixelEl) throw new VolumeLoadError("DICOM: Keine Pixeldaten gefunden.");
-
-  const pixelsPerFrame = rows * cols;
-  const data = new Float32Array(nFrames * pixelsPerFrame);
-  const bytesPerPixel = bitsAllocated / 8;
-
-  for (let f = 0; f < nFrames; f++) {
-    const byteOffset = pixelEl.dataOffset + f * pixelsPerFrame * bytesPerPixel;
-    const raw = bytes.buffer.slice(byteOffset, byteOffset + pixelsPerFrame * bytesPerPixel);
-    const frameBase = f * pixelsPerFrame;
-    applyPixelData(raw, data, frameBase, pixelsPerFrame, bitsAllocated, pixelRep, slope, intercept);
+  let frames: Float32Array[];
+  try {
+    frames = decodePixelFrames(dataSet, {
+      numberOfFrames: nFrames,
+      rows,
+      cols,
+      bitsAllocated,
+      pixelRepresentation: encoding.pixelRepresentation,
+    });
+  } catch (e) {
+    if (e instanceof PixelDecodeError) throw new VolumeLoadError(`${file.name}: ${e.message}`);
+    throw e;
   }
+  if (encoding.bitsStored < bitsAllocated) maskStoredBits(frames, encoding);
 
-  return new Volume3D(data, nFrames, rows, cols, [spacingZ, spacingRow, spacingCol]);
+  return {
+    file: { fileName: file.name, bytes, dataSet, transferSyntax, zStart: 0, nFrames, encoding },
+    rows,
+    cols,
+    spacing: readDicomSpacing(dataSet),
+    instanceNumber: parseInt(dataSet.string("x00200013") ?? "0", 10) || 0,
+    sliceLocation: parseFloat(dataSet.string("x00201041") ?? "0") || 0,
+    frames,
+  };
 }
 
-interface DicomSlice {
-  instanceNumber: number;
-  sliceLocation: number;
-  rows: number;
-  cols: number;
-  spacingRow: number;
-  spacingCol: number;
-  spacingZ: number;
-  pixelData: Float32Array;
-}
-
-async function loadDicomSeries(files: File[]): Promise<Volume3D> {
-  const slices: DicomSlice[] = await Promise.all(
-    files.map(async (file) => {
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      let dataSet: dicomParser.DataSet;
-      try {
-        dataSet = dicomParser.parseDicom(bytes);
-      } catch (e) {
-        throw new VolumeLoadError(`DICOM-Parser-Fehler in ${file.name}: ${String(e)}`);
-      }
-
-      const rows = dataSet.uint16("x00280010") ?? 0;
-      const cols = dataSet.uint16("x00280011") ?? 0;
-      if (!rows || !cols)
-        throw new VolumeLoadError(`DICOM: Bildgröße nicht lesbar in ${file.name}.`);
-
-      const bitsAllocated = dataSet.uint16("x00280100") ?? 16;
-      const pixelRep = dataSet.uint16("x00280103") ?? 0;
-      const slope = parseFloat(dataSet.string("x00281053") ?? "1") || 1;
-      const intercept = parseFloat(dataSet.string("x00281052") ?? "0") || 0;
-      const instanceNumber = parseInt(dataSet.string("x00200013") ?? "0", 10);
-      const sliceLocation = parseFloat(dataSet.string("x00201041") ?? "0") || 0;
-      const [spacingZ, spacingRow, spacingCol] = readDicomSpacing(dataSet);
-
-      const pixelEl = dataSet.elements["x7fe00010"];
-      if (!pixelEl) throw new VolumeLoadError(`DICOM: Keine Pixeldaten in ${file.name}.`);
-
-      const n = rows * cols;
-      const pixelData = new Float32Array(n);
-      const bytesPerPixel = bitsAllocated / 8;
-      const raw = bytes.buffer.slice(pixelEl.dataOffset, pixelEl.dataOffset + n * bytesPerPixel);
-      applyPixelData(raw, pixelData, 0, n, bitsAllocated, pixelRep, slope, intercept);
-
-      return { instanceNumber, sliceLocation, rows, cols, spacingRow, spacingCol, spacingZ, pixelData };
-    }),
-  );
-
-  slices.sort((a, b) =>
-    a.instanceNumber !== b.instanceNumber
-      ? a.instanceNumber - b.instanceNumber
-      : a.sliceLocation - b.sliceLocation,
-  );
-
-  const { rows, cols } = slices[0];
-  if (!slices.every((s) => s.rows === rows && s.cols === cols))
-    throw new VolumeLoadError("DICOM-Serie: inkonsistente Bildgrößen.");
-
-  const nz = slices.length;
-  const data = new Float32Array(nz * rows * cols);
-  for (let z = 0; z < nz; z++) data.set(slices[z].pixelData, z * rows * cols);
-
-  const { spacingRow, spacingCol, spacingZ } = slices[0];
-  return new Volume3D(data, nz, rows, cols, [spacingZ, spacingRow, spacingCol]);
+/** Restricts samples to BitsStored (high bits may contain overlay/garbage), sign-extending if signed. */
+function maskStoredBits(frames: Float32Array[], enc: DicomPixelEncoding): void {
+  const bits = enc.bitsStored;
+  const range = 2 ** bits;
+  for (const frame of frames) {
+    for (let i = 0; i < frame.length; i++) {
+      let v = ((frame[i] % range) + range) % range;
+      if (enc.pixelRepresentation === 1 && v >= range / 2) v -= range;
+      frame[i] = v;
+    }
+  }
 }
 
 function readDicomSpacing(dataSet: dicomParser.DataSet): [number, number, number] {
@@ -253,29 +288,7 @@ function readDicomSpacing(dataSet: dicomParser.DataSet): [number, number, number
     spacingRow = parts[0] || 1;
     spacingCol = parts[1] || 1;
   }
-  const spacingZ = parseFloat(dataSet.string("x00180050") ?? "1") || 1;
+  const spacingZ =
+    parseFloat(dataSet.string("x00180088") ?? "") || parseFloat(dataSet.string("x00180050") ?? "1") || 1;
   return [spacingZ, spacingRow, spacingCol];
-}
-
-function applyPixelData(
-  raw: ArrayBuffer,
-  out: Float32Array,
-  outBase: number,
-  n: number,
-  bitsAllocated: number,
-  pixelRep: number,
-  slope: number,
-  intercept: number,
-): void {
-  if (bitsAllocated === 16) {
-    const src = pixelRep === 1 ? new Int16Array(raw) : new Uint16Array(raw);
-    for (let i = 0; i < Math.min(n, src.length); i++)
-      out[outBase + i] = src[i] * slope + intercept;
-  } else if (bitsAllocated === 8) {
-    const src = new Uint8Array(raw);
-    for (let i = 0; i < Math.min(n, src.length); i++)
-      out[outBase + i] = src[i] * slope + intercept;
-  } else {
-    throw new VolumeLoadError(`DICOM: ${bitsAllocated}-bit-Pixel werden nicht unterstützt.`);
-  }
 }

@@ -1,4 +1,5 @@
 import type { Volume3D } from "../viewer/volume";
+import type { NiftiSourceInfo } from "../dataset/types";
 
 const HEADER_SIZE = 348;
 const EXTENSION_SIZE = 4;
@@ -85,4 +86,29 @@ function writeAscii(dv: DataView, offset: number, maxLen: number, s: string) {
   for (let i = 0; i < Math.min(s.length, maxLen); i++) {
     dv.setUint8(offset + i, s.charCodeAt(i) & 0xff);
   }
+}
+
+/**
+ * Writes the volume into a copy of an original NIfTI-1 header (incl. extensions, qform/sform,
+ * description, intent, etc.). Only datatype/bitpix (→ float32) and scl_slope/scl_inter (→ 1/0)
+ * are changed; vox_offset stays the same. Returns null for big-endian originals.
+ */
+export function buildNiftiFromOriginalHeader(volume: Volume3D, nifti: NiftiSourceInfo): Uint8Array<ArrayBuffer> | null {
+  if (!nifti.littleEndian) return null;
+  const voxOffset = nifti.headerBytes.length;
+  const { data } = volume;
+  const out = new Uint8Array(voxOffset + data.byteLength);
+  out.set(nifti.headerBytes, 0);
+  const dv = new DataView(out.buffer);
+  dv.setInt16(70, DT_FLOAT32, true);
+  dv.setInt16(72, 32, true);
+  dv.setFloat32(112, 1, true);
+  dv.setFloat32(116, 0, true);
+  // Only the first 3D volume of a 4D+ file is loaded/exported: make the header 3D accordingly.
+  if (dv.getInt16(40, true) > 3) {
+    dv.setInt16(40, 3, true);
+    for (let i = 4; i <= 7; i++) dv.setInt16(40 + i * 2, 1, true);
+  }
+  out.set(new Uint8Array(data.buffer, data.byteOffset, data.byteLength), voxOffset);
+  return out;
 }

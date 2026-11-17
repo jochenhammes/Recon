@@ -1,13 +1,7 @@
 import * as dicomParser from "dicom-parser";
 import type { DataSet } from "dicom-parser";
-import { Decoder as JpegLosslessDecoder } from "jpeg-lossless-decoder-js";
+import { PixelDecodeError, decodeJpegLosslessFrame, decodePixelFrames, describeParseError } from "./pixelDecode";
 import type { ProjectionFrame, SpectProjectionSet } from "./types";
-
-/** Transfer syntaxes this parser can decode for encapsulated (compressed) PixelData. */
-const JPEG_LOSSLESS_TRANSFER_SYNTAXES = new Set([
-  "1.2.840.10008.1.2.4.57", // JPEG Lossless, Non-Hierarchical (Process 14)
-  "1.2.840.10008.1.2.4.70", // JPEG Lossless, Non-Hierarchical, First-Order Prediction (Process 14 [Selection Value 1])
-]);
 
 const TAG = {
   TransferSyntaxUID: "x00020010",
@@ -69,17 +63,6 @@ const VR_DICTIONARY: Record<string, string> = {
 
 function vrCallback(tag: string): string | undefined {
   return VR_DICTIONARY[tag];
-}
-
-/**
- * dicom-parser throws plain strings or `{ exception, dataSet }` objects rather than Error
- * instances, so `String(e)` on those yields "[object Object]". Extracts a readable message.
- */
-function describeParseError(e: unknown): string {
-  if (typeof e === "string") return e;
-  if (e instanceof Error) return e.message;
-  if (e && typeof e === "object" && "exception" in e && typeof e.exception === "string") return e.exception;
-  return String(e);
 }
 
 function isMissingP10Prefix(e: unknown): boolean {
@@ -351,121 +334,19 @@ function computeFrameAngles(
   return angles;
 }
 
-/** Decodes one JPEG-Lossless-compressed frame (fragment bytes) into raw sample bytes. */
-function decodeJpegLosslessFrame(fragment: Uint8Array): ArrayBuffer {
-  const decoder = new JpegLosslessDecoder();
-  return decoder.decompress(
-    fragment.buffer as ArrayBuffer,
-    fragment.byteOffset,
-    fragment.length,
-  ) as ArrayBuffer;
-}
-
-function readEncapsulatedPixelFrames(
-  dataSet: DataSet,
-  pixelDataElement: dicomParser.Element,
-  numberOfFrames: number,
-  pixelsPerFrame: number,
-  bytesPerPixel: number,
-  pixelRepresentation: number,
-): Float32Array[] {
-  const transferSyntax = dataSet.string(TAG.TransferSyntaxUID);
-  if (!transferSyntax || !JPEG_LOSSLESS_TRANSFER_SYNTAXES.has(transferSyntax)) {
-    throw new DicomParseError(
-      `Komprimierte PixelData mit Transfer Syntax "${transferSyntax ?? "unbekannt"}" wird nicht unterstützt. ` +
-        "Unterstützt werden unkomprimierte Dateien sowie JPEG Lossless " +
-        "(1.2.840.10008.1.2.4.57 / 1.2.840.10008.1.2.4.70).",
-    );
-  }
-  const basicOffsetTable =
-    pixelDataElement.basicOffsetTable && pixelDataElement.basicOffsetTable.length > 0
-      ? pixelDataElement.basicOffsetTable
-      : dicomParser.createJPEGBasicOffsetTable(dataSet, pixelDataElement);
-
-  const frames: Float32Array[] = [];
-  for (let f = 0; f < numberOfFrames; f++) {
-    const fragment = dicomParser.readEncapsulatedImageFrame(dataSet, pixelDataElement, f, basicOffsetTable);
-    let decoded: ArrayBuffer;
-    try {
-      decoded = decodeJpegLosslessFrame(fragment);
-    } catch (e) {
-      throw new DicomParseError(`JPEG-Lossless-Dekodierung von Frame ${f} fehlgeschlagen: ${describeParseError(e)}`);
-    }
-    if (decoded.byteLength < pixelsPerFrame * bytesPerPixel) {
-      throw new DicomParseError(
-        `Dekodierter Frame ${f} ist zu kurz: erwartet ${pixelsPerFrame * bytesPerPixel} Bytes, ` +
-          `gefunden ${decoded.byteLength}.`,
-      );
-    }
-    const view = new DataView(decoded);
-    const pixels = new Float32Array(pixelsPerFrame);
-    for (let p = 0; p < pixelsPerFrame; p++) {
-      const byteOffset = p * bytesPerPixel;
-      let value: number;
-      if (bytesPerPixel === 2) {
-        value = pixelRepresentation === 1 ? view.getInt16(byteOffset, true) : view.getUint16(byteOffset, true);
-      } else {
-        value = pixelRepresentation === 1 ? view.getInt8(byteOffset) : view.getUint8(byteOffset);
-      }
-      pixels[p] = value;
-    }
-    frames.push(pixels);
-  }
-  return frames;
-}
-
-function readPixelFrames(
-  dataSet: DataSet,
-  byteArray: Uint8Array,
-  numberOfFrames: number,
-  rows: number,
-  cols: number,
-): Float32Array[] {
-  const pixelDataElement = dataSet.elements[TAG.PixelData];
-  if (!pixelDataElement) throw new DicomParseError("DICOM-Datei enthält keine PixelData (7FE0,0010).");
-  const bitsAllocated = readNumeric(dataSet, TAG.BitsAllocated) ?? 16;
-  const pixelRepresentation = readNumeric(dataSet, TAG.PixelRepresentation) ?? 0;
-  const bytesPerPixel = bitsAllocated / 8;
-  const pixelsPerFrame = rows * cols;
-
-  if (pixelDataElement.encapsulatedPixelData) {
-    return readEncapsulatedPixelFrames(
-      dataSet,
-      pixelDataElement,
+function readPixelFrames(dataSet: DataSet, numberOfFrames: number, rows: number, cols: number): Float32Array[] {
+  try {
+    return decodePixelFrames(dataSet, {
       numberOfFrames,
-      pixelsPerFrame,
-      bytesPerPixel,
-      pixelRepresentation,
-    );
+      rows,
+      cols,
+      bitsAllocated: readNumeric(dataSet, TAG.BitsAllocated) ?? 16,
+      pixelRepresentation: readNumeric(dataSet, TAG.PixelRepresentation) ?? 0,
+    });
+  } catch (e) {
+    if (e instanceof PixelDecodeError) throw new DicomParseError(e.message);
+    throw e;
   }
-
-  const frameByteLength = pixelsPerFrame * bytesPerPixel;
-  const dataOffset = pixelDataElement.dataOffset;
-  const available = pixelDataElement.length;
-  if (frameByteLength * numberOfFrames > available) {
-    throw new DicomParseError(
-      `PixelData zu kurz für ${numberOfFrames} Frames à ${rows}x${cols} (${bitsAllocated} bit): ` +
-        `erwartet ${frameByteLength * numberOfFrames} Bytes, gefunden ${available}.`,
-    );
-  }
-  const view = new DataView(byteArray.buffer, byteArray.byteOffset, byteArray.byteLength);
-  const frames: Float32Array[] = [];
-  for (let f = 0; f < numberOfFrames; f++) {
-    const frameOffset = dataOffset + f * frameByteLength;
-    const pixels = new Float32Array(pixelsPerFrame);
-    for (let p = 0; p < pixelsPerFrame; p++) {
-      const byteOffset = frameOffset + p * bytesPerPixel;
-      let value: number;
-      if (bytesPerPixel === 2) {
-        value = pixelRepresentation === 1 ? view.getInt16(byteOffset, true) : view.getUint16(byteOffset, true);
-      } else {
-        value = pixelRepresentation === 1 ? view.getInt8(byteOffset) : view.getUint8(byteOffset);
-      }
-      pixels[p] = value;
-    }
-    frames.push(pixels);
-  }
-  return frames;
 }
 
 /** Parses a single NM (Nuclear Medicine) multi-frame DICOM file containing SPECT raw projections. */
@@ -526,7 +407,7 @@ export function parseSpectDicom(arrayBuffer: ArrayBuffer, fileName: string): Spe
   console.log("[SPECT] columnFlips:", columnFlips);
 
   const angles = computeFrameAngles(dataSet, numberOfFrames, detectorVector, detectorInfos, numDetectors);
-  const pixelFrames = readPixelFrames(dataSet, byteArray, numberOfFrames, rows, cols);
+  const pixelFrames = readPixelFrames(dataSet, numberOfFrames, rows, cols);
 
   const frames: ProjectionFrame[] = pixelFrames.map((pixels, i) => ({
     detector: detectorVector[i],

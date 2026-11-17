@@ -1,4 +1,10 @@
 import { useMemo, useRef, useState } from "react";
+import { AnalysisPanel } from "./components/AnalysisPanel";
+import { EditPanel } from "./components/EditPanel";
+import { computeStats } from "./analysis/stats";
+import { type LoadedDataset, createDataset } from "./dataset/types";
+import { type EditOp, applyEdit } from "./edit/operations";
+import type { LoadedVolume } from "./viewer/volumeLoader";
 import { UploadPanel } from "./components/UploadPanel";
 import { VolumeUploadPanel } from "./components/VolumeUploadPanel";
 import { ReconControls } from "./components/ReconControls";
@@ -13,9 +19,8 @@ import "./App.css";
 
 function App() {
   const [projectionSet, setProjectionSet] = useState<SpectProjectionSet | null>(null);
-  const [volume, setVolume] = useState<Volume3D | null>(null);
-  const [lastReconParams, setLastReconParams] = useState<ReconParams | null>(null);
-  const [sourceFileName, setSourceFileName] = useState<string>("recon");
+  const [dataset, setDataset] = useState<LoadedDataset | null>(null);
+  const [threshold, setThreshold] = useState("");
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -23,20 +28,46 @@ function App() {
 
   const sino = useMemo(() => (projectionSet ? buildSinogram(projectionSet) : null), [projectionSet]);
 
+  const volume = dataset?.current ?? null;
+  const stats = useMemo(() => (volume ? computeStats(volume.data) : null), [volume]);
+
+  function showDataset(next: LoadedDataset) {
+    setDataset(next);
+    const s = computeStats(next.current.data);
+    setThreshold(Number.isFinite(s.max) ? String(s.max) : "0");
+  }
+
   function handleLoaded(set: SpectProjectionSet) {
     setProjectionSet(set);
-    setSourceFileName(set.meta.sourceFileName);
-    setVolume(null);
-    setLastReconParams(null);
+    setDataset(null);
     setError(null);
   }
 
-  function handleVolumeLoaded(vol: Volume3D, fileName: string) {
+  function handleVolumeLoaded(loaded: LoadedVolume, fileName: string) {
     setProjectionSet(null);
-    setLastReconParams(null);
-    setSourceFileName(fileName);
-    setVolume(vol);
+    showDataset(createDataset(loaded.volume, loaded.source, fileName));
     setError(null);
+  }
+
+  function handleApplyEdit(op: EditOp) {
+    if (!dataset) return;
+    const { volume: next } = applyEdit(dataset.current, op);
+    setDataset({ ...dataset, current: next, history: [...dataset.history, dataset.current], edits: [...dataset.edits, op] });
+  }
+
+  function handleUndo() {
+    if (!dataset || dataset.history.length === 0) return;
+    setDataset({
+      ...dataset,
+      current: dataset.history[dataset.history.length - 1],
+      history: dataset.history.slice(0, -1),
+      edits: dataset.edits.slice(0, -1),
+    });
+  }
+
+  function handleReset() {
+    if (!dataset) return;
+    setDataset({ ...dataset, current: dataset.original, history: [], edits: [] });
   }
 
   async function handleStart(params: ReconParams) {
@@ -51,8 +82,7 @@ function App() {
       const [spacingRow, spacingCol] = projectionSet.pixelSpacingMm;
       const voxelSpacingMm: [number, number, number] = [spacingRow, spacingCol, spacingCol];
       const vol = new Volume3D(result.data, result.rows, result.cols, result.cols, voxelSpacingMm);
-      setVolume(vol);
-      setLastReconParams(params);
+      showDataset(createDataset(vol, { kind: "reconstruction", reconParams: params }, projectionSet.meta.sourceFileName));
     } catch (e) {
       if (!(e instanceof DOMException && e.name === "AbortError")) {
         setError(`Rekonstruktion fehlgeschlagen: ${String(e instanceof Error ? e.message : e)}`);
@@ -87,13 +117,7 @@ function App() {
               onCancel={handleCancel}
             />
           )}
-          {volume && (
-            <ExportPanel
-              volume={volume}
-              reconParams={lastReconParams ?? undefined}
-              sourceFileName={sourceFileName}
-            />
-          )}
+          {dataset && <ExportPanel dataset={dataset} />}
           {error && <div className="error-banner">{error}</div>}
         </aside>
         <main className="app-main">
@@ -107,6 +131,21 @@ function App() {
             </div>
           )}
         </main>
+        {dataset && volume && stats && (
+          <aside className="app-tools">
+            <AnalysisPanel volume={volume} stats={stats} marker={Number(threshold.replace(",", "."))} />
+            <EditPanel
+              volume={volume}
+              stats={stats}
+              edits={dataset.edits}
+              threshold={threshold}
+              onThresholdChange={setThreshold}
+              onApply={handleApplyEdit}
+              onUndo={handleUndo}
+              onReset={handleReset}
+            />
+          </aside>
+        )}
       </div>
     </div>
   );
