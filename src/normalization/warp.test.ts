@@ -93,4 +93,49 @@ describe("nonlinear normalization", () => {
     expect(r.costAfter).toBeLessThan(r.costBefore);
     expect(r.foldedFraction).toBe(0);
   }, 300000);
+
+  it("estimates the weight of an additional template component (adaptive template)", () => {
+    const t = load("MNI152NLin2009cAsym_res-02_T1w.nii.gz");
+    const mask = load("MNI152NLin2009cAsym_res-02_brainmask.nii.gz").data.map((v) => (v > 0.5 ? 1 : 0));
+    const { nx, ny, nz } = t;
+    // Component: smooth left–right asymmetric "uptake" pattern inside the brain.
+    const comp = new Float32Array(t.data.length);
+    for (let k = 0, o = 0; k < nz; k++)
+      for (let j = 0; j < ny; j++)
+        for (let i = 0; i < nx; i++, o++) comp[o] = mask[o] * 60 * (1 + Math.sin(i / 8) * Math.cos(k / 10));
+    const c = voxelToWorld(t.geometry, nx / 2, ny / 2, nz / 2);
+    const dTrue = (p: number[]) => [3 * Math.sin((p[1] - c[1]) / 30), -2 * Math.cos((p[2] - c[2]) / 35), 2.5 * Math.sin((p[0] - c[0]) / 40)];
+    const mixed = t.withData(t.data.map((v, i) => v + 0.7 * comp[i]));
+    const points = new Float32Array(nx * ny * nz * 3);
+    for (let k = 0, o = 0; k < nz; k++)
+      for (let j = 0; j < ny; j++)
+        for (let i = 0; i < nx; i++, o++) {
+          const q = voxelToWorld(t.geometry, i, j, k);
+          let x = q;
+          for (let it = 0; it < 5; it++) {
+            const d = dTrue(x);
+            x = [q[0] - d[0], q[1] - d[1], q[2] - d[2]];
+          }
+          points.set(x, 3 * o);
+        }
+    const subject = t.withData(resampleAtPoints(mixed, worldToVoxelTransform(t.geometry), points, "linear"));
+    const r = estimateWarp(
+      { template: { data: t.data, dims: [nx, ny, nz], geometry: t.geometry }, subject: { data: subject.data, dims: [nx, ny, nz], geometry: t.geometry }, affine: IDENTITY_MAT4, weights: mask, components: [comp] },
+      { cutoffMm: 30, regularization: 0.05, iterations: 10, fwhmMm: 6, sampleStep: 2 },
+    );
+    expect(r.componentWeights[0]).toBeGreaterThan(0.6);
+    expect(r.componentWeights[0]).toBeLessThan(0.8);
+    let err = 0, n = 0;
+    for (let k = 0, o = 0; k < nz; k++)
+      for (let j = 0; j < ny; j++)
+        for (let i = 0; i < nx; i++, o++) {
+          if (!mask[o]) continue;
+          const x = voxelToWorld(t.geometry, i, j, k);
+          const d = dTrue(x);
+          err += Math.hypot(r.field[3 * o] - x[0] - d[0], r.field[3 * o + 1] - x[1] - d[1], r.field[3 * o + 2] - x[2] - d[2]);
+          n++;
+        }
+    console.log(`component weight ${r.componentWeights[0].toFixed(3)}, residual ${(err / n).toFixed(2)} mm`);
+    expect(err / n).toBeLessThan(1);
+  }, 300000);
 });

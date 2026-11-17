@@ -207,6 +207,7 @@ function readNiftiGeometry(view: DataView, le: boolean, pixdim: Vec3): VolumeGeo
 // ─── DICOM ───────────────────────────────────────────────────────────────────
 
 const EXPLICIT_VR_LE = "1.2.840.10008.1.2.1";
+const IMPLICIT_VR_LE = "1.2.840.10008.1.2";
 
 interface ParsedDicomFile {
   file: DicomSourceFile;
@@ -284,7 +285,11 @@ export function parseDicomBytes(bytes: Uint8Array): dicomParser.DataSet {
   } catch (e) {
     const message = describeParseError(e);
     if (message.includes("DICM prefix not found") || message.includes("attempt to read past end of buffer")) {
-      return dicomParser.parseDicom(bytes, { TransferSyntaxUID: EXPLICIT_VR_LE });
+      // Raw data set without Part-10 header: explicit VR if the first element carries a two-letter VR,
+      // otherwise implicit VR little endian (common in older archives).
+      const isVr = (c: number) => c >= 65 && c <= 90;
+      const explicit = bytes.length > 6 && isVr(bytes[4]) && isVr(bytes[5]);
+      return dicomParser.parseDicom(bytes, { TransferSyntaxUID: explicit ? EXPLICIT_VR_LE : IMPLICIT_VR_LE });
     }
     throw e;
   }

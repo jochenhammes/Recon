@@ -22,7 +22,7 @@ import { DatasetInfo } from "./ui/DatasetInfo";
 import { LayerSettings, type WindowPreset } from "./ui/ViewSettingsPanel";
 import { RegistrationPanel } from "./ui/RegistrationPanel";
 import { CT_PRESETS, datasetModality, defaultDisplay, isAnatomical, modalityLabel, rawUnitLabel, suvForSource, unitSource } from "./dataset/describe";
-import { BUNDLED_MNI, loadBundledMni } from "./normalization/templates";
+import { BUNDLED_MNI, loadBundledMni, loadPetTemplate } from "./normalization/templates";
 import { AnalysisPanel } from "./components/AnalysisPanel";
 import { type BrushState, FilterSection, GeometrySection, HistorySection, ValueSection, VoiSection, type VoiTool } from "./components/EditTools";
 import { runEdits } from "./edit/runner";
@@ -628,6 +628,7 @@ function App() {
           subject: { data: s.data, dims: [s.nx, s.ny, s.nz], geometry: s.geometry },
           affine: r.matrix,
           weights: opts.mask,
+          components: T.dataset.template?.components,
         },
         { ...DEFAULT_WARP, regularization: REGULARIZATION_WEIGHT[opts.regularization] },
         (p) => setNormProgress(describeWarpProgress(p, affineShare)),
@@ -750,12 +751,13 @@ function App() {
       if (t1) {
         template = templateEntries.find((e) => e.dataset.template?.kind === "T1") ?? (setCentiloidStatus("MNI-Vorlage wird geladen …"), addDataset(await loadBundledMni()));
         setCentiloidStatus("1/4 PET → T1 coregistrieren …");
-        const differentStudy = !!pet.dataset.current.geometry.frameOfReferenceUid && pet.dataset.current.geometry.frameOfReferenceUid !== t1.dataset.current.geometry.frameOfReferenceUid;
+        // Coarse search always: PET and MRI often come from different sessions/scanners, and the Frame of
+        // Reference UID is not a reliable indicator (anonymization, missing tags).
         const run = runCoregistration(t1.dataset.current, pet.dataset.current, {
           dof: 6,
           cost: "nmi",
           levels: [8, 4, 2],
-          coarseSearch: differentStudy,
+          coarseSearch: true,
           initial: multiply4(invert4(t1.matrix), pet.matrix),
         });
         normRun.current = run;
@@ -1074,7 +1076,21 @@ function App() {
           </a>
         </p>
         <VolumeUploadPanel title="Eigene T1-Vorlage (NIfTI)" description="z. B. aus SPM oder CAT12." onLoaded={(l, n) => addOwnTemplate(l, n, "T1")} />
-        <VolumeUploadPanel title="Eigene PET-Vorlage (NIfTI)" description="Tracer-spezifische Vorlage (z. B. FDG, Amyloid) für die Normalisierung ohne MRT." onLoaded={(l, n) => addOwnTemplate(l, n, "PET")} />
+        <label className="field">
+          Eigene PET-Vorlage (NIfTI; 4D = adaptive Vorlage: amyloid-negativ, amyloid-positiv)
+          <input
+            type="file"
+            accept=".nii,.gz"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f)
+                loadPetTemplate(f)
+                  .then((d) => addDataset(d))
+                  .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+              e.target.value = "";
+            }}
+          />
+        </label>
       </details>
       <details className="card collapsible" open={entries.length === 0 || !!projectionSet}>
         <summary>SPECT-Rohdaten rekonstruieren</summary>

@@ -33,6 +33,11 @@ export interface WarpInput {
   affine: Mat4;
   /** Optional weights on the template grid (e.g. brain mask). */
   weights?: Float32Array;
+  /**
+   * Additional template components on the template grid (adaptive template, e.g. amyloid-positive minus
+   * amyloid-negative PET): the matched template is g + Σ aᵢ·cᵢ with coefficients aᵢ estimated jointly.
+   */
+  components?: Float32Array[];
 }
 
 export interface WarpProgress {
@@ -49,6 +54,8 @@ export interface WarpResult {
   /** Fraction of template voxels (within weights > 0.5) with a non-positive Jacobian determinant. */
   foldedFraction: number;
   maxDisplacementMm: number;
+  /** Estimated coefficients of the template components (adaptive template). */
+  componentWeights: number[];
 }
 
 function toVolume(img: WarpInput["template"]): Volume3D {
@@ -57,13 +64,18 @@ function toVolume(img: WarpInput["template"]): Volume3D {
   return new Volume3D(img.data, nz, ny, nx, [g.spacing[2], g.spacing[1], g.spacing[0]], g);
 }
 
-/** Robust scaling to ~0..1 (99.5th percentile of positive values → 1). */
-function normalizeIntensity(v: Volume3D): Volume3D {
+/** 99.5th percentile of positive values (robust intensity scale). */
+function robustMax(v: Volume3D): number {
   const stride = Math.max(1, Math.floor(v.data.length / 500_000));
   const vals: number[] = [];
   for (let i = 0; i < v.data.length; i += stride) if (v.data[i] > 0) vals.push(v.data[i]);
   const arr = Float32Array.from(vals.length ? vals : [1]);
-  const hi = quickselect(arr, Math.floor(0.995 * (arr.length - 1))) || 1;
+  return quickselect(arr, Math.floor(0.995 * (arr.length - 1))) || 1;
+}
+
+/** Robust scaling to ~0..1 (99.5th percentile of positive values → 1), or by a given divisor. */
+function normalizeIntensity(v: Volume3D, divisor?: number): Volume3D {
+  const hi = divisor ?? robustMax(v);
   const out = new Float32Array(v.data.length);
   for (let i = 0; i < out.length; i++) {
     const x = v.data[i];
@@ -98,7 +110,11 @@ function sampleWithGradient(vol: Volume3D, x: number, y: number, z: number, g: F
 export function estimateWarp(input: WarpInput, opts: WarpOptions = DEFAULT_WARP, onProgress?: (p: WarpProgress) => void, shouldStop?: () => boolean): WarpResult {
   const templateRaw = toVolume(input.template);
   const subjectRaw = toVolume(input.subject);
-  const tpl = normalizeIntensity(templateRaw.withData(gaussianSmooth(templateRaw, opts.fwhmMm)));
+  const tplSmooth = templateRaw.withData(gaussianSmooth(templateRaw, opts.fwhmMm));
+  const tplScale = robustMax(tplSmooth);
+  const tpl = normalizeIntensity(tplSmooth, tplScale);
+  const comps = (input.components ?? []).map((c) => normalizeIntensity(templateRaw.withData(gaussianSmooth(templateRaw.withData(c), opts.fwhmMm)), tplScale).data);
+  const C = comps.length;
   const sub = normalizeIntensity(subjectRaw.withData(gaussianSmooth(subjectRaw, opts.fwhmMm)));
   const { nx: NX, ny: NY, nz: NZ } = tpl;
   const tg = tpl.geometry;
@@ -112,13 +128,14 @@ export function estimateWarp(input: WarpInput, opts: WarpOptions = DEFAULT_WARP,
   const kz = basisCount(NZ, tg.spacing[2], opts.cutoffMm);
   const basis: Basis3 = { bx: dctBasis(NX, kx, ix), by: dctBasis(NY, ky, iy), bz: dctBasis(NZ, kz, iz), kx, ky, kz, nx: ix.length, ny: iy.length, nz: iz.length };
   const K = kx * ky * kz;
-  const P = 3 * K + 2; // 3 displacement fields + scale + offset
+  const P = 3 * K + 2 + C; // 3 displacement fields + scale + offset + template component weights
   const N = ix.length * iy.length * iz.length;
 
   // Sample data: template world positions, template values, weights.
   const X = new Float64Array(3 * N);
   const G = new Float64Array(N);
   const W0 = new Float64Array(N);
+  const GC = comps.map(() => new Float64Array(N));
   let s = 0;
   for (const k of iz)
     for (const j of iy)
@@ -129,6 +146,7 @@ export function estimateWarp(input: WarpInput, opts: WarpOptions = DEFAULT_WARP,
         X[3 * s + 2] = p[2];
         const idx = (k * NY + j) * NX + i;
         G[s] = tpl.data[idx];
+        for (let c = 0; c < C; c++) GC[c][s] = comps[c][idx];
         W0[s] = input.weights ? (input.weights[idx] > 0.5 ? 1 : 0) : 1;
         s++;
       }
@@ -186,7 +204,9 @@ export function estimateWarp(input: WarpInput, opts: WarpOptions = DEFAULT_WARP,
       }
       Wv[n] = W0[n];
       F[n] = f;
-      const r = sc * f + off - G[n];
+      let g = G[n];
+      for (let c = 0; c < C; c++) g += th[3 * K + 2 + c] * GC[c][n];
+      const r = sc * f + off - g;
       R[n] = r;
       ssd += W0[n] * r * r;
       if (withJ)
@@ -240,6 +260,31 @@ export function estimateWarp(input: WarpInput, opts: WarpOptions = DEFAULT_WARP,
         A[(c * K + k) * P + 3 * K] = pf[k];
         A[(c * K + k) * P + 3 * K + 1] = p1[k];
         b[c * K + k] = -pr[k];
+      }
+      // ∂r/∂aᵢ = −cᵢ
+      for (let ci = 0; ci < C; ci++) {
+        const wc = new Float64Array(N);
+        for (let n = 0; n < N; n++) wc[n] = -Wv[n] * J[c][n] * GC[ci][n];
+        const pc = project(basis, wc);
+        for (let k = 0; k < K; k++) A[(c * K + k) * P + 3 * K + 2 + ci] = pc[k];
+      }
+    }
+    for (let ci = 0; ci < C; ci++) {
+      let sfc = 0, s1c = 0, src = 0;
+      for (let n = 0; n < N; n++) {
+        const w = Wv[n];
+        if (w === 0) continue;
+        sfc -= w * F[n] * GC[ci][n];
+        s1c -= w * GC[ci][n];
+        src -= w * R[n] * GC[ci][n];
+      }
+      A[3 * K * P + 3 * K + 2 + ci] = sfc;
+      A[(3 * K + 1) * P + 3 * K + 2 + ci] = s1c;
+      b[3 * K + 2 + ci] = -src;
+      for (let cj = ci; cj < C; cj++) {
+        let scc = 0;
+        for (let n = 0; n < N; n++) scc += Wv[n] * GC[ci][n] * GC[cj][n];
+        A[(3 * K + 2 + ci) * P + 3 * K + 2 + cj] = scc;
       }
     }
     A[3 * K * P + 3 * K] = sff;
@@ -305,7 +350,14 @@ export function estimateWarp(input: WarpInput, opts: WarpOptions = DEFAULT_WARP,
         field[3 * o + 2] = Ainv[8] * qx + Ainv[9] * qy + Ainv[10] * qz + Ainv[11];
         maxDisp = Math.max(maxDisp, Math.hypot(fdx[o], fdy[o], fdz[o]));
       }
-  return { field, costBefore, costAfter: ssd, foldedFraction: foldedFraction(fdx, fdy, fdz, NX, NY, NZ, tg.spacing, input.weights), maxDisplacementMm: maxDisp };
+  return {
+    field,
+    costBefore,
+    costAfter: ssd,
+    foldedFraction: foldedFraction(fdx, fdy, fdz, NX, NY, NZ, tg.spacing, input.weights),
+    maxDisplacementMm: maxDisp,
+    componentWeights: Array.from(theta.subarray(3 * K + 2)),
+  };
 }
 
 /** Fraction of voxels where det(I + ∇d) ≤ 0 (folding), by central differences. */

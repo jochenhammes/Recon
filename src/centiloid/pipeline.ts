@@ -18,6 +18,8 @@ export interface PipelineInput {
   t1?: Volume3D;
   template: Volume3D;
   templateMask?: Float32Array;
+  /** Adaptive template components (PET-only). */
+  templateComponents?: Float32Array[];
   vois: CentiloidVois;
   calibration: CentiloidCalibration;
   warp?: Partial<WarpOptions> | false;
@@ -31,6 +33,7 @@ export interface PipelineOutput {
   petToSubject: Mat4;
   petStd: Volume3D;
   subjectStd: Volume3D;
+  componentWeights: number[];
 }
 
 /**
@@ -62,24 +65,26 @@ export function runCentiloidPipeline(input: PipelineInput): PipelineOutput {
   let petToSubject: Mat4 = IDENTITY_MAT4;
   if (t1) {
     input.onStage?.("PET → T1");
-    petToSubject = coregister(img(t1), img(pet), { dof: 6, cost: "nmi", levels: [8, 4, 2], coarseSearch: false, initial: IDENTITY_MAT4 }).matrix;
+    petToSubject = coregister(img(t1), img(pet), { dof: 6, cost: "nmi", levels: [8, 4, 2], coarseSearch: true, initial: IDENTITY_MAT4 }).matrix;
   }
   input.onStage?.("affin");
   const aff = affineToTemplate(img(template), img(subject), input.templateMask, "ncc");
   const grid = { nx: template.nx, ny: template.ny, nz: template.nz, geometry: template.geometry };
+  let componentWeights: number[] = [];
   let n: Normalization = { subjectId: "subject", templateName: "template", grid, affine: aff.matrix, field: fieldFromAffine(grid, aff.matrix), kind: "affine" };
   if (input.warp !== false) {
     input.onStage?.("nichtlinear");
     const w = estimateWarp(
-      { template: img(template), subject: img(subject), affine: aff.matrix, weights: input.templateMask },
+      { template: img(template), subject: img(subject), affine: aff.matrix, weights: input.templateMask, components: input.templateComponents },
       { ...DEFAULT_WARP, ...(input.warp ?? {}) },
     );
     n = { ...n, field: w.field, kind: "nonlinear", warp: { foldedFraction: w.foldedFraction, maxDisplacementMm: w.maxDisplacementMm, costBefore: w.costBefore, costAfter: w.costAfter } };
+    componentWeights = w.componentWeights;
   }
   const petStd = onGrid(pet, n, petToSubject);
   const subjectStd = onGrid(subject, n, IDENTITY_MAT4);
   const result = centiloidFromMeans(voiMeans(petStd, input.vois), input.calibration);
-  return { result, normalization: n, petToSubject, petStd, subjectStd };
+  return { result, normalization: n, petToSubject, petStd, subjectStd, componentWeights };
 }
 
 /** Pearson correlation of two volumes on the same grid inside a mask (quality measure of a normalization). */
