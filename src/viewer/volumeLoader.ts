@@ -15,6 +15,8 @@ import {
   normalize,
   scale,
 } from "../core/geometry";
+import { type AtlasInfo, atlasFromLabels, parseLabelTable } from "../atlas/atlas";
+import { LABEL_FILE_NAME, looksLikeLabels, niftiLabelInfo, parseXmlLabelTable } from "../atlas/labelNifti";
 
 export class VolumeLoadError extends Error {
   constructor(message: string) {
@@ -26,6 +28,36 @@ export class VolumeLoadError extends Error {
 export interface LoadedVolume {
   volume: Volume3D;
   source: VolumeSource;
+  /** Set for label images (atlas, segmentation) recognized from the NIfTI header, a label table or the file name. */
+  atlas?: AtlasInfo;
+}
+
+const NIFTI_NAME = /\.nii(\.gz)?$/i;
+/** Label tables that may accompany a label image (FSL/FreeSurfer LUT, ITK-SNAP, TSV/CSV, Caret XML). */
+const TABLE_NAME = /\.(txt|tsv|csv|lut|label|xml)$/i;
+const baseName = (n: string) => n.replace(NIFTI_NAME, "").replace(/\.(nii\.)?(txt|tsv|csv|lut|label|xml)$/i, "").toLowerCase();
+
+/**
+ * Atlas information of a loaded NIfTI: label table from the header (Recon Studio export, Caret XML) or an
+ * accompanying table file; otherwise integer images marked as labels or named like label images.
+ */
+export function detectAtlas(volume: Volume3D, nifti: NiftiSourceInfo, fileName: string, table?: Map<number, string>): AtlasInfo | undefined {
+  const info = niftiLabelInfo(nifti.headerBytes, nifti.littleEndian);
+  const labels = table?.size ? table : info?.labels;
+  if (!labels?.size && !info?.intentLabel && !LABEL_FILE_NAME.test(fileName.replace(NIFTI_NAME, ""))) return undefined;
+  if (!looksLikeLabels(volume.data)) return undefined;
+  const atlas = atlasFromLabels(volume.data, info?.name ?? fileName.replace(NIFTI_NAME, ""), labels);
+  return info?.attribution ? { ...atlas, attribution: info.attribution } : atlas;
+}
+
+async function readTable(file: File): Promise<Map<number, string>> {
+  const text = await file.text();
+  return /<Label\b/.test(text) ? parseXmlLabelTable(text) : parseLabelTable(text);
+}
+
+/** Label table for a NIfTI: same base name, or the only table if there is only one NIfTI. */
+function tableFor(nifti: File, niftis: File[], tables: File[]): File | undefined {
+  return tables.find((t) => baseName(t.name) === baseName(nifti.name)) ?? (niftis.length === 1 && tables.length === 1 ? tables[0] : undefined);
 }
 
 export interface LoadedItem {
@@ -51,14 +83,17 @@ export async function loadVolumesFromFiles(input: File[]): Promise<MultiLoadResu
   const files = input.filter((f) => !isIgnorable(f));
   const items: LoadedItem[] = [];
   const skipped: string[] = [];
-  for (const f of files.filter((x) => /\.nii(\.gz)?$/i.test(x.name))) {
+  const niftis = files.filter((x) => NIFTI_NAME.test(x.name));
+  const tables = niftis.length ? files.filter((x) => TABLE_NAME.test(x.name)) : [];
+  for (const f of niftis) {
     try {
-      items.push({ loaded: await loadNiftiFile(f), name: f.name });
+      const t = tableFor(f, niftis, tables);
+      items.push({ loaded: await loadNiftiFile(f, t ? await readTable(t) : undefined), name: f.name });
     } catch {
       skipped.push(f.name);
     }
   }
-  const dicomFiles = files.filter((x) => !/\.nii(\.gz)?$/i.test(x.name));
+  const dicomFiles = files.filter((x) => !NIFTI_NAME.test(x.name) && !tables.includes(x));
   const results = await Promise.allSettled(dicomFiles.map(parseDicomFile));
   const ok: ParsedDicomFile[] = [];
   results.forEach((r, i) => (r.status === "fulfilled" ? ok.push(r.value) : skipped.push(dicomFiles[i].name)));
@@ -108,11 +143,11 @@ export async function loadVolumeFromFiles(files: File[]): Promise<LoadedVolume> 
 
 // ─── NIfTI ───────────────────────────────────────────────────────────────────
 
-async function loadNiftiFile(file: File): Promise<LoadedVolume> {
+async function loadNiftiFile(file: File, table?: Map<number, string>): Promise<LoadedVolume> {
   let buffer = await file.arrayBuffer();
   if (/\.gz$/i.test(file.name)) buffer = await decompressGzip(buffer);
   const { volume, nifti } = parseNifti1(buffer);
-  return { volume, source: { kind: "nifti", fileName: file.name, nifti } };
+  return { volume, source: { kind: "nifti", fileName: file.name, nifti }, atlas: detectAtlas(volume, nifti, file.name, table) };
 }
 
 export async function decompressGzip(buffer: ArrayBuffer): Promise<ArrayBuffer> {

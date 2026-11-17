@@ -91,7 +91,7 @@ export function SpaceExport({ spaces, activeId, anonymize }: SpaceExportProps) {
         setStatus(`${i + 1}/${selected.length}: ${s.label} wird resampelt …`);
         // Source voxel for a point given in the target dataset's own coordinates.
         const w2v = worldToVoxelThrough(s.w2v, target.matrix);
-        const data = await runResample(s.dataset.current, w2v, grid, method, (f) => setStatus(`${i + 1}/${selected.length}: ${s.label} ${Math.round(f * 100)} %`));
+        const data = await runResample(s.dataset.current, w2v, grid, s.dataset.atlas ? "nearest" : method, (f) => setStatus(`${i + 1}/${selected.length}: ${s.label} ${Math.round(f * 100)} %`));
         const g = grid.geometry;
         const vol = new Volume3D(data, grid.nz, grid.ny, grid.nx, [g.spacing[2], g.spacing[1], g.spacing[0]], {
           ...g,
@@ -99,7 +99,7 @@ export function SpaceExport({ spaces, activeId, anonymize }: SpaceExportProps) {
         });
         const base = `${safe(datasetModality(s.dataset))}_${safe(s.dataset.displayName)}_im_${safe(datasetModality(target.dataset))}-Raum`;
         if (format === "nifti" || s.dataset.source.kind !== "dicom") {
-          outputs.push({ name: base, files: [{ name: `${base}.nii`, bytes: buildNiftiFile(vol) }] });
+          outputs.push({ name: base, files: [{ name: `${base}.nii`, bytes: buildNiftiFile(vol, { atlas: s.dataset.atlas }) }] });
         } else {
           const edits = s.dataset.edits.map((e) => describeEdit(e)).join("; ");
           const { files } = buildTemplateSeries(vol, s.dataset.source.files[0], {

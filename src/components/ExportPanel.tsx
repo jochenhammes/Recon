@@ -126,15 +126,15 @@ export function ExportPanel({ dataset, spaces, activeId }: ExportPanelProps) {
 
   function exportNifti() {
     run(() => {
-      if (source.kind === "nifti" && !gridChanged) {
+      if (source.kind === "nifti" && !gridChanged && !dataset.atlas) {
         const bytes = buildNiftiFromOriginalHeader(volume, source.nifti);
         if (bytes) {
           downloadBytes(bytes, `${outBase}.nii`, "application/octet-stream");
           return ["Original-NIfTI-Header übernommen, Datentyp float32."];
         }
       }
-      downloadBytes(buildNiftiFile(volume), `${outBase}.nii`, "application/octet-stream");
-      return [];
+      downloadBytes(buildNiftiFile(volume, { atlas: dataset.atlas }), `${outBase}.nii`, "application/octet-stream");
+      return dataset.atlas ? [`Als Labelbild gespeichert (${dataset.atlas.labels.size} Regionen mit Namen im Header) – wird beim Laden wieder als Atlas erkannt.`] : [];
     });
   }
 

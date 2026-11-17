@@ -1,10 +1,10 @@
 import type { Volume3D } from "../viewer/volume";
 import type { NiftiSourceInfo } from "../dataset/types";
 import { niftiQformFromGeometry, niftiSformFromGeometry } from "../core/geometry";
+import type { AtlasInfo } from "../atlas/atlas";
+import { NIFTI_INTENT_LABEL, atlasExtension } from "../atlas/labelNifti";
 
 const HEADER_SIZE = 348;
-const EXTENSION_SIZE = 4;
-const VOX_OFFSET = HEADER_SIZE + EXTENSION_SIZE;
 
 const DT_FLOAT32 = 16;
 const NIFTI_UNITS_MM = 2;
@@ -13,8 +13,12 @@ const NIFTI_UNITS_MM = 2;
  * Builds a single-file NIfTI-1 (.nii) volume from a reconstructed Volume3D.
  * Voxel data is written as float32 with no patient/identity information: only
  * dimensions, voxel spacing (mm) and the patient-space orientation (sform/qform) are stored.
+ * With `atlas`, the file is marked as a label image (intent NIFTI_INTENT_LABEL) and carries the label
+ * table in a header extension, so that it is recognized as an atlas when loaded again.
  */
-export function buildNiftiFile(volume: Volume3D): Uint8Array<ArrayBuffer> {
+export function buildNiftiFile(volume: Volume3D, opts: { atlas?: AtlasInfo } = {}): Uint8Array<ArrayBuffer> {
+  const extension = opts.atlas ? atlasExtension(opts.atlas) : new Uint8Array(4); // all-zero: no extensions
+  const VOX_OFFSET = HEADER_SIZE + extension.length;
   const { nx, ny, nz, data, voxelSpacingMm } = volume;
   const [spacingZ, spacingY, spacingX] = voxelSpacingMm;
 
@@ -48,6 +52,10 @@ export function buildNiftiFile(volume: Volume3D): Uint8Array<ArrayBuffer> {
   dv.setFloat32(116, 0, true); // scl_inter
 
   writeAscii(dv, 148, 80, "Recon Studio export (anonymized)");
+  if (opts.atlas) {
+    dv.setInt16(68, NIFTI_INTENT_LABEL, true); // intent_code
+    writeAscii(dv, 328, 16, "Labels");
+  }
 
   // Orientation: sform from the volume's patient geometry (LPS → RAS); qform as well if the axes
   // are orthogonal. Code 1 = scanner-based anatomical coordinates.
@@ -72,11 +80,9 @@ export function buildNiftiFile(volume: Volume3D): Uint8Array<ArrayBuffer> {
 
   writeAscii(dv, 344, 4, "n+1\0");
 
-  const extension = new Uint8Array(EXTENSION_SIZE); // all-zero: no extensions present
-
   const voxelBytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
 
-  const out = new Uint8Array(HEADER_SIZE + EXTENSION_SIZE + voxelBytes.length);
+  const out = new Uint8Array(VOX_OFFSET + voxelBytes.length);
   out.set(new Uint8Array(header), 0);
   out.set(extension, HEADER_SIZE);
   out.set(voxelBytes, VOX_OFFSET);

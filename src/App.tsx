@@ -521,7 +521,13 @@ function App() {
 
   function handleVolumeLoaded(loaded: LoadedVolume, fileName: string) {
     if (!isAnatomical(loaded.source)) setProjectionSet(null);
-    addDataset(createDataset(loaded.volume, loaded.source, fileName));
+    const d = createDataset(loaded.volume, loaded.source, fileName);
+    if (loaded.atlas) {
+      // Label images (atlas, segmentation) come back as atlases: label colors, region list, region statistics.
+      const hadReference = live.current.entries.some((e) => e.id === live.current.referenceId);
+      const entry = addDataset({ ...d, atlas: loaded.atlas });
+      if (hadReference) addOverlay(entry.id);
+    } else addDataset(d);
     setError(null);
   }
 
@@ -1094,7 +1100,8 @@ function App() {
     const inc = new Set(tumor.lesions.filter((l) => l.included).map((l) => l.id));
     const data = new Float32Array(tumor.labels.length);
     for (let i = 0; i < data.length; i++) if (inc.has(tumor.labels[i])) data[i] = tumor.labels[i];
-    downloadBytes(buildNiftiFile(e.dataset.current.withData(data)), `Laesionen_${e.dataset.displayName.replace(/\.nii(\.gz)?$/i, "").replace(/[^A-Za-z0-9_.-]+/g, "_")}.nii`);
+    const atlas = { name: `Läsionen · ${e.dataset.displayName}`, labels: new Map([...inc].sort((a, b) => a - b).map((id) => [id, `Läsion ${id}`] as [number, string])) };
+    downloadBytes(buildNiftiFile(e.dataset.current.withData(data), { atlas }), `Laesionen_${e.dataset.displayName.replace(/\.nii(\.gz)?$/i, "").replace(/[^A-Za-z0-9_.-]+/g, "_")}.nii`);
   }
 
   // ── CT organ segmentation (browser, ONNX) ──
@@ -1290,7 +1297,7 @@ function App() {
       const labels = table ? parseLabelTable(await table.text()) : undefined;
       if (table && !labels?.size) throw new Error(`In „${table.name}“ wurden keine Labels erkannt.`);
       const d = createDataset(loaded.volume, loaded.source, image.name);
-      addDataset({ ...d, atlas: atlasFromLabels(loaded.volume.data, image.name.replace(/\.nii(\.gz)?$/i, ""), labels) });
+      addDataset({ ...d, atlas: labels || !loaded.atlas ? atlasFromLabels(loaded.volume.data, image.name.replace(/\.nii(\.gz)?$/i, ""), labels) : loaded.atlas });
     } catch (e) {
       setAtlasError(e instanceof Error ? e.message : String(e));
     }
