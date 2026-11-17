@@ -1,6 +1,5 @@
 import { useRef, useState } from "react";
 import { COST_LABELS, type CostName } from "../registration/cost";
-import type { CoregProgress, CoregResult } from "../registration/coregister";
 
 export type CostChoice = CostName | "auto";
 
@@ -18,22 +17,13 @@ const LEVEL_PRESETS: { label: string; levels: number[] }[] = [
 ];
 
 export interface CoregPanelProps {
-  movingOptions: { id: string; label: string }[];
-  movingId: string | null;
-  onMovingChange: (id: string) => void;
-  referenceLabel: string;
+  /** Dataset the transformation tools act on (selected in the list). */
+  focusLabel: string | null;
   /** Cost used when "auto" is selected (depends on the modality pair). */
   autoCost: CostName;
   settings: CoregSettings;
   onSettingsChange: (s: CoregSettings) => void;
   running: boolean;
-  progress: CoregProgress | null;
-  onStart: () => void;
-  onCancel: () => void;
-  /** Last result awaiting confirmation. */
-  pending: CoregResult | null;
-  onAccept: () => void;
-  onDiscard: () => void;
   onResetToScanner: () => void;
   onSaveMatrix: () => void;
   onLoadMatrix: (file: File) => void;
@@ -41,37 +31,17 @@ export interface CoregPanelProps {
   error?: string | null;
 }
 
-/** Converts a cost value (lower is better) to the displayed similarity. */
-function similarity(cost: CostName, v: number): string {
-  if (!Number.isFinite(v)) return "–";
-  if (v >= 10) return "keine Überlappung";
-  if (cost === "cr") return `CR ${(1 - v).toFixed(4)}`;
-  if (cost === "ncc") return `NCC ${(-v).toFixed(4)}`;
-  return `${cost.toUpperCase()} ${(-v).toFixed(4)}`;
-}
 
 export function CoregPanel(props: CoregPanelProps) {
-  const { settings, running, progress, pending } = props;
+  const { settings, running } = props;
   const fileRef = useRef<HTMLInputElement>(null);
   const [showHelp, setShowHelp] = useState(false);
   const set = (patch: Partial<CoregSettings>) => props.onSettingsChange({ ...settings, ...patch });
-  const effectiveCost = settings.cost === "auto" ? props.autoCost : settings.cost;
   const preset = LEVEL_PRESETS.findIndex((p) => p.levels.join() === settings.levels.join());
 
   return (
     <section className="card">
-      <h3>Automatische Coregistrierung</h3>
-      <label className="field">
-        Bewegter Datensatz → Referenz ({props.referenceLabel})
-        <select value={props.movingId ?? ""} disabled={running} onChange={(e) => props.onMovingChange(e.target.value)}>
-          {props.movingOptions.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      {props.frameNote && <p className="hint">{props.frameNote}</p>}
+      <h3>3 · Einstellungen</h3>
       <div className="segmented-control" role="group" aria-label="Freiheitsgrade">
         <button className={settings.dof === 6 ? "active" : ""} disabled={running} onClick={() => set({ dof: 6 })}>
           Rigide (6)
@@ -105,53 +75,13 @@ export function CoregPanel(props: CoregPanelProps) {
         <input type="checkbox" checked={settings.coarseSearch} disabled={running} onChange={(e) => set({ coarseSearch: e.target.checked })} />
         Grobsuche (Schwerpunkt + Rotationsraster ±30°) – für Daten aus verschiedenen Untersuchungen
       </label>
-      {!running ? (
-        <button className="primary-btn" disabled={!props.movingId || !!pending} onClick={props.onStart}>
-          Coregistrierung starten
-        </button>
-      ) : (
-        <>
-          <div className="progress-bar">
-            <div className="progress-bar-fill" style={{ width: `${progress ? Math.round(((progress.level - 1) / progress.levels) * 100 + 100 / progress.levels / 2) : 3}%` }} />
-          </div>
-          <p className="tool-hint">
-            {progress
-              ? `Stufe ${progress.level}/${progress.levels} · ${progress.stage} · Iteration ${progress.iteration + 1} · ${similarity(effectiveCost, progress.cost)}`
-              : "Vorbereitung …"}
-          </p>
-          <button className="secondary-btn" onClick={props.onCancel}>
-            Abbrechen
-          </button>
-        </>
-      )}
-      {pending && (
-        <div className="coreg-result">
-          <p className="tool-hint">
-            Ergebnis ({pending.evaluations} Auswertungen): {similarity(pending.cost, pending.before)} → <strong>{similarity(pending.cost, pending.after)}</strong>
-          </p>
-          <p className="tool-hint">
-            Verschiebung {[pending.params.tx, pending.params.ty, pending.params.tz].map((v) => v.toFixed(1)).join(" / ")} mm · Drehung{" "}
-            {[pending.params.rx, pending.params.ry, pending.params.rz].map((v) => v.toFixed(2)).join(" / ")}°
-            {settings.dof === 12 && ` · Skalierung ${[pending.params.sx, pending.params.sy, pending.params.sz].map((v) => v.toFixed(3)).join(" / ")}`}
-          </p>
-          <p className="tool-hint">Die Ansicht zeigt bereits das Ergebnis – bitte visuell prüfen.</p>
-          <div className="button-row">
-            <button className="secondary-btn toggled" onClick={props.onAccept}>
-              Übernehmen
-            </button>
-            <button className="secondary-btn" onClick={props.onDiscard}>
-              Verwerfen
-            </button>
-          </div>
-        </div>
-      )}
       {props.error && <div className="error-banner">{props.error}</div>}
-      <h3>Transformation</h3>
+      <h3>Transformation{props.focusLabel ? `: ${props.focusLabel}` : ""}</h3>
       <div className="button-row">
-        <button className="secondary-btn" disabled={running || !props.movingId} onClick={props.onSaveMatrix}>
+        <button className="secondary-btn" disabled={running || !props.focusLabel} onClick={props.onSaveMatrix}>
           Matrix speichern
         </button>
-        <button className="secondary-btn" disabled={running || !props.movingId} onClick={() => fileRef.current?.click()}>
+        <button className="secondary-btn" disabled={running || !props.focusLabel} onClick={() => fileRef.current?.click()}>
           Matrix laden
         </button>
       </div>
@@ -166,7 +96,7 @@ export function CoregPanel(props: CoregPanelProps) {
           e.target.value = "";
         }}
       />
-      <button className="secondary-btn" disabled={running || !props.movingId} onClick={props.onResetToScanner}>
+      <button className="secondary-btn" disabled={running || !props.focusLabel} onClick={props.onResetToScanner}>
         Auf Patientenkoordinaten zurücksetzen
       </button>
       <button className="link-btn" onClick={() => setShowHelp((v) => !v)}>

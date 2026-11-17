@@ -1,0 +1,141 @@
+import type { CostName } from "../registration/cost";
+
+export type RegStatusKind = "scanner" | "registered" | "manual" | "pending" | "running" | "queued";
+
+export interface RegRow {
+  id: string;
+  label: string;
+  /** Short info (matrix, voxel size). */
+  info: string;
+  status: RegStatusKind;
+  /** e.g. similarity before → after. */
+  detail?: string;
+  /** Not useful for intensity registration (labels, templates in standard space, derived datasets). */
+  passive?: boolean;
+}
+
+export interface RegistrationSetupProps {
+  datasets: { id: string; label: string; info: string }[];
+  referenceId: string;
+  onReferenceChange: (id: string) => void;
+  rows: RegRow[];
+  selected: string[];
+  onSelectedChange: (ids: string[]) => void;
+  focusId: string | null;
+  onFocus: (id: string) => void;
+  running: boolean;
+  progressText: string | null;
+  onStart: () => void;
+  onCancel: () => void;
+  onAccept: (id: string) => void;
+  onDiscard: (id: string) => void;
+  onAcceptAll: () => void;
+  autoCostFor: (id: string) => CostName;
+  error?: string | null;
+}
+
+const STATUS: Record<RegStatusKind, string> = {
+  scanner: "Patientenkoordinaten",
+  registered: "registriert",
+  manual: "manuell/geladen",
+  pending: "Ergebnis prüfen",
+  running: "läuft …",
+  queued: "wartet",
+};
+
+/** Base (target space) selection and the list of datasets registered onto it. */
+export function RegistrationSetup(props: RegistrationSetupProps) {
+  const base = props.datasets.find((d) => d.id === props.referenceId);
+  const anyPending = props.rows.some((r) => r.status === "pending");
+  const toggle = (id: string, on: boolean) => props.onSelectedChange(on ? [...props.selected, id] : props.selected.filter((x) => x !== id));
+  const selectable = props.rows.filter((r) => !r.passive).map((r) => r.id);
+
+  return (
+    <>
+      <section className="card">
+        <h3>1 · Zielraum (Basis)</h3>
+        <label className="field">
+          Dieser Datensatz definiert den Raum – alle anderen werden darauf ausgerichtet und darin angezeigt
+          <select value={props.referenceId} disabled={props.running} onChange={(e) => props.onReferenceChange(e.target.value)}>
+            {props.datasets.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {base && <p className="tool-hint">{base.info}. Export „im Raum eines anderen Datensatzes“ und Fusionen nutzen dieses Raster.</p>}
+      </section>
+
+      <section className="card">
+        <h3>2 · Auf die Basis registrieren</h3>
+        <div className="reg-list">
+          {props.rows.map((r) => (
+            <div key={r.id} className={`reg-row${r.id === props.focusId ? " focused" : ""}`} onClick={() => props.onFocus(r.id)}>
+              <input
+                type="checkbox"
+                checked={props.selected.includes(r.id)}
+                disabled={props.running}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => toggle(r.id, e.target.checked)}
+                aria-label={`${r.label} registrieren`}
+              />
+              <div className="reg-row-main">
+                <div className="reg-row-title">{r.label}</div>
+                <div className="reg-row-info">
+                  {r.info}
+                  {!r.passive && ` · ${props.autoCostFor(r.id).toUpperCase()}`}
+                  {r.passive && " · wird nicht automatisch ausgewählt (Labels/Vorlage/abgeleitet)"}
+                </div>
+                {r.status === "pending" && (
+                  <div className="button-row reg-row-actions">
+                    <button className="secondary-btn toggled" onClick={(e) => (e.stopPropagation(), props.onAccept(r.id))}>
+                      Übernehmen
+                    </button>
+                    <button className="secondary-btn" onClick={(e) => (e.stopPropagation(), props.onDiscard(r.id))}>
+                      Verwerfen
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className={`reg-status reg-${r.status}`}>
+                {STATUS[r.status]}
+                {r.detail && <small>{r.detail}</small>}
+              </div>
+            </div>
+          ))}
+          {props.rows.length === 0 && <p className="tool-hint">Nur ein Datensatz geladen.</p>}
+        </div>
+        <div className="button-row">
+          <button className="link-btn" disabled={props.running} onClick={() => props.onSelectedChange(selectable)}>
+            alle
+          </button>
+          <button className="link-btn" disabled={props.running} onClick={() => props.onSelectedChange([])}>
+            keine
+          </button>
+        </div>
+        {!props.running ? (
+          <button className="primary-btn" disabled={props.selected.length === 0} onClick={props.onStart}>
+            {props.selected.length > 1 ? `${props.selected.length} Datensätze registrieren` : "Ausgewählten Datensatz registrieren"}
+          </button>
+        ) : (
+          <>
+            <p className="tool-hint">{props.progressText ?? "Vorbereitung …"}</p>
+            <button className="secondary-btn" onClick={props.onCancel}>
+              Abbrechen
+            </button>
+          </>
+        )}
+        {anyPending && !props.running && (
+          <>
+            <p className="tool-hint">Die Ansicht zeigt die Ergebnisse bereits – bitte prüfen (Datensatz anklicken = als Overlay zeigen).</p>
+            <button className="secondary-btn" onClick={props.onAcceptAll}>
+              Alle Ergebnisse übernehmen
+            </button>
+          </>
+        )}
+        {props.error && <div className="error-banner">{props.error}</div>}
+      </section>
+    </>
+  );
+}

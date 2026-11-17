@@ -72,11 +72,42 @@ export async function loadPetTemplate(file: File): Promise<LoadedDataset> {
     for (let i = 0; i < nvox; i++) c[i] = all.data[v * nvox + i] - base[i];
     components.push(c);
   }
-  const sorted = Float32Array.from(base.filter((x) => x > 0)).sort();
-  const thr = 0.2 * (sorted[Math.floor(0.99 * (sorted.length - 1))] ?? 1);
-  const mask = Float32Array.from(base, (x) => (x > thr ? 1 : 0));
+  const mask = maskFromBase(base);
   const name = file.name.replace(/\.nii(\.gz)?$/i, "");
   const nifti = parseNifti1(buffer).nifti;
   const d = createDataset(vol, { kind: "nifti", fileName: file.name, nifti }, name);
   return { ...d, template: { name: components.length ? `${name} (adaptiv, ${components.length + 1} Komponenten)` : name, kind: "PET", mask, components } };
+}
+
+/** Brain mask of a PET/SPECT template: voxels above 20 % of the 99th percentile. */
+function maskFromBase(base: Float32Array): Float32Array {
+  const sorted = Float32Array.from(base.filter((x) => x > 0)).sort();
+  const thr = 0.2 * (sorted[Math.floor(0.99 * (sorted.length - 1))] ?? 1);
+  return Float32Array.from(base, (x) => (x > thr ? 1 : 0));
+}
+
+/** PET/SPECT templates bundled from SPM12 (toolbox/OldNorm, GPL v2+), MNI space 2 mm (91×109×91). */
+export const BUNDLED_PET_TEMPLATES = [
+  {
+    id: "spm-pet",
+    name: "SPM12 PET (H₂¹⁵O-Perfusion, 2 mm)",
+    file: `${BASE}spm12_PET.nii.gz`,
+    hint: "für Hirn-PET ohne MRT (Perfusion, näherungsweise auch FDG)",
+  },
+  {
+    id: "spm-spect",
+    name: "SPM12 SPECT (Perfusion, 2 mm)",
+    file: `${BASE}spm12_SPECT.nii.gz`,
+    hint: "für Hirnperfusions-SPECT (HMPAO/ECD)",
+  },
+] as const;
+
+export const SPM_TEMPLATE_LICENSE = `${BASE}LICENSE-SPM12-GPL.txt`;
+export const SPM_TEMPLATE_ATTRIBUTION = "SPM12 (Wellcome Centre for Human Neuroimaging, UCL), toolbox/OldNorm, GNU General Public License v2 oder später.";
+
+export async function loadBundledPetTemplate(id: (typeof BUNDLED_PET_TEMPLATES)[number]["id"]): Promise<LoadedDataset> {
+  const t = BUNDLED_PET_TEMPLATES.find((x) => x.id === id)!;
+  const img = await fetchNifti(t.file);
+  const d = createDataset(img.volume, { kind: "nifti", fileName: t.file.split("/").pop()!, nifti: img.nifti }, t.name);
+  return { ...d, template: { name: t.name, kind: "PET", mask: maskFromBase(img.volume.data), attribution: SPM_TEMPLATE_ATTRIBUTION } };
 }

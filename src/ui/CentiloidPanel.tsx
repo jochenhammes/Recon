@@ -95,7 +95,20 @@ export function CentiloidPanel(props: CentiloidPanelProps) {
         )}
       </div>
       <p className="tool-hint">
-        {props.voisLoaded ?? "Standard-VOIs von gaain.org (Centiloid Project → Centiloid_Std_VOI.zip) – die ZIP-Datei direkt auswählen. Sie werden nicht mitgeliefert (GAAIN-Nutzungsbedingungen)."}
+        {props.voisLoaded ?? (
+          <>
+            Standard-VOIs von GAAIN:{" "}
+            <a href="https://www.gaaindata.org/data/centiloid/Centiloid_Std_VOI.zip" target="_blank" rel="noreferrer" download>
+              Centiloid_Std_VOI.zip herunterladen
+            </a>{" "}
+            (
+            <a href="https://www.gaain.org/centiloid-project" target="_blank" rel="noreferrer">
+              Centiloid Project
+            </a>
+            ), dann die ZIP-Datei hier direkt auswählen. Die VOIs werden nicht mitgeliefert (GAAIN-Nutzungsbedingungen: persönliche,
+            nicht-kommerzielle Nutzung).
+          </>
+        )}
       </p>
 
       <label className="field">

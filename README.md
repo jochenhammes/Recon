@@ -45,10 +45,14 @@ Alles läuft clientseitig im Browser (Web Worker), es gibt keinen Server – die
   mit Brent-Liniensuche; **rigide (6) oder affin (12 Parameter)**; optionale Grobsuche (Schwerpunkt + Rotationsraster
   ±30°) für Daten aus verschiedenen Untersuchungen. Läuft im Web Worker mit Fortschritt und Abbruch; Ergebnis
   übernehmen oder verwerfen.
+- **Ablauf**: (1) Zielraum wählen – der Basis-Datensatz definiert den Raum; (2) die zu registrierenden Datensätze
+  anhaken (Status je Datensatz: Patientenkoordinaten, registriert mit Ähnlichkeitsmaß, Ergebnis prüfen, manuell) und
+  nacheinander auf die Basis registrieren; Ergebnisse einzeln oder gemeinsam übernehmen/verwerfen; (3) Einstellungen.
 - **Manuelle Feinkorrektur** (Verschiebung/Drehung), Transformationsmatrix als JSON speichern und laden.
 
 ### Standardraum (MNI), Atlas und SUVR
-- **Vorlagen**: MNI ICBM 152 2009c (asymmetrisch, T1, 2 mm, mit Hirnmaske) wird mitgeliefert und bei Bedarf geladen;
+- **Vorlagen**: MNI ICBM 152 2009c (asymmetrisch, T1, 2 mm, mit Hirnmaske), SPM12-PET- und SPM12-SPECT-Vorlage
+  (Perfusion, für Hirn-PET/SPECT ohne MRT) werden mitgeliefert und bei Bedarf geladen;
   eigene Vorlagen (T1 oder Tracer-PET) können als NIfTI geladen werden.
 - **Räumliche Normalisierung** eines Subjekts (meist das T1-MRT, ohne MRT direkt das PET):
   - affin (12 Parameter) mit der Coregistrierungs-Engine (Kreuzkorrelation bei gleichem Kontrast, sonst NMI;
@@ -185,6 +189,9 @@ Ein Push auf `main` veröffentlicht die App über GitHub Pages.
 - `public/atlases/`: CerebrA (Manera et al. 2020, Scientific Data 7:237), CC0 1.0; ursprünglich auf der symmetrischen
   2009c-Vorlage (1 mm) erstellt und für Recon Studio per Mehrheitsentscheid auf das 2-mm-Raster der asymmetrischen
   Vorlage übertragen.
+- `public/templates/spm12_PET.nii.gz`, `spm12_SPECT.nii.gz`: PET- (H₂¹⁵O) und SPECT-Perfusionsvorlage aus SPM12
+  (`toolbox/OldNorm`, Wellcome Centre for Human Neuroimaging), GNU GPL v2 oder später (`LICENSE-SPM12-GPL.txt`);
+  unverändert, nur als little-endian float32 gespeichert.
 - `public/models/totalseg-total-3mm/`: TotalSegmentator „total“ 3 mm (Wasserthal et al., Radiology: AI 2023;
   nnU-Net, Isensee et al. 2021), Apache 2.0; unverändert nach ONNX exportiert (`tools/totalseg-onnx/export.py`),
   siehe `NOTICE.txt`.

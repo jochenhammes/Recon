@@ -28,22 +28,24 @@ import { runWarp } from "./normalization/warpRunner";
 import { runResample } from "./resample/runner";
 import { type Interpolation, resampleAtPoints } from "./resample/resample";
 import { CoregPanel, type CoregSettings } from "./ui/CoregPanel";
+import { similarity } from "./registration/similarity";
 import { type RegistrationRun, runCoregistration } from "./registration/runner";
 import type { CoregProgress, CoregResult } from "./registration/coregister";
 import { HeaderPanel } from "./ui/HeaderPanel";
 import { AppShell, type ShellTab } from "./ui/AppShell";
 import { DatasetInfo } from "./ui/DatasetInfo";
 import { LayerSettings, type WindowPreset } from "./ui/ViewSettingsPanel";
+import { type RegRow, type RegStatusKind, RegistrationSetup } from "./ui/RegistrationSetup";
 import { RegistrationPanel } from "./ui/RegistrationPanel";
 import { CT_PRESETS, datasetModality, defaultDisplay, isAnatomical, modalityLabel, rawUnitLabel, suvForSource, unitSource } from "./dataset/describe";
-import { BUNDLED_MNI, loadBundledMni, loadPetTemplate } from "./normalization/templates";
+import { BUNDLED_MNI, BUNDLED_PET_TEMPLATES, SPM_TEMPLATE_ATTRIBUTION, SPM_TEMPLATE_LICENSE, loadBundledMni, loadBundledPetTemplate, loadPetTemplate } from "./normalization/templates";
 import { AnalysisPanel } from "./components/AnalysisPanel";
 import { type BrushState, FilterSection, GeometrySection, HistorySection, ValueSection, VoiSection, type VoiTool } from "./components/EditTools";
 import { runEdits } from "./edit/runner";
 import { type VoiShape, maskBounds, paintDisc, voiMask, voiStats } from "./edit/voi";
 import { computeStats } from "./analysis/stats";
 import type { SuvResult } from "./analysis/suv";
-import { type UnitMode, formatInput, parseInput } from "./components/format";
+import { type UnitMode, formatInput, formatValue, parseInput } from "./components/format";
 import { type LoadedDataset, createDataset } from "./dataset/types";
 import { type EditOp, type VoiAction, changesGrid, countAffected } from "./edit/operations";
 import { type LoadedVolume, decompressGzip, loadVolumeFromFiles } from "./viewer/volumeLoader";
@@ -141,7 +143,12 @@ function App() {
   const [coregSettings, setCoregSettings] = useState<CoregSettings>({ dof: 6, cost: "auto", levels: [8, 4, 2], coarseSearch: false });
   const [coregProgress, setCoregProgress] = useState<CoregProgress | null>(null);
   const [coregRunning, setCoregRunning] = useState(false);
-  const [coregPending, setCoregPending] = useState<{ entryId: string; previous: Mat4; result: CoregResult } | null>(null);
+  /** Registration results per dataset (pending until accepted; previous matrix for discarding). */
+  const [coregResults, setCoregResults] = useState<Record<string, { previous: Mat4; result: CoregResult; accepted: boolean }>>({});
+  /** Datasets checked for registration (null = default selection). */
+  const [regSelected, setRegSelected] = useState<string[] | null>(null);
+  const [regQueue, setRegQueue] = useState<{ running: string | null; waiting: string[] }>({ running: null, waiting: [] });
+  const regCancelled = useRef(false);
   const [coregError, setCoregError] = useState<string | null>(null);
   const coregRun = useRef<RegistrationRun | null>(null);
   const [normTemplateId, setNormTemplateId] = useState<string | null>(null);
@@ -449,6 +456,18 @@ function App() {
     }
   }
 
+  async function addBundledPetTemplate(id: (typeof BUNDLED_PET_TEMPLATES)[number]["id"]) {
+    setTemplateBusy(true);
+    setError(null);
+    try {
+      addDataset(await loadBundledPetTemplate(id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setTemplateBusy(false);
+    }
+  }
+
   function addOwnTemplate(loaded: LoadedVolume, fileName: string, kind: "T1" | "PET") {
     const d = createDataset(loaded.volume, loaded.source, fileName);
     addDataset({ ...d, template: { name: fileName, kind } });
@@ -582,47 +601,84 @@ function App() {
     abortRef.current?.abort();
   }
 
-  // ── Coregistration: moving dataset → reference ──
+  // ── Coregistration: datasets → base (reference) ──
   const movingCandidates = entries.filter((e) => e.id !== reference?.id);
   const moving = byId(movingId) && movingId !== reference?.id ? byId(movingId) : (overlay ?? movingCandidates[0]);
-  const autoCost = moving && reference && datasetModality(moving.dataset) === datasetModality(reference.dataset) ? "ncc" : "nmi";
+  const costFor = (e: Entry | undefined): "ncc" | "nmi" => (e && reference && datasetModality(e.dataset) === datasetModality(reference.dataset) ? "ncc" : "nmi");
+  const autoCost = costFor(moving);
+  /** Labels, standard-space templates and derived datasets are not registered by intensity by default. */
+  const isPassive = (e: Entry) => !!(e.dataset.atlas || e.dataset.derivedFrom || e.dataset.template);
+  const regSelection = (regSelected ?? movingCandidates.filter((e) => !isPassive(e)).map((e) => e.id)).filter((id) => movingCandidates.some((e) => e.id === id));
 
   function selectMoving(id: string) {
     setMovingId(id);
     makeOverlay(id);
   }
 
-  function startCoregistration() {
-    if (!moving || !reference || coregRunning) return;
+  /** Registers the checked datasets one after another onto the base. */
+  async function startCoregistration() {
+    if (!reference || coregRunning) return;
+    const ids = regSelection;
+    if (!ids.length) return;
     setCoregError(null);
     setCoregProgress(null);
     setCoregRunning(true);
-    makeOverlay(moving.id);
-    const previous = moving.matrix;
-    const run = runCoregistration(
-      reference.dataset.current,
-      moving.dataset.current,
-      { ...coregSettings, cost: coregSettings.cost === "auto" ? autoCost : coregSettings.cost, initial: previous },
-      setCoregProgress,
-    );
-    coregRun.current = run;
-    run.promise
-      .then((result) => {
-        updateEntry(moving.id, { matrix: result.matrix });
-        setCoregPending({ entryId: moving.id, previous, result });
-      })
-      .catch((e) => {
-        if (!(e instanceof DOMException && e.name === "AbortError")) setCoregError(`Coregistrierung fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
-      })
-      .finally(() => {
-        setCoregRunning(false);
-        coregRun.current = null;
-      });
+    regCancelled.current = false;
+    try {
+      for (const [n, id] of ids.entries()) {
+        if (regCancelled.current) break;
+        const e = byId(id);
+        if (!e) continue;
+        setRegQueue({ running: id, waiting: ids.slice(n + 1) });
+        setMovingId(id);
+        makeOverlay(id);
+        const previous = coregResults[id] && !coregResults[id].accepted ? coregResults[id].previous : e.matrix;
+        const run = runCoregistration(
+          reference.dataset.current,
+          e.dataset.current,
+          { ...coregSettings, cost: coregSettings.cost === "auto" ? costFor(e) : coregSettings.cost, initial: e.matrix },
+          setCoregProgress,
+        );
+        coregRun.current = run;
+        const result = await run.promise;
+        updateEntry(id, { matrix: result.matrix });
+        setCoregResults((r) => ({ ...r, [id]: { previous, result, accepted: false } }));
+      }
+    } catch (err) {
+      if (!(err instanceof DOMException && err.name === "AbortError")) setCoregError(`Coregistrierung fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setCoregRunning(false);
+      setRegQueue({ running: null, waiting: [] });
+      coregRun.current = null;
+    }
   }
 
-  function discardCoregistration() {
-    if (coregPending) updateEntry(coregPending.entryId, { matrix: coregPending.previous });
-    setCoregPending(null);
+  function acceptCoregistration(id: string) {
+    setCoregResults((r) => (r[id] ? { ...r, [id]: { ...r[id], accepted: true } } : r));
+  }
+
+  function discardCoregistration(id: string) {
+    const r = coregResults[id];
+    if (r) updateEntry(id, { matrix: r.previous });
+    setCoregResults((all) => {
+      const next = { ...all };
+      delete next[id];
+      return next;
+    });
+  }
+
+  function discardResultOnly(id: string) {
+    setCoregResults((all) => {
+      const next = { ...all };
+      delete next[id];
+      return next;
+    });
+  }
+
+  /** New base: matrices are re-expressed; open results are accepted (their "previous" refers to the old base). */
+  function changeBase(id: string) {
+    setCoregResults((all) => Object.fromEntries(Object.entries(all).map(([k, v]) => [k, { ...v, accepted: true }])));
+    makeReference(id);
   }
 
   function saveMatrix() {
@@ -636,8 +692,8 @@ function App() {
       center,
       moving: { name: moving.dataset.displayName, frameOfReferenceUid: moving.dataset.current.geometry.frameOfReferenceUid },
       reference: { name: reference.dataset.displayName, frameOfReferenceUid: reference.dataset.current.geometry.frameOfReferenceUid },
-      method: coregPending?.entryId === moving.id ? `${coregSettings.dof === 6 ? "rigide" : "affin"}, ${coregPending.result.cost}` : undefined,
-      cost: coregPending?.entryId === moving.id ? { name: coregPending.result.cost, before: coregPending.result.before, after: coregPending.result.after } : undefined,
+      method: coregResults[moving.id] ? `${coregSettings.dof === 6 ? "rigide" : "affin"}, ${coregResults[moving.id].result.cost}` : undefined,
+      cost: coregResults[moving.id] ? { name: coregResults[moving.id].result.cost, before: coregResults[moving.id].result.before, after: coregResults[moving.id].result.after } : undefined,
       created: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(file, null, 2)], { type: "application/json" });
@@ -654,7 +710,7 @@ function App() {
     try {
       const t = parseTransformFile(await f.text());
       updateEntry(moving.id, { matrix: t.matrix });
-      setCoregPending(null);
+      discardResultOnly(moving.id);
       setCoregError(null);
     } catch (e) {
       setCoregError(e instanceof Error ? e.message : String(e));
@@ -1454,6 +1510,25 @@ function App() {
             Lizenz
           </a>
         </p>
+        <div className="template-buttons">
+          {BUNDLED_PET_TEMPLATES.map((t) => (
+            <button
+              key={t.id}
+              className="secondary-btn"
+              title={t.hint}
+              disabled={templateBusy || entries.some((e) => e.dataset.template?.name === t.name)}
+              onClick={() => void addBundledPetTemplate(t.id)}
+            >
+              {t.name} laden
+            </button>
+          ))}
+        </div>
+        <p className="hint template-attribution">
+          {SPM_TEMPLATE_ATTRIBUTION}{" "}
+          <a href={SPM_TEMPLATE_LICENSE} target="_blank" rel="noreferrer">
+            Lizenz
+          </a>
+        </p>
         <VolumeUploadPanel title="Eigene T1-Vorlage (NIfTI)" description="z. B. aus SPM oder CAT12." onLoaded={(l, n) => addOwnTemplate(l, n, "T1")} />
         <label className="field">
           Eigene PET-Vorlage (NIfTI; 4D = adaptive Vorlage: amyloid-negativ, amyloid-positiv)
@@ -1566,47 +1641,84 @@ function App() {
     return w2v ? [{ id: e.id, label: `${datasetModality(e.dataset)} · ${e.dataset.displayName}`, dataset: e.dataset, matrix: e.matrix, w2v }] : [];
   });
 
-  const registrationTab = reference && moving && movingCenter && (
+  const isIdentity = (m: Mat4) => m.every((v, i) => Math.abs(v - IDENTITY_MAT4[i]) < 1e-9);
+  const gridInfo = (e: Entry) => {
+    const v = e.dataset.current;
+    return `${v.nx}×${v.ny}×${v.nz} · ${v.geometry.spacing.map((x) => formatValue(x)).join("×")} mm`;
+  };
+  const regRows: RegRow[] = movingCandidates.map((e) => {
+    const r = coregResults[e.id];
+    const status: RegStatusKind =
+      regQueue.running === e.id ? "running" : regQueue.waiting.includes(e.id) ? "queued" : r && !r.accepted ? "pending" : r ? "registered" : isIdentity(e.matrix) ? "scanner" : "manual";
+    const detail =
+      status === "running" && coregProgress
+        ? `Stufe ${coregProgress.level}/${coregProgress.levels} · ${similarity(coregSettings.cost === "auto" ? costFor(e) : coregSettings.cost, coregProgress.cost)}`
+        : r && (status === "pending" || status === "registered")
+          ? `${similarity(r.result.cost, r.result.before)} → ${similarity(r.result.cost, r.result.after)}`
+          : undefined;
+    return { id: e.id, label: entryLabel(e), info: gridInfo(e), status, detail, passive: isPassive(e) };
+  });
+  const registrationTab = reference && (
     <>
-      <CoregPanel
-        movingOptions={movingCandidates.map((e) => ({ id: e.id, label: `${datasetModality(e.dataset)} · ${e.dataset.displayName}` }))}
-        movingId={moving.id}
-        onMovingChange={selectMoving}
-        referenceLabel={`${datasetModality(reference.dataset)} · ${reference.dataset.displayName}`}
-        autoCost={autoCost}
-        settings={coregSettings}
-        onSettingsChange={setCoregSettings}
+      <RegistrationSetup
+        datasets={entries.map((e) => ({ id: e.id, label: entryLabel(e), info: `${datasetModality(e.dataset)} · ${gridInfo(e)}` }))}
+        referenceId={reference.id}
+        onReferenceChange={changeBase}
+        rows={regRows}
+        selected={regSelection}
+        onSelectedChange={setRegSelected}
+        focusId={moving?.id ?? null}
+        onFocus={selectMoving}
         running={coregRunning}
-        progress={coregProgress}
-        onStart={startCoregistration}
-        onCancel={() => coregRun.current?.cancel()}
-        pending={coregPending?.entryId === moving.id ? coregPending.result : null}
-        onAccept={() => setCoregPending(null)}
-        onDiscard={discardCoregistration}
-        onResetToScanner={() => {
-          updateEntry(moving.id, { matrix: IDENTITY_MAT4 });
-          setCoregPending(null);
+        progressText={
+          regQueue.running
+            ? `${entryLabel(byId(regQueue.running)!)}${coregProgress ? ` · Stufe ${coregProgress.level}/${coregProgress.levels} · ${coregProgress.stage}` : ""}${regQueue.waiting.length ? ` · noch ${regQueue.waiting.length} wartend` : ""}`
+            : null
+        }
+        onStart={() => void startCoregistration()}
+        onCancel={() => {
+          regCancelled.current = true;
+          coregRun.current?.cancel();
         }}
-        onSaveMatrix={saveMatrix}
-        onLoadMatrix={(f) => void loadMatrix(f)}
-        frameNote={frameNote}
+        onAccept={acceptCoregistration}
+        onDiscard={discardCoregistration}
+        onAcceptAll={() => setCoregResults((all) => Object.fromEntries(Object.entries(all).map(([k, v]) => [k, { ...v, accepted: true }])))}
+        autoCostFor={(id) => (coregSettings.cost === "auto" ? costFor(byId(id)) : coregSettings.cost)}
         error={coregError}
       />
-      <RegistrationPanel
-        title={`Manuelle Korrektur ${datasetModality(moving.dataset)} → ${datasetModality(reference.dataset)}`}
-        params={movingParams}
-        onChange={(p) => {
-          updateEntry(moving.id, { matrix: matrixFromParams(p, movingCenter) });
-          setCoregPending(null);
-        }}
-      >
-        {!isRigid(movingParams) && (
-          <p className="tool-hint">
-            Affine Anteile: Skalierung {[movingParams.sx, movingParams.sy, movingParams.sz].map((v) => v.toFixed(3)).join(" / ")}, Scherung{" "}
-            {[movingParams.hxy, movingParams.hxz, movingParams.hyz].map((v) => v.toFixed(3)).join(" / ")}
-          </p>
-        )}
-      </RegistrationPanel>
+      {moving && movingCenter && (
+        <>
+          <CoregPanel
+            focusLabel={entryLabel(moving)}
+            autoCost={autoCost}
+            settings={coregSettings}
+            onSettingsChange={setCoregSettings}
+            running={coregRunning}
+            onResetToScanner={() => {
+              updateEntry(moving.id, { matrix: IDENTITY_MAT4 });
+              discardResultOnly(moving.id);
+            }}
+            onSaveMatrix={saveMatrix}
+            onLoadMatrix={(f) => void loadMatrix(f)}
+            frameNote={frameNote}
+          />
+          <RegistrationPanel
+            title={`Manuelle Korrektur: ${entryLabel(moving)} → Basis`}
+            params={movingParams}
+            onChange={(p) => {
+              updateEntry(moving.id, { matrix: matrixFromParams(p, movingCenter) });
+              discardResultOnly(moving.id);
+            }}
+          >
+            {!isRigid(movingParams) && (
+              <p className="tool-hint">
+                Affine Anteile: Skalierung {[movingParams.sx, movingParams.sy, movingParams.sz].map((v) => v.toFixed(3)).join(" / ")}, Scherung{" "}
+                {[movingParams.hxy, movingParams.hxz, movingParams.hyz].map((v) => v.toFixed(3)).join(" / ")}
+              </p>
+            )}
+          </RegistrationPanel>
+        </>
+      )}
     </>
   );
 
@@ -1615,8 +1727,12 @@ function App() {
       templates={templateEntries.map((e) => ({ id: e.id, label: e.dataset.template!.name }))}
       templateId={normTemplate?.id ?? null}
       onTemplateChange={setNormTemplateId}
-      onLoadMni={() => void addBundledTemplate()}
-      mniLoading={templateBusy}
+      bundled={[
+        { id: "mni", label: BUNDLED_MNI.name, hint: "T1-MRT-Vorlage (MNI ICBM 2009c)", loaded: entries.some((e) => e.dataset.template?.name === BUNDLED_MNI.name) },
+        ...BUNDLED_PET_TEMPLATES.map((t) => ({ id: t.id, label: t.name, hint: t.hint, loaded: entries.some((e) => e.dataset.template?.name === t.name) })),
+      ]}
+      onLoadBundled={(id) => void (id === "mni" ? addBundledTemplate() : addBundledPetTemplate(id as (typeof BUNDLED_PET_TEMPLATES)[number]["id"]))}
+      bundledLoading={templateBusy}
       subjects={subjectCandidates.map((e) => ({ id: e.id, label: `${datasetModality(e.dataset)} · ${e.dataset.displayName}` }))}
       subjectId={normSubject?.id ?? null}
       onSubjectChange={(id) => {

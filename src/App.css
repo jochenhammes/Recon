@@ -1211,3 +1211,73 @@ tr.excluded-row td {
   font-size: 11px;
   white-space: normal !important;
 }
+
+/* Registration list */
+.reg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.reg-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: start;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.reg-row:hover {
+  background: var(--surface-3);
+}
+.reg-row.focused {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+.reg-row-title {
+  color: var(--text-h);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.reg-row-info {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.reg-row-actions {
+  margin-top: 6px;
+}
+.reg-status {
+  font-size: 11px;
+  text-align: right;
+  white-space: nowrap;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.reg-status small {
+  color: var(--text-dim);
+  font-size: 10px;
+}
+.reg-scanner {
+  color: var(--text-dim);
+}
+.reg-registered {
+  color: var(--success);
+}
+.reg-pending {
+  color: var(--warning);
+}
+.reg-running,
+.reg-queued,
+.reg-manual {
+  color: var(--accent-strong);
+}
+
+.template-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0;
+}

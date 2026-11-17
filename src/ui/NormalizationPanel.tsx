@@ -14,8 +14,10 @@ export interface NormalizationPanelProps {
   templates: Option[];
   templateId: string | null;
   onTemplateChange: (id: string) => void;
-  onLoadMni: () => void;
-  mniLoading: boolean;
+  /** Bundled templates (MNI T1, SPM PET/SPECT) with load state. */
+  bundled: { id: string; label: string; hint: string; loaded: boolean }[];
+  onLoadBundled: (id: string) => void;
+  bundledLoading: boolean;
   subjects: Option[];
   subjectId: string | null;
   onSubjectChange: (id: string) => void;
@@ -57,13 +59,7 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
       <section className="card">
         <h3>Vorlage</h3>
         {props.templates.length === 0 ? (
-          <>
-            <p className="hint">Noch keine Vorlage geladen.</p>
-            <button className="secondary-btn" disabled={props.mniLoading} onClick={props.onLoadMni}>
-              {props.mniLoading ? "Wird geladen …" : "MNI152 2009c (T1, 2 mm) laden"}
-            </button>
-            <p className="hint">Eigene Vorlagen (T1 oder Tracer-PET) im Panel „Daten“ unter „Standardraum-Vorlage“.</p>
-          </>
+          <p className="hint">Noch keine Vorlage geladen.</p>
         ) : (
           <label className="field">
             Standardraum
@@ -76,6 +72,19 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
             </select>
           </label>
         )}
+        <div className="template-buttons">
+          {props.bundled
+            .filter((b) => !b.loaded)
+            .map((b) => (
+              <button key={b.id} className="secondary-btn" disabled={props.bundledLoading || running} title={b.hint} onClick={() => props.onLoadBundled(b.id)}>
+                {props.bundledLoading ? "Wird geladen …" : `${b.label} laden`}
+              </button>
+            ))}
+        </div>
+        <p className="tool-hint">
+          T1-MRT → MNI-T1-Vorlage; Hirn-PET ohne MRT → SPM-PET-Vorlage; Perfusions-SPECT → SPM-SPECT-Vorlage. Eigene Vorlagen (z. B. Amyloid) im
+          Panel „Daten“ unter „Standardraum-Vorlage“.
+        </p>
       </section>
 
       {props.templates.length === 0 && props.error && <div className="error-banner">{props.error}</div>}

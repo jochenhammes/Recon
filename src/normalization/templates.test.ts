@@ -24,3 +24,28 @@ describe("bundled MNI template", () => {
     expect(inBrain).toBeLessThan(2000);
   });
 });
+
+describe("bundled SPM PET/SPECT templates", () => {
+  it("load in MNI space and overlap the MNI 2009c brain", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { gunzipSync } = await import("node:zlib");
+    const { fileURLToPath } = await import("node:url");
+    const { parseNifti1 } = await import("../viewer/volumeLoader");
+    const { voiMeans } = await import("../centiloid/vois");
+    const load = (n: string) => {
+      const raw = gunzipSync(readFileSync(fileURLToPath(new URL(`../../public/templates/${n}`, import.meta.url))));
+      return parseNifti1(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength) as ArrayBuffer).volume;
+    };
+    const brain = load("MNI152NLin2009cAsym_res-02_brainmask.nii.gz");
+    for (const f of ["spm12_PET.nii.gz", "spm12_SPECT.nii.gz"]) {
+      const t = load(f);
+      expect([t.nx, t.ny, t.nz]).toEqual([91, 109, 91]);
+      // Mean template intensity inside vs outside the MNI 2009c brain (sampled on the template grid).
+      const asMask = { resolutionMm: 2, volumes: { ctx: brain }, source: "" };
+      const inside = voiMeans(t, asMask)[0].mean;
+      let all = 0;
+      for (const v of t.data) all += v;
+      expect(inside, f).toBeGreaterThan(1.8 * (all / t.data.length));
+    }
+  });
+});
