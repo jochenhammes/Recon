@@ -3,6 +3,7 @@ import type { ReconParams } from "../recon/volume";
 import type { Volume3D } from "../viewer/volume";
 import type { EditOp } from "../edit/operations";
 import type { HeaderEdit } from "../header/headerModel";
+import type { TemplateInfo } from "../normalization/templates";
 
 /** How stored DICOM sample values map to real values: real = stored * slope + intercept. */
 export interface DicomPixelEncoding {
@@ -53,6 +54,8 @@ export interface LoadedDataset {
   edits: EditOp[];
   /** Pending DICOM header changes (header editor), applied on DICOM export. */
   headerEdits: HeaderEdit[];
+  /** Set when the dataset is a standard-space template (e.g. MNI T1). */
+  template?: TemplateInfo;
   source: VolumeSource;
   displayName: string;
 }

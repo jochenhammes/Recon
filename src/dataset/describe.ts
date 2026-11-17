@@ -1,7 +1,7 @@
 import { type SuvResult, computeSuv } from "../analysis/suv";
 import type { LayerDisplay } from "../viewer/types";
 import type { Volume3D } from "../viewer/volume";
-import type { VolumeSource } from "./types";
+import type { LoadedDataset, VolumeSource } from "./types";
 
 /** Short modality label for chips and the status bar. */
 export function modalityLabel(source: VolumeSource | undefined): string {
@@ -9,6 +9,11 @@ export function modalityLabel(source: VolumeSource | undefined): string {
   if (source.kind === "reconstruction") return "SPECT";
   if (source.kind === "nifti") return "NIfTI";
   return source.files[0].dataSet.string("x00080060")?.trim() || "DICOM";
+}
+
+/** Label for chips and lists: the modality, or "T1-Vorlage"/"PET-Vorlage" for templates. */
+export function datasetModality(d: LoadedDataset): string {
+  return d.template ? `${d.template.kind}-Vorlage` : modalityLabel(d.source);
 }
 
 /** True for anatomical modalities that serve as the fusion base (CT, MR). */

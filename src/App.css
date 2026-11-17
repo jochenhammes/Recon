@@ -1088,3 +1088,13 @@
   cursor: pointer;
   text-align: left;
 }
+
+.template-attribution {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 6px;
+}
+
+.template-attribution a {
+  color: var(--accent-strong);
+}

@@ -8,7 +8,8 @@ import { AppShell, type ShellTab } from "./ui/AppShell";
 import { DatasetInfo } from "./ui/DatasetInfo";
 import { LayerSettings, type WindowPreset } from "./ui/ViewSettingsPanel";
 import { RegistrationPanel } from "./ui/RegistrationPanel";
-import { CT_PRESETS, defaultDisplay, isAnatomical, modalityLabel, rawUnitLabel, suvForSource } from "./dataset/describe";
+import { CT_PRESETS, datasetModality, defaultDisplay, isAnatomical, rawUnitLabel, suvForSource } from "./dataset/describe";
+import { BUNDLED_MNI, loadBundledMni } from "./normalization/templates";
 import { AnalysisPanel } from "./components/AnalysisPanel";
 import { type BrushState, FilterSection, GeometrySection, HistorySection, ValueSection, VoiSection, type VoiTool } from "./components/EditTools";
 import { runEdits } from "./edit/runner";
@@ -185,7 +186,7 @@ function App() {
     const add = (e: Entry | undefined, display?: LayerDisplay) => {
       const w2v = e && w2vById.get(e.id);
       if (!e || !w2v) return;
-      out.push({ id: e.id, label: modalityLabel(e.dataset.source), volume: e.dataset.current, w2v, display: display ?? e.display, unit: layerUnits.get(e.id) });
+      out.push({ id: e.id, label: datasetModality(e.dataset), volume: e.dataset.current, w2v, display: display ?? e.display, unit: layerUnits.get(e.id) });
     };
     add(reference, reference ? { ...reference.display, opacity: 1 } : undefined);
     add(overlay);
@@ -218,7 +219,12 @@ function App() {
 
   function addDataset(next: LoadedDataset) {
     const entry: Entry = { id: `ds${nextEntryId++}`, dataset: next, display: defaultDisplay(next.current, next.source), matrix: IDENTITY_MAT4 };
-    const anatomical = isAnatomical(next.source);
+    if (next.template && reference) {
+      // Templates are added without changing reference, overlay or active dataset.
+      setEntries([...entries, entry]);
+      return;
+    }
+    const anatomical = isAnatomical(next.source) || next.template?.kind === "T1";
     const ref = reference;
     let list = [...entries, entry];
     if (!ref) {
@@ -297,6 +303,25 @@ function App() {
     }
     if (id === active?.id) setActiveId(rest[0]?.id ?? null);
     if (voi?.entryId === id) setVoi(null);
+  }
+
+  const [templateBusy, setTemplateBusy] = useState(false);
+
+  async function addBundledTemplate() {
+    setTemplateBusy(true);
+    setError(null);
+    try {
+      addDataset(await loadBundledMni());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setTemplateBusy(false);
+    }
+  }
+
+  function addOwnTemplate(loaded: LoadedVolume, fileName: string, kind: "T1" | "PET") {
+    const d = createDataset(loaded.volume, loaded.source, fileName);
+    addDataset({ ...d, template: { name: fileName, kind } });
   }
 
   function handleUnitModeChange(mode: UnitMode) {
@@ -430,7 +455,7 @@ function App() {
   // ── Coregistration: moving dataset → reference ──
   const movingCandidates = entries.filter((e) => e.id !== reference?.id);
   const moving = byId(movingId) && movingId !== reference?.id ? byId(movingId) : (overlay ?? movingCandidates[0]);
-  const autoCost = moving && reference && modalityLabel(moving.dataset.source) === modalityLabel(reference.dataset.source) ? "ncc" : "nmi";
+  const autoCost = moving && reference && datasetModality(moving.dataset) === datasetModality(reference.dataset) ? "ncc" : "nmi";
 
   function selectMoving(id: string) {
     setMovingId(id);
@@ -509,7 +534,7 @@ function App() {
   // ── Panels ──
   const presetsFor = (e: Entry): WindowPreset[] => {
     const v = e.dataset.current;
-    if (modalityLabel(e.dataset.source) === "CT") return CT_PRESETS;
+    if (datasetModality(e.dataset) === "CT") return CT_PRESETS;
     const suv = suvById.get(e.id);
     return [
       { label: "Auto", window: defaultDisplay(v, e.dataset.source).window },
@@ -553,7 +578,7 @@ function App() {
           highlighted={e.id === active?.id && entries.length > 1}
           title={
             <>
-              {modalityLabel(e.dataset.source)}
+              {datasetModality(e.dataset)}
               {roleBadges(e)}
             </>
           }
@@ -574,6 +599,25 @@ function App() {
           )}
         </DatasetInfo>
       ))}
+      <details className="card collapsible">
+        <summary>Standardraum-Vorlage</summary>
+        <p className="hint">Vorlage für die räumliche Normalisierung (Registrierung → Standardraum).</p>
+        <button
+          className="secondary-btn"
+          disabled={templateBusy || entries.some((e) => e.dataset.template?.name === BUNDLED_MNI.name)}
+          onClick={() => void addBundledTemplate()}
+        >
+          {templateBusy ? "Wird geladen …" : `${BUNDLED_MNI.name} laden`}
+        </button>
+        <p className="hint template-attribution">
+          {BUNDLED_MNI.attribution}{" "}
+          <a href={BUNDLED_MNI.license} target="_blank" rel="noreferrer">
+            Lizenz
+          </a>
+        </p>
+        <VolumeUploadPanel title="Eigene T1-Vorlage (NIfTI)" description="z. B. aus SPM oder CAT12." onLoaded={(l, n) => addOwnTemplate(l, n, "T1")} />
+        <VolumeUploadPanel title="Eigene PET-Vorlage (NIfTI)" description="Tracer-spezifische Vorlage (z. B. FDG, Amyloid) für die Normalisierung ohne MRT." onLoaded={(l, n) => addOwnTemplate(l, n, "PET")} />
+      </details>
       <details className="card collapsible" open={entries.length === 0 || !!projectionSet}>
         <summary>SPECT-Rohdaten rekonstruieren</summary>
         <UploadPanel onLoaded={handleLoaded} />
@@ -590,7 +634,7 @@ function App() {
     return (
       <LayerSettings
         key={e.id}
-        title={`${modalityLabel(e.dataset.source)}${overlay ? (isOverlay ? " · Overlay" : " · Basis") : ""}`}
+        title={`${datasetModality(e.dataset)}${overlay ? (isOverlay ? " · Overlay" : " · Basis") : ""}`}
         display={isOverlay ? e.display : { ...e.display, opacity: 1 }}
         onChange={(d) => updateEntry(e.id, { display: d })}
         scale={u.scale}
@@ -611,16 +655,16 @@ function App() {
 
   const spaces = entries.flatMap((e) => {
     const w2v = w2vById.get(e.id);
-    return w2v ? [{ id: e.id, label: `${modalityLabel(e.dataset.source)} · ${e.dataset.displayName}`, dataset: e.dataset, matrix: e.matrix, w2v }] : [];
+    return w2v ? [{ id: e.id, label: `${datasetModality(e.dataset)} · ${e.dataset.displayName}`, dataset: e.dataset, matrix: e.matrix, w2v }] : [];
   });
 
   const registrationTab = reference && moving && movingCenter && (
     <>
       <CoregPanel
-        movingOptions={movingCandidates.map((e) => ({ id: e.id, label: `${modalityLabel(e.dataset.source)} · ${e.dataset.displayName}` }))}
+        movingOptions={movingCandidates.map((e) => ({ id: e.id, label: `${datasetModality(e.dataset)} · ${e.dataset.displayName}` }))}
         movingId={moving.id}
         onMovingChange={selectMoving}
-        referenceLabel={`${modalityLabel(reference.dataset.source)} · ${reference.dataset.displayName}`}
+        referenceLabel={`${datasetModality(reference.dataset)} · ${reference.dataset.displayName}`}
         autoCost={autoCost}
         settings={coregSettings}
         onSettingsChange={setCoregSettings}
@@ -641,7 +685,7 @@ function App() {
         error={coregError}
       />
       <RegistrationPanel
-        title={`Manuelle Korrektur ${modalityLabel(moving.dataset.source)} → ${modalityLabel(reference.dataset.source)}`}
+        title={`Manuelle Korrektur ${datasetModality(moving.dataset)} → ${datasetModality(reference.dataset)}`}
         params={movingParams}
         onChange={(p) => {
           updateEntry(moving.id, { matrix: matrixFromParams(p, movingCenter) });
@@ -773,7 +817,7 @@ function App() {
           title={`${e.dataset.displayName}${entries.length > 1 ? " – klicken, um Analyse, Bearbeitung, Header und Export auf diesen Datensatz anzuwenden" : ""}`}
           onClick={() => switchActive(e.id)}
         >
-          <span className="badge">{modalityLabel(e.dataset.source)}</span>
+          <span className="badge">{datasetModality(e.dataset)}</span>
           <span className="chip-name">{e.dataset.displayName}</span>
           {e.id === reference?.id && entries.length > 1 && <span className="chip-edited chip-ref">Ref</span>}
           {e.dataset.edits.length > 0 && <span className="chip-edited">bearbeitet</span>}
@@ -803,7 +847,7 @@ function App() {
             entries.length > 1 &&
             active && (
               <span className="toolbar-note">
-                Aktiv: <strong>{modalityLabel(active.dataset.source)}</strong>
+                Aktiv: <strong>{datasetModality(active.dataset)}</strong>
               </span>
             )
           }

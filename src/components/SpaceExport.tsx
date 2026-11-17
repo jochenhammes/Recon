@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Vec3, WorldToVoxel } from "../core/geometry";
 import { type Mat4, worldToVoxelThrough } from "../core/transform";
-import { modalityLabel } from "../dataset/describe";
+import { datasetModality } from "../dataset/describe";
 import type { LoadedDataset } from "../dataset/types";
 import { describeEdit } from "../edit/operations";
 import type { AnonymizeOptions } from "../export/anonymize";
@@ -97,13 +97,13 @@ export function SpaceExport({ spaces, activeId, anonymize }: SpaceExportProps) {
           ...g,
           frameOfReferenceUid: tv.geometry.frameOfReferenceUid,
         });
-        const base = `${safe(modalityLabel(s.dataset.source))}_${safe(s.dataset.displayName)}_im_${safe(modalityLabel(target.dataset.source))}-Raum`;
+        const base = `${safe(datasetModality(s.dataset))}_${safe(s.dataset.displayName)}_im_${safe(datasetModality(target.dataset))}-Raum`;
         if (format === "nifti" || s.dataset.source.kind !== "dicom") {
           outputs.push({ name: base, files: [{ name: `${base}.nii`, bytes: buildNiftiFile(vol) }] });
         } else {
           const edits = s.dataset.edits.map((e) => describeEdit(e)).join("; ");
           const { files } = buildTemplateSeries(vol, s.dataset.source.files[0], {
-            seriesDescription: `${modalityLabel(s.dataset.source)} im ${modalityLabel(target.dataset.source)}-Raum`,
+            seriesDescription: `${datasetModality(s.dataset)} im ${datasetModality(target.dataset)}-Raum`,
             derivationDescription: `Resampelt in den Raum von ${target.dataset.displayName} (${INTERPOLATION_LABELS[method].split(" (")[0]})${edits ? `; ${edits}` : ""}`,
             frameOfReferenceUid: tv.geometry.frameOfReferenceUid,
             anonymize,
@@ -118,7 +118,7 @@ export function SpaceExport({ spaces, activeId, anonymize }: SpaceExportProps) {
         download(f.bytes, f.name.endsWith(".nii") ? f.name : `${outputs[0].name}.dcm`, f.name.endsWith(".nii") ? "application/octet-stream" : "application/dicom");
       } else {
         const entries = outputs.flatMap((o) => (o.files.length === 1 && o.files[0].name.endsWith(".nii") ? o.files : o.files.map((f) => ({ name: `${o.name}/${f.name}`, bytes: f.bytes }))));
-        download(buildZip(entries), outputs.length === 1 ? `${outputs[0].name}.zip` : `export_im_${safe(modalityLabel(target.dataset.source))}-Raum.zip`, "application/zip");
+        download(buildZip(entries), outputs.length === 1 ? `${outputs[0].name}.zip` : `export_im_${safe(datasetModality(target.dataset))}-Raum.zip`, "application/zip");
       }
       setStatus(`${selected.length} Datensatz/Datensätze exportiert (${grid.nx} × ${grid.ny} × ${grid.nz}).`);
     } catch (e) {
