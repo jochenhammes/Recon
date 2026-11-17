@@ -47,39 +47,6 @@ export class Volume3D {
     return this.data[(z * this.ny + y) * this.nx + x];
   }
 
-  /** Transaxial slice at fixed z. Returns ny x nx, row-major. */
-  axialSlice(z: number): { width: number; height: number; data: Float32Array } {
-    const zc = clamp(z, 0, this.nz - 1);
-    const size = this.ny * this.nx;
-    return { width: this.nx, height: this.ny, data: this.data.subarray(zc * size, zc * size + size) };
-  }
-
-  /** Sagittal slice at fixed x (varies z vertically, y horizontally). Returns ny x nz. */
-  sagittalSlice(x: number): { width: number; height: number; data: Float32Array } {
-    const xc = clamp(x, 0, this.nx - 1);
-    const out = new Float32Array(this.nz * this.ny);
-    for (let z = 0; z < this.nz; z++) {
-      const rowBase = (z * this.ny) * this.nx;
-      for (let y = 0; y < this.ny; y++) {
-        out[z * this.ny + y] = this.data[rowBase + y * this.nx + xc];
-      }
-    }
-    return { width: this.ny, height: this.nz, data: out };
-  }
-
-  /** Coronal slice at fixed y (varies z vertically, x horizontally). Returns nx x nz. */
-  coronalSlice(y: number): { width: number; height: number; data: Float32Array } {
-    const yc = clamp(y, 0, this.ny - 1);
-    const out = new Float32Array(this.nz * this.nx);
-    for (let z = 0; z < this.nz; z++) {
-      const base = (z * this.ny + yc) * this.nx;
-      for (let x = 0; x < this.nx; x++) {
-        out[z * this.nx + x] = this.data[base + x];
-      }
-    }
-    return { width: this.nx, height: this.nz, data: out };
-  }
-
   /**
    * Rotating maximum-intensity projection around the vertical (z) axis, viewed from azimuth
    * `azimuthDeg` (0 = looking along +y, matching the default coronal/anterior view).
@@ -126,11 +93,6 @@ export class Volume3D {
     return quickselect(copy, idx);
   }
 
-  max(): number {
-    let m = 0;
-    for (let i = 0; i < this.data.length; i++) if (this.data[i] > m) m = this.data[i];
-    return m;
-  }
 }
 
 function bilinearSample(data: Float32Array, sliceBase: number, nx: number, ny: number, x: number, y: number): number {
@@ -221,32 +183,4 @@ export function lutTable(lut: ColorLut): Uint8Array {
     default:
       return GRAY_LUT;
   }
-}
-
-/** Maps a float slice buffer to RGBA (ImageData-ready) using window/level and an optional color LUT. */
-export function windowLevelToRgba(
-  slice: Float32Array,
-  windowMin: number,
-  windowMax: number,
-  colorLut: ColorLut = "gray",
-): Uint8ClampedArray<ArrayBuffer> {
-  const out = new Uint8ClampedArray(slice.length * 4);
-  const range = Math.max(windowMax - windowMin, 1e-6);
-  for (let i = 0; i < slice.length; i++) {
-    const norm = clamp((slice[i] - windowMin) / range, 0, 1);
-    const v = Math.round(norm * 255);
-    const o = i * 4;
-    if (colorLut === "inverted") {
-      const iv = 255 - v;
-      out[o] = iv; out[o + 1] = iv; out[o + 2] = iv;
-    } else if (colorLut === "rainbow") {
-      out[o] = RAINBOW_LUT[v * 3]; out[o + 1] = RAINBOW_LUT[v * 3 + 1]; out[o + 2] = RAINBOW_LUT[v * 3 + 2];
-    } else if (colorLut === "kidney") {
-      out[o] = KIDNEY_LUT[v * 3]; out[o + 1] = KIDNEY_LUT[v * 3 + 1]; out[o + 2] = KIDNEY_LUT[v * 3 + 2];
-    } else {
-      out[o] = v; out[o + 1] = v; out[o + 2] = v;
-    }
-    out[o + 3] = 255;
-  }
-  return out;
 }
