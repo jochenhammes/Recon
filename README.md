@@ -1,7 +1,8 @@
 # Recon Studio
 
 Browserbasierte Werkbank für nuklearmedizinische Bilddaten: SPECT-Rohdaten rekonstruieren, PET-, SPECT-,
-CT- und MRT-Volumen ansehen, analysieren, bearbeiten, coregistrieren, fusionieren, in den MNI-Standardraum
+CT- und MRT-Volumen ansehen, analysieren, bearbeiten, coregistrieren, fusionieren, CT-Organe segmentieren,
+die Tumorlast (MTV) bestimmen, in den MNI-Standardraum
 normalisieren, regional (SUVR) auswerten und als DICOM oder NIfTI exportieren.
 Alles läuft clientseitig im Browser (Web Worker), es gibt keinen Server – die Daten verlassen den Rechner nicht.
 
@@ -26,6 +27,14 @@ Alles läuft clientseitig im Browser (Web Worker), es gibt keinen Server – die
 - Statusleiste mit Position (mm, LPS) und Werten unter dem Cursor (HU, Bq/ml, SUV).
 - Farbtabellen, Fenster-Eingabe und Presets (SUV 0–5/10/15, CT: Weichteil, Lunge, Knochen, Gehirn, Leber).
 - Screenshot der aktuellen Ansicht als PNG; dunkles und helles Design.
+- **Beliebig viele Overlays** über der Basis, je mit eigener Farbtabelle, eigenem Fenster und eigener Deckkraft;
+  Reihenfolge ändern, Ebenen einzeln ein-/ausblenden, Datensatz zur Basis machen. Label-Bilder (Atlas, Organe,
+  Läsionen) werden ohne Interpolation dargestellt.
+- **GPU-Darstellung (WebGL2)**: Schnittbilder und MIP werden auf der Grafikkarte in Bildschirmauflösung berechnet
+  (Volumen als 3D-Texturen); CPU-Weg als Rückfall (kein WebGL2, Software-Rasterizer, zu große Volumina).
+  `?renderer=cpu` bzw. `?renderer=gpu` erzwingen einen Weg.
+- **Fusion exportieren**: die sichtbaren Ebenen so, wie sie angezeigt werden, als RGB-Datensatz – DICOM Secondary
+  Capture (eine Datei je Schicht, ZIP, mit Patientengeometrie) oder NIfTI RGB24, im Raster der Basis oder axial.
 
 ### Fusion und Coregistrierung
 - Ausrichtung zunächst über die Patientenkoordinaten; Overlay farbig und halbtransparent (Deckkraft, Sichtbarkeit).
@@ -60,8 +69,41 @@ Alles läuft clientseitig im Browser (Web Worker), es gibt keinen Server – die
   als CSV und **SUVR-Bild** (exportierbar wie jeder Datensatz); Atlas als farbiges Overlay (Farbtabelle „Atlas-Regionen“).
 
 ### Analyse
-- Anzahl Bildpunkte, Minimum, Mittelwert, Median, Maximum, Histogramm (Bins, log. Skala, ohne Nullwerte).
+- **Alle geladenen Datensätze** in einer Übersicht (Matrix, Voxelgröße, Min/Mittel/Median/Max in der jeweiligen
+  Einheit); Klick wählt den Datensatz für die Detailanalyse.
+- Anzahl Bildpunkte, Minimum, Mittelwert, Median, Maximum, Histogramm (Bins, log. Skala, ohne unterste Bin).
 - Für PET (Einheit BQML) wahlweise in **SUV** (Körpergewicht; zerfallskorrigiert auf Serienstart bzw. Injektion).
+- **VOI auf allen Datensätzen**: die gezeichnete VOI wird über die Registrierung auf jeden Datensatz übertragen
+  (Volumen, Mittel, Peak, Max).
+
+### Tumorlast (metabolisches Tumorvolumen) und CT-Organsegmentierung
+- **CT-Organsegmentierung im Browser**: TotalSegmentator „total“ (3 mm, 117 Strukturen; Apache 2.0) als ONNX-Modell
+  mit ONNX Runtime Web (WebGPU, sonst CPU/WASM) – die Daten verlassen den Rechner nicht. Vorverarbeitung wie nnU-Net
+  (RAS-Raster 3 mm, CT-Normierung), Sliding Window mit TotalSegmentators Kachelschritt (0,8) und Gauß-gewichteter
+  Mittelung der Wahrscheinlichkeiten (Top-4 Klassen je Voxel). Modell (66 MB) wird einmalig geladen und im Browser
+  gespeichert. Abgleich mit dem Original-TotalSegmentator (`--fast`) am Beispiel-CT: Dice 0,994–1,000 je Struktur
+  (eine Kachel), 99,75 % Voxel-Übereinstimmung bei mehreren Kacheln. Ohne WebGPU dauert ein Ganzkörper-CT lange.
+- **Läsionssegmentierung** auf dem PET in SUV: feste Schwelle (Lymphom SUV ≥ 4,0 nach LYSA oder 2,5; PSMA SUV ≥ 3;
+  frei), **41 % SUVmax je Läsion** (Region-Growing vom Maximum) oder **Leber-basiert** (a × Mittel + b × SD,
+  PERCIST 1,5/2); 26-Nachbar-Zusammenhangskomponenten, Mindestvolumen.
+- **Kennzahlen**: Läsionszahl, **TMTV/PSMA-TV**, **TLG/TL-PSMA**, SUVmax/SUVmean, je Läsion Volumen, SUVmax,
+  SUVpeak (1 ml), SUVmean; Lymphom zusätzlich **Dmax** und Dmax_bulk (Cottereau et al.); PSMA aufgeteilt in
+  Knochen / Weichteil.
+- **Mit CT-Organmasken**: Läsionen überwiegend (> 50 %) in Organen mit physiologischer Anreicherung werden
+  automatisch ausgeschlossen (FDG: Gehirn, Herz, Nieren, Blase; PSMA: Nieren, Blase, Leber, Milz, Darm, Magen),
+  Ort je Läsion (Organ/Knochen), **automatische Leber-Referenz** (3-cm-Kugel im rechten Leberlappen).
+  Speichel- und Tränendrüsen sind im CT-Modell nicht enthalten.
+- **Korrektur**: Klick schließt Läsionen ein/aus, Pinsel ergänzt/entfernt Voxel; Export als CSV und Läsionsmaske (NIfTI).
+- Methodenwahl: Literatur empfiehlt, eine Methode festzulegen und beizubehalten; die gewählte Methode und die
+  Ausschlüsse stehen im Ergebnis und in der CSV.
+
+### Centiloid (Amyloid-PET)
+- Standard-VOIs (Kortex, Kleinhirn gesamt, Kleinhirnrinde, Pons, Kleinhirn + Hirnstamm) von GAAIN werden vom
+  Nutzer geladen (`Centiloid_Std_VOI.zip`; nicht mitgeliefert, GAAIN-Nutzungsbedingungen).
+- Pipeline mit MRT (PET → T1 rigide, T1 → MNI) oder PET-only (adaptive PET-Vorlage, 4D-NIfTI); SUVR und Centiloid
+  mit der Florbetaben-Gleichung (Rowe et al. 2017), PiB (Klunk et al. 2015) oder einer eigenen Kalibrierung;
+  Prüfung von Aufnahmezeitfenster und Tracer aus dem DICOM-Header.
+- Validierung gegen die GAAIN-Florbetaben-Daten läuft (siehe unten); bis dahin sind die Werte nicht kalibriert.
 
 ### Bearbeiten
 - **Werte**: ≥ / ≤ Grenzwert → Wert, Bereich [a, b] → Wert, Begrenzen auf [min, max], linear a·x + b – Eingabe in
@@ -117,16 +159,22 @@ Ein Push auf `main` veröffentlicht die App über GitHub Pages.
 - `src/normalization/` – Vorlagen, Normalisierungsmodell (Rückwärtsfeld), DCT-Basis und nichtlineare Schätzung,
   SPM/CAT12-`y_*.nii`-Import/Export
 - `src/atlas/` – Atlanten, Labeltabellen, Regionalstatistik und SUVR
+- `src/tumor/` – Läsionssegmentierung (Schwellen, Zusammenhangskomponenten), Tumorlast-Kennzahlen, Organkopplung
+- `src/segmentation/` – CT-Organsegmentierung: Vorverarbeitung, Sliding Window, Modell-Laden/Cache
+- `src/centiloid/` – Centiloid-VOIs, Kalibrierungen, synchrone Pipeline für Skripte
+- `tools/totalseg-onnx/` – Export des TotalSegmentator-Modells nach ONNX
 - `src/resample/` – Interpolation (NN/trilinear/B-Spline), Resampling in Zielraster, eigene Matrix-/Voxelgrößen
 - `src/dicom/` – DICOM-Parsing (Rohdaten), Pixel-Dekodierung inkl. JPEG Lossless
 - `src/recon/` – Sinogramm, FFT/Rampenfilter, FBP, OSEM
-- `src/viewer/` – Volume-Modell, Volumen-Loader, Ebenen-Abtastung im Weltkoordinatensystem, Layer-Komposition, Viewer, MIP
+- `src/viewer/` – Volume-Modell, Volumen-Loader, Ebenen-Abtastung im Weltkoordinatensystem, Layer-Komposition, Viewer, MIP,
+  WebGL2-Renderer (`gl/`)
 - `src/dataset/` – Datenmodell geladener Volumen (Herkunft, Bearbeitungen, Header-Änderungen) und Hilfsfunktionen
 - `src/analysis/` – Statistik, Histogramm, SUV
 - `src/edit/` – Bearbeitungsoperationen, VOI, Filter, Geometrie-Operationen, Worker-Runner
 - `src/header/` – Tag-Wörterbuch, Header-Modell, Validierung
 - `src/export/` – header-erhaltender DICOM-Rewriter, Vorlagen-Writer, Anonymisierung, Pixel-Kodierung, NIfTI, ZIP
-- `src/workers/` – Worker für Rekonstruktion, Bearbeitung, Coregistrierung, Normalisierung und Resampling
+- `src/workers/` – Worker für Rekonstruktion, Bearbeitung, Coregistrierung, Normalisierung, Resampling,
+  Läsionssegmentierung und CT-Segmentierung (ONNX)
 - `src/ui/`, `src/components/` – Oberfläche (Shell, Panels)
 
 ## Mitgelieferte Daten und Lizenzen
@@ -137,3 +185,8 @@ Ein Push auf `main` veröffentlicht die App über GitHub Pages.
 - `public/atlases/`: CerebrA (Manera et al. 2020, Scientific Data 7:237), CC0 1.0; ursprünglich auf der symmetrischen
   2009c-Vorlage (1 mm) erstellt und für Recon Studio per Mehrheitsentscheid auf das 2-mm-Raster der asymmetrischen
   Vorlage übertragen.
+- `public/models/totalseg-total-3mm/`: TotalSegmentator „total“ 3 mm (Wasserthal et al., Radiology: AI 2023;
+  nnU-Net, Isensee et al. 2021), Apache 2.0; unverändert nach ONNX exportiert (`tools/totalseg-onnx/export.py`),
+  siehe `NOTICE.txt`.
+- Nicht mitgeliefert: GAAIN-Centiloid-Daten und -VOIs (nur persönliche, nicht-kommerzielle, nicht-klinische Nutzung;
+  Weitergabe nur mit Genehmigung von LONI/GAAIN).
