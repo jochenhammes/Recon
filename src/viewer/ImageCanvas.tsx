@@ -13,6 +13,21 @@ export interface CanvasImage {
 /** Maps image pixel coordinates (pixel centers at integers) to CSS pixels on the canvas. */
 export type ToScreen = (u: number, v: number) => [number, number];
 
+/**
+ * GPU drawing request: the canvas size in device pixels and the mapping image → CSS pixels
+ * (css = x0 + (u + 0.5)·sx). Returns the rendered canvas, or null to fall back to `image.rgba`.
+ */
+export interface GpuTarget {
+  width: number;
+  height: number;
+  dpr: number;
+  x0: number;
+  y0: number;
+  sx: number;
+  sy: number;
+}
+export type GpuDraw = (t: GpuTarget) => CanvasImageSource | null;
+
 export interface ImageCanvasProps {
   image: CanvasImage;
   transform: ViewTransform;
@@ -23,6 +38,8 @@ export interface ImageCanvasProps {
   /** Orientation letters [top, bottom, left, right]. */
   labels?: [string, string, string, string];
   overlay?: (ctx: CanvasRenderingContext2D, toScreen: ToScreen, scale: number) => void;
+  /** Renders the image at screen resolution on the GPU (WebGL); `image.rgba` is the fallback. */
+  gpuDraw?: GpuDraw;
   /** Left click/drag at image coordinates. */
   onPoint?: (u: number, v: number) => void;
   onHover?: (u: number, v: number) => void;
@@ -37,7 +54,7 @@ export interface ImageCanvasProps {
 type Drag = { mode: "point" | "window" | "pan"; lastX: number; lastY: number };
 
 export function ImageCanvas(props: ImageCanvasProps) {
-  const { image, transform, onTransformChange, title, actions, labels, overlay } = props;
+  const { image, transform, onTransformChange, title, actions, labels, overlay, gpuDraw } = props;
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const offscreenRef = useRef<HTMLCanvasElement | null>(null);
@@ -80,18 +97,24 @@ export function ImageCanvas(props: ImageCanvasProps) {
     canvas.height = Math.round(size.h * dpr);
     canvas.style.width = `${size.w}px`;
     canvas.style.height = `${size.h}px`;
-    if (!offscreenRef.current) offscreenRef.current = document.createElement("canvas");
-    const off = offscreenRef.current;
-    off.width = image.width;
-    off.height = image.height;
-    off.getContext("2d")!.putImageData(new ImageData(image.rgba, image.width, image.height), 0, 0);
-
     const ctx = canvas.getContext("2d")!;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, size.w, size.h);
-    ctx.imageSmoothingEnabled = sx < 4;
-    ctx.drawImage(off, x0, y0, image.width * sx, image.height * sy);
+    const gpu = gpuDraw?.({ width: canvas.width, height: canvas.height, dpr, x0, y0, sx, sy }) ?? null;
+    if (gpu) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(gpu, 0, 0, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    } else {
+      if (!offscreenRef.current) offscreenRef.current = document.createElement("canvas");
+      const off = offscreenRef.current;
+      off.width = image.width;
+      off.height = image.height;
+      if (image.rgba.length === image.width * image.height * 4) off.getContext("2d")!.putImageData(new ImageData(image.rgba, image.width, image.height), 0, 0);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, size.w, size.h);
+      ctx.imageSmoothingEnabled = sx < 4;
+      ctx.drawImage(off, x0, y0, image.width * sx, image.height * sy);
+    }
     overlay?.(ctx, (u, v) => [x0 + (u + 0.5) * sx, y0 + (v + 0.5) * sy], sx);
 
     if (labels) {
@@ -106,7 +129,7 @@ export function ImageCanvas(props: ImageCanvasProps) {
       ctx.textAlign = "right";
       ctx.fillText(labels[3], size.w - 6, size.h / 2);
     }
-  }, [image, size, sx, sy, x0, y0, overlay, labels]);
+  }, [image, size, sx, sy, x0, y0, overlay, labels, gpuDraw]);
 
   function rel(e: React.MouseEvent | React.WheelEvent): [number, number] {
     const r = canvasRef.current!.getBoundingClientRect();

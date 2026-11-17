@@ -3,8 +3,9 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { Vec3 } from "../core/geometry";
 import { formatValue } from "../components/format";
 import { compositeLayers } from "./composite";
-import { ImageCanvas } from "./ImageCanvas";
-import { orientedMip } from "./mip";
+import { type GpuDraw, ImageCanvas } from "./ImageCanvas";
+import { GlRenderer } from "./gl/renderer";
+import { mipSource, orientedMip } from "./mip";
 import { Volume3D } from "./volume";
 import {
   type DisplayGrid,
@@ -42,6 +43,8 @@ export interface ViewerProps {
   planeOverlay?: (kind: PlaneKind, ctx: CanvasRenderingContext2D, toScreen: (u: number, v: number) => [number, number], basis: ReturnType<typeof planeBasis>, scale: number) => void;
 }
 
+const EMPTY_RGBA = new Uint8ClampedArray(0);
+
 const VIEW_TITLES: Record<ViewKind, string> = { axial: "Axial", coronal: "Koronar", sagittal: "Sagittal", mip: "MIP" };
 const GRID_ORDER: ViewKind[] = ["axial", "sagittal", "coronal", "mip"];
 
@@ -50,6 +53,7 @@ export function Viewer(props: ViewerProps) {
   const visible = useShallowStable(layers.filter((l) => l.display.visible));
   const volumes = useShallowStable(layers.map((l) => l.volume));
   const grid = useMemo(() => computeDisplayGrid(volumes), [volumes]);
+
   const center: Vec3 = [(grid.min[0] + grid.max[0]) / 2, (grid.min[1] + grid.max[1]) / 2, (grid.min[2] + grid.max[2]) / 2];
   const cursor = props.cursor ?? center;
   const [transforms, setTransforms] = useState<Record<ViewKind, ViewTransform>>({
@@ -61,6 +65,13 @@ export function Viewer(props: ViewerProps) {
   const [hover, setHover] = useState<Vec3 | null>(null);
   const active = layers.find((l) => l.id === activeLayerId) ?? layers[layers.length - 1];
   const mipLayer = visible.find((l) => l.id === (props.mipLayerId ?? activeLayerId)) ?? visible[visible.length - 1];
+  const mipVolume = mipLayer?.volume;
+  // Free GPU textures of volumes that are no longer shown (plus the MIP source of the MIP layer).
+  useEffect(() => {
+    const gl = GlRenderer.get();
+    if (!gl) return;
+    gl.retain([...volumes, ...(mipVolume instanceof Volume3D ? [mipSource(mipVolume)] : [])]);
+  }, [volumes, mipVolume]);
 
   function dragWindow(dx: number, dy: number, target: ViewerLayer | undefined = active) {
     if (!target) return;
@@ -234,14 +245,45 @@ function PlaneView(props: PlaneViewProps) {
   const volumes = useShallowStable(layers.map((l) => l.volume));
   const transforms = useShallowStable(layers.map((l) => l.w2v));
   const displays = useShallowStable(layers.map((l) => l.display));
-  const samples = useMemo(() => volumes.map((v, i) => samplePlane(v, transforms[i], basis)), [volumes, transforms, basis]);
+  // GPU (WebGL2) when available and the volumes fit; otherwise the CPU path (sampling + compositing).
+  const [gpuFailed, setGpuFailed] = useState(false);
+  const gl = gpuFailed ? null : GlRenderer.get();
+  const useGpu = !!gl && gl.canHost(volumes);
+  const samples = useMemo(() => (useGpu ? [] : volumes.map((v, i) => samplePlane(v, transforms[i], basis))), [useGpu, volumes, transforms, basis]);
   const image = useMemo(() => {
+    if (useGpu) return { rgba: EMPTY_RGBA, width: basis.width, height: basis.height };
     const rgba = compositeLayers(
       displays.map((d, i) => ({ values: samples[i], window: d.window, lut: d.lut, opacity: d.opacity })),
       basis.width * basis.height,
     );
     return { rgba, width: basis.width, height: basis.height };
-  }, [samples, displays, basis]);
+  }, [useGpu, samples, displays, basis]);
+  const gpuDraw = useMemo<GpuDraw | undefined>(() => {
+    if (!useGpu || !gl) return undefined;
+    return (t) => {
+      try {
+        const du = 1 / (t.dpr * t.sx);
+        const dv = 1 / (t.dpr * t.sy);
+        const au = (0.5 / t.dpr - t.x0) / t.sx - 0.5;
+        const av = (0.5 / t.dpr - t.y0) / t.sy - 0.5;
+        const { origin: O, U, V } = basis;
+        return gl.renderPlane(
+          volumes.map((v, i) => ({ volume: v, w2v: transforms[i], display: displays[i] })),
+          {
+            width: t.width,
+            height: t.height,
+            world0: [O[0] + au * U[0] + av * V[0], O[1] + au * U[1] + av * V[1], O[2] + au * U[2] + av * V[2]],
+            worldDx: [U[0] * du, U[1] * du, U[2] * du],
+            worldDy: [V[0] * dv, V[1] * dv, V[2] * dv],
+          },
+        );
+      } catch (e) {
+        console.error("WebGL rendering failed, using the CPU path:", e);
+        setGpuFailed(true);
+        return null;
+      }
+    };
+  }, [useGpu, gl, basis, volumes, transforms, displays]);
 
   const [cu, cv] = worldToPlane(basis, cursor);
   const overlayFn = useMemo(
@@ -279,6 +321,7 @@ function PlaneView(props: PlaneViewProps) {
   return (
     <ImageCanvas
       image={image}
+      gpuDraw={gpuDraw}
       transform={props.transform}
       onTransformChange={props.onTransformChange}
       title={`${VIEW_TITLES[kind]} · ${planeCoord.toFixed(1)} mm`}
@@ -335,22 +378,55 @@ function MipView({ layer, transform, onTransformChange, onWindowDrag, onDoubleCl
     return () => cancelAnimationFrame(raf);
   }, [rotating]);
 
-  const deg = Math.round(azimuth / 3) * 3;
   const volume = layer?.volume;
   const display = layer?.display;
-  const mip = useMemo(() => (volume instanceof Volume3D ? orientedMip(volume, deg) : null), [volume, deg]);
+  const [gpuFailed, setGpuFailed] = useState(false);
+  const gl = gpuFailed ? null : GlRenderer.get();
+  const src = useMemo(() => (volume instanceof Volume3D ? mipSource(volume) : null), [volume]);
+  const useGpu = !!gl && !!src && gl.canHost([src]);
+  // GPU: continuous angle; CPU: 3° steps (each angle is a full ray-marching pass).
+  const deg = useGpu ? azimuth : Math.round(azimuth / 3) * 3;
+  const mip = useMemo(() => (!useGpu && volume instanceof Volume3D ? orientedMip(volume, deg) : null), [useGpu, volume, deg]);
   const image = useMemo(() => {
+    if (useGpu && src) {
+      const [sx, , sz] = src.geometry.spacing;
+      return { rgba: EMPTY_RGBA, width: Math.max(src.nx, src.ny), height: src.nz, pixelAspect: sz / sx };
+    }
     if (!mip || !display) return { rgba: new Uint8ClampedArray(4), width: 1, height: 1 };
     const rgba = compositeLayers([{ values: mip.data, window: display.window, lut: display.lut, opacity: 1 }], mip.width * mip.height);
     return { rgba, width: mip.width, height: mip.height, pixelAspect: mip.pixelAspect };
-  }, [mip, display]);
+  }, [useGpu, src, mip, display]);
+  const gpuDraw = useMemo<GpuDraw | undefined>(() => {
+    if (!useGpu || !gl || !src || !display) return undefined;
+    return (t) => {
+      try {
+        return gl.renderMip(
+          { volume: src, w2v: { m: [1, 0, 0, 0, 1, 0, 0, 0, 1], origin: [0, 0, 0] }, display },
+          {
+            width: t.width,
+            height: t.height,
+            img0: [(0.5 / t.dpr - t.x0) / t.sx - 0.5, (0.5 / t.dpr - t.y0) / t.sy - 0.5],
+            imgD: [1 / (t.dpr * t.sx), 1 / (t.dpr * t.sy)],
+            imgSize: [Math.max(src.nx, src.ny), src.nz],
+            thetaRad: (deg * Math.PI) / 180,
+            flip: [src.geometry.axes[0][0] < 0, src.geometry.axes[2][2] > 0],
+          },
+        );
+      } catch (e) {
+        console.error("WebGL MIP failed, using the CPU path:", e);
+        setGpuFailed(true);
+        return null;
+      }
+    };
+  }, [useGpu, gl, src, display, deg]);
 
   return (
     <ImageCanvas
       image={image}
       transform={transform}
       onTransformChange={onTransformChange}
-      title={`MIP · ${deg}°`}
+      gpuDraw={gpuDraw}
+      title={`MIP · ${Math.round(deg)}°`}
       actions={
         <>
           <input
@@ -370,7 +446,7 @@ function MipView({ layer, transform, onTransformChange, onWindowDrag, onDoubleCl
           </button>
         </>
       }
-      labels={deg === 0 ? ["H", "F", "R", "L"] : undefined}
+      labels={Math.round(deg) === 0 ? ["H", "F", "R", "L"] : undefined}
       onScroll={(dir) => {
         setRotating(false);
         setAzimuth((a) => (a + dir * 6 + 360) % 360);
