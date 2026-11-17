@@ -1,16 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, Brain, Crosshair, Download, Eye, FileCode2, FolderOpen, Wand2 } from "lucide-react";
+import { BarChart3, Brain, Crosshair, Download, Eye, FileCode2, FolderOpen, Target, Wand2 } from "lucide-react";
 import { NormalizationPanel, type NormMethod, type Regularization } from "./ui/NormalizationPanel";
 import { type Normalization, REGULARIZATION_WEIGHT, sameGrid, describeCoregProgress, describeWarpProgress, fieldFromAffine, pullbackPositions } from "./normalization/model";
 import { DEFAULT_WARP } from "./normalization/warp";
 import { buildDeformationField, fieldCoverage, parseDeformationField } from "./normalization/yfield";
 import { DeformationFieldCard } from "./ui/DeformationFieldCard";
 import { CentiloidPanel, type CentiloidOutcome } from "./ui/CentiloidPanel";
+import { TumorPanel, type TumorIndication, type TumorMode } from "./ui/TumorPanel";
+import { type Lesion, type ThresholdMethod, lesionStats } from "./tumor/segment";
+import { burdenCsv, tumorBurden } from "./tumor/metrics";
+import { runTumorSegmentation } from "./tumor/runner";
+import { transferVoi } from "./analysis/voiTransfer";
 import { DatasetOverview } from "./components/DatasetOverview";
 import { useStableRows, useStableVoi } from "./components/useStableRows";
 import { FusionExportCard, type FusionFormat, type FusionGridMode } from "./ui/FusionExportCard";
 import { axialGridCovering, buildFusionDicomSeries, buildFusionNifti, renderFusion } from "./export/fusionExport";
 import { buildZip } from "./export/zip";
+import { buildNiftiFile } from "./export/niftiWriter";
 import { type CentiloidCalibration, acquisitionWindow, centiloidFromMeans, guessTracer, windowWarning } from "./centiloid/centiloid";
 import { type CentiloidVois, VOI_LABELS, type VoiName, loadVois, voiMeans, voiVolumeMl } from "./centiloid/vois";
 import { AtlasPanel, type RegionResult } from "./ui/AtlasPanel";
@@ -150,6 +156,18 @@ function App() {
   const [fieldStatus, setFieldStatus] = useState<string | null>(null);
   const [fusionBusy, setFusionBusy] = useState(false);
   const [fusionStatus, setFusionStatus] = useState<string | null>(null);
+  // ── Tumor burden (MTV) ──
+  const [tumorTargetId, setTumorTargetId] = useState<string | null>(null);
+  const [tumorIndication, setTumorIndication] = useState<TumorIndication>("lymphoma");
+  const [tumor, setTumor] = useState<{ entryId: string; labels: Int32Array; lesions: Lesion[]; description: string; version: number } | null>(null);
+  const [tumorBusy, setTumorBusy] = useState(false);
+  const [tumorError, setTumorError] = useState<string | null>(null);
+  const [tumorMode, setTumorMode] = useState<TumorMode>("none");
+  const [tumorBrushMm, setTumorBrushMm] = useState(6);
+  const [liverRef, setLiverRef] = useState<{ entryId: string; mean: number; sd: number; ml: number } | null>(null);
+  const tumorStroke = useRef<{ id: number; time: number } | null>(null);
+  const tumorScratch = useRef<Uint8Array | null>(null);
+  const tumorStatsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [centiloidVois, setCentiloidVois] = useState<CentiloidVois | null>(null);
   const [centiloidRunning, setCentiloidRunning] = useState(false);
   const [centiloidStatus, setCentiloidStatus] = useState<string | null>(null);
@@ -223,6 +241,18 @@ function App() {
     [voiMaskData, volume, voiBounds],
   );
 
+  // Included lesions as label image (color by lesion number) for the viewer.
+  const tumorDisplay = useMemo(() => {
+    if (!tumor) return null;
+    const inc = new Set(tumor.lesions.filter((l) => l.included).map((l) => l.id));
+    const out = new Float32Array(tumor.labels.length);
+    for (let i = 0; i < out.length; i++) {
+      const id = tumor.labels[i];
+      if (id && inc.has(id)) out[i] = ((id - 1) % 254) + 1;
+    }
+    return out;
+  }, [tumor]); // tumor.version changes with every edit (new object)
+
   // ── Viewer layers: reference at the bottom, overlay on top, VOI above. ──
   const layerUnits = new Map(entries.map((e) => [e.id, unitFor(e)]));
   const unitsKey = [...layerUnits.values()].map((u) => `${u.scale}:${u.label}`).join("|");
@@ -235,6 +265,17 @@ function App() {
     };
     add(reference, reference ? { ...reference.display, opacity: 1 } : undefined);
     for (const o of overlays) add(o);
+    const tEntry = tumor && byId(tumor.entryId);
+    const tW2v = tEntry && w2vById.get(tEntry.id);
+    if (tumor && tEntry && tW2v && tumorDisplay)
+      out.push({
+        id: "tumor",
+        label: "Läsionen",
+        volume: { nx: tEntry.dataset.current.nx, ny: tEntry.dataset.current.ny, nz: tEntry.dataset.current.nz, data: tumorDisplay, geometry: tEntry.dataset.current.geometry },
+        w2v: tW2v,
+        display: { window: [0, 255], lut: "labels", opacity: 0.55, visible: true },
+        hideInStatus: true,
+      });
     if (voiMaskData && volume && activeW2v)
       out.push({
         id: "voi",
@@ -245,7 +286,7 @@ function App() {
         hideInStatus: true,
       });
     return out;
-  }, [reference, overlays, w2vById, unitsKey, voiMaskData, volume, activeW2v, voi]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [reference, overlays, w2vById, unitsKey, voiMaskData, volume, activeW2v, voi, tumorDisplay]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function updateEntry(id: string, patch: Partial<Entry>) {
     setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
@@ -740,6 +781,148 @@ function App() {
     } finally {
       setFusionBusy(false);
     }
+  }
+
+  // ── Tumor burden ──
+  const tumorTargets = entries.filter((e) => !e.dataset.template && !e.dataset.atlas && !isAnatomical(unitSource(e.dataset)));
+  const tumorEntry = byId(tumorTargetId) && tumorTargets.some((e) => e.id === tumorTargetId) ? byId(tumorTargetId) : (tumorTargets.find((e) => e.id === active?.id) ?? tumorTargets.find((e) => datasetModality(e.dataset) === "PT") ?? tumorTargets[0]);
+  const tumorSuv = tumorEntry ? suvById.get(tumorEntry.id) : undefined;
+  const tumorFactor = tumorSuv?.ok ? tumorSuv.info.factor : 1;
+
+  async function runTumor(method: ThresholdMethod, minVolumeMl: number) {
+    const e = tumorEntry;
+    if (!e) return;
+    setTumorBusy(true);
+    setTumorError(null);
+    try {
+      const r = await runTumorSegmentation(e.dataset.current, { method, suvFactor: tumorFactor, minVolumeMl });
+      setTumor({ entryId: e.id, labels: r.labels, lesions: r.lesions, description: r.description, version: 0 });
+      setTumorMode("pick");
+    } catch (err) {
+      setTumorError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setTumorBusy(false);
+    }
+  }
+
+  /** Liver reference (mean ± SD in SUV) from the current VOI, transferred onto the tumor PET if drawn elsewhere. */
+  function liverFromVoi() {
+    const e = tumorEntry;
+    if (!e || !overviewVoi) return;
+    const row = overviewRows.find((r) => r.id === e.id);
+    if (!row) return;
+    const t = row.volume === overviewVoi.volume ? { mask: overviewVoi.mask } : transferVoi(overviewVoi, row);
+    if (!t) return;
+    let n = 0, s = 0, ss = 0;
+    const d = e.dataset.current.data;
+    for (let i = 0; i < t.mask.length; i++)
+      if (t.mask[i] && Number.isFinite(d[i])) {
+        const v = d[i] * tumorFactor;
+        n++;
+        s += v;
+        ss += v * v;
+      }
+    if (!n) return;
+    const mean = s / n;
+    const [sx, sy, sz] = e.dataset.current.geometry.spacing;
+    setLiverRef({ entryId: e.id, mean, sd: Math.sqrt(Math.max(0, ss / n - mean * mean)), ml: (n * sx * sy * sz) / 1000 });
+  }
+
+  /** Voxel index of a reference-world point on the tumor PET, or −1 outside. */
+  function tumorIndexAt(world: Vec3): number {
+    const e = tumor && byId(tumor.entryId);
+    const w2v = e && w2vById.get(e.id);
+    if (!e || !w2v) return -1;
+    const v = e.dataset.current;
+    const [x, y, z] = applyWorldToVoxel(w2v, world).map(Math.round);
+    if (x < 0 || y < 0 || z < 0 || x >= v.nx || y >= v.ny || z >= v.nz) return -1;
+    return (z * v.ny + y) * v.nx + x;
+  }
+
+  function toggleLesion(id: number) {
+    setTumor((t) => (t ? { ...t, lesions: t.lesions.map((l) => (l.id === id ? { ...l, included: !l.included } : l)), version: t.version + 1 } : t));
+  }
+
+  const lastToggle = useRef<{ id: number; time: number } | null>(null);
+  function tumorClick(world: Vec3) {
+    const i = tumorIndexAt(world);
+    const id = i >= 0 && tumor ? tumor.labels[i] : 0;
+    if (!id) return;
+    // A click also fires while dragging: toggle each lesion at most once per gesture.
+    const now = performance.now();
+    if (lastToggle.current && lastToggle.current.id === id && now - lastToggle.current.time < 600) {
+      lastToggle.current.time = now;
+      return;
+    }
+    lastToggle.current = { id, time: now };
+    toggleLesion(id);
+  }
+
+  /** Brush on the lesion labels (add: into the lesion where the stroke starts or a new one; erase: remove). */
+  function tumorPaint(world: Vec3, axis: 0 | 1 | 2) {
+    const e = tumor && byId(tumor.entryId);
+    if (!tumor || !e) return;
+    const v = e.dataset.current;
+    const now = performance.now();
+    if (!tumorStroke.current || now - tumorStroke.current.time > 400) {
+      const at = tumorIndexAt(world);
+      const existing = at >= 0 ? tumor.labels[at] : 0;
+      tumorStroke.current = { id: existing || tumor.lesions.reduce((m, l) => Math.max(m, l.id), 0) + 1, time: now };
+    }
+    tumorStroke.current.time = now;
+    if (!tumorScratch.current || tumorScratch.current.length !== v.data.length) tumorScratch.current = new Uint8Array(v.data.length);
+    const scratch = tumorScratch.current;
+    const native = applyMat4(invert4(e.matrix), world);
+    const box = paintDisc(v, scratch, native, tumorBrushMm, axis, 1);
+    const add = tumorMode === "add";
+    const labels = tumor.labels;
+    for (let k = box.min[2]; k <= box.max[2]; k++)
+      for (let j = box.min[1]; j <= box.max[1]; j++)
+        for (let i = box.min[0]; i <= box.max[0]; i++) {
+          const o = (k * v.ny + j) * v.nx + i;
+          if (!scratch[o]) continue;
+          scratch[o] = 0;
+          if (add) {
+            if (!labels[o]) labels[o] = tumorStroke.current.id;
+          } else labels[o] = 0;
+        }
+    setTumor({ ...tumor, version: tumor.version + 1 });
+    // Lesion statistics after the stroke settles.
+    if (tumorStatsTimer.current) clearTimeout(tumorStatsTimer.current);
+    tumorStatsTimer.current = setTimeout(() => {
+      setTumor((t) => (t && t.labels === labels ? { ...t, lesions: lesionStats(v, labels, tumorFactor, t.lesions), version: t.version + 1 } : t));
+    }, 300);
+  }
+
+  function gotoLesion(id: number) {
+    const e = tumor && byId(tumor.entryId);
+    const l = tumor?.lesions.find((x) => x.id === id);
+    if (e && l) setCursor(applyMat4(e.matrix, l.centroid));
+  }
+
+  function downloadBytes(bytes: Uint8Array<ArrayBuffer>, name: string, type = "application/octet-stream") {
+    const url = URL.createObjectURL(new Blob([bytes], { type }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportTumorCsv() {
+    const e = tumor && byId(tumor.entryId);
+    if (!tumor || !e) return;
+    const csv = burdenCsv(tumorBurden(tumor.lesions), tumor.lesions, { dataset: e.dataset.displayName, method: tumor.description, tlgLabel: tumorIndication === "psma" ? "TL-PSMA" : "TLG" });
+    downloadBytes(new TextEncoder().encode("\ufeff" + csv) as Uint8Array<ArrayBuffer>, `Tumorlast_${e.dataset.displayName.replace(/[^A-Za-z0-9_.-]+/g, "_")}.csv`, "text/csv;charset=utf-8");
+  }
+
+  function exportTumorNifti() {
+    const e = tumor && byId(tumor.entryId);
+    if (!tumor || !e) return;
+    const inc = new Set(tumor.lesions.filter((l) => l.included).map((l) => l.id));
+    const data = new Float32Array(tumor.labels.length);
+    for (let i = 0; i < data.length; i++) if (inc.has(tumor.labels[i])) data[i] = tumor.labels[i];
+    downloadBytes(buildNiftiFile(e.dataset.current.withData(data)), `Laesionen_${e.dataset.displayName.replace(/\.nii(\.gz)?$/i, "").replace(/[^A-Za-z0-9_.-]+/g, "_")}.nii`);
   }
 
   // ── Centiloid ──
@@ -1399,6 +1582,42 @@ function App() {
     { id: "registration", label: "Registrierung", shortLabel: "Registr.", icon: Crosshair, disabled: entries.length < 2, content: registrationTab },
     { id: "normalization", label: "Standardraum", shortLabel: "MNI", icon: Brain, disabled: entries.filter((e) => !e.dataset.template).length === 0, content: normalizationTab },
     {
+      id: "tumor",
+      label: "Tumorlast",
+      shortLabel: "Tumor",
+      icon: Target,
+      disabled: tumorTargets.length === 0,
+      content: (
+        <TumorPanel
+          targets={tumorTargets.map((e) => ({ id: e.id, label: entryLabel(e) }))}
+          targetId={tumorEntry?.id ?? null}
+          onTargetChange={setTumorTargetId}
+          unitInfo={tumorSuv?.ok ? "Schwellen in SUV (Körpergewicht) aus dem DICOM-Header." : `Kein SUV verfügbar${tumorSuv && !tumorSuv.ok ? ` (${tumorSuv.reason})` : ""} – die Werte werden direkt als SUV interpretiert.`}
+          suvAvailable={!!tumorSuv?.ok}
+          liver={liverRef && liverRef.entryId === tumorEntry?.id ? liverRef : null}
+          voiAvailable={!!overviewVoi}
+          onLiverFromVoi={liverFromVoi}
+          busy={tumorBusy}
+          error={tumorError}
+          onRun={(m, ml) => void runTumor(m, ml)}
+          description={tumor?.description ?? null}
+          burden={tumor ? tumorBurden(tumor.lesions) : null}
+          lesions={tumor?.lesions ?? []}
+          mode={tumorMode}
+          onModeChange={setTumorMode}
+          brushMm={tumorBrushMm}
+          onBrushMmChange={setTumorBrushMm}
+          onToggle={toggleLesion}
+          onGoto={gotoLesion}
+          onExportCsv={exportTumorCsv}
+          onExportNifti={exportTumorNifti}
+          onClear={() => setTumor(null)}
+          indication={tumorIndication}
+          onIndicationChange={setTumorIndication}
+        />
+      ),
+    },
+    {
       id: "analysis",
       label: "Analyse",
       icon: BarChart3,
@@ -1532,10 +1751,13 @@ function App() {
           layers={layers}
           activeLayerId={active && displayedIds.includes(active.id) ? active.id : (reference?.id ?? "")}
           mipLayerId={mipLayerId}
-          paintMode={brush.active && voiTool === "brush" && activeTab === "edit" && panelOpen}
-          onPaint={paint}
+          paintMode={(brush.active && voiTool === "brush" && activeTab === "edit" && panelOpen) || (activeTab === "tumor" && panelOpen && !!tumor && (tumorMode === "add" || tumorMode === "erase"))}
+          onPaint={activeTab === "tumor" ? tumorPaint : paint}
           cursor={cursor}
-          onCursorChange={setCursor}
+          onCursorChange={(p) => {
+            if (activeTab === "tumor" && panelOpen && tumorMode === "pick" && tumor) tumorClick(p);
+            setCursor(p);
+          }}
           onWindowChange={(id, window) => {
             const e = byId(id);
             if (e) updateEntry(id, { display: { ...e.display, window } });

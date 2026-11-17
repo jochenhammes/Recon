@@ -88,7 +88,7 @@ export interface VoiStats {
   peak: number;
 }
 
-const PEAK_RADIUS_MM = Math.cbrt((3 * 1000) / (4 * Math.PI)); // 1 ml sphere
+export const PEAK_RADIUS_MM = Math.cbrt((3 * 1000) / (4 * Math.PI)); // 1 ml sphere
 
 /** Statistics of the voxels inside a mask; `bounds` (index box) limits the scan if known. */
 export function voiStats(volume: Volume3D, mask: Uint8Array, bounds?: { min: Vec3; max: Vec3 } | null): VoiStats {
@@ -121,7 +121,8 @@ export function voiStats(volume: Volume3D, mask: Uint8Array, bounds?: { min: Vec
   return { voxels: n, volumeMl: (n * sx * sy * sz) / 1000, min, max, mean: sum / n, peak };
 }
 
-function sphereMean(volume: Volume3D, index: number, radiusMm: number): number {
+/** Mean inside a sphere (mm) around a voxel index. */
+export function sphereMean(volume: Volume3D, index: number, radiusMm: number): number {
   const { nx, ny, nz, data } = volume;
   const [sx, sy, sz] = volume.geometry.spacing;
   const ci = index % nx;
