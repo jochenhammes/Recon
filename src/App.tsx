@@ -6,6 +6,8 @@ import { DEFAULT_WARP } from "./normalization/warp";
 import { buildDeformationField, fieldCoverage, parseDeformationField } from "./normalization/yfield";
 import { DeformationFieldCard } from "./ui/DeformationFieldCard";
 import { CentiloidPanel, type CentiloidOutcome } from "./ui/CentiloidPanel";
+import { DatasetOverview } from "./components/DatasetOverview";
+import { useStableRows, useStableVoi } from "./components/useStableRows";
 import { FusionExportCard, type FusionFormat, type FusionGridMode } from "./ui/FusionExportCard";
 import { axialGridCovering, buildFusionDicomSeries, buildFusionNifti, renderFusion } from "./export/fusionExport";
 import { buildZip } from "./export/zip";
@@ -1211,6 +1213,18 @@ function App() {
     );
   };
 
+  const overviewVoi = useStableVoi(
+    voiMaskData && volume && activeW2v && voi && active
+      ? { mask: voiMaskData, volume, w2v: activeW2v, bounds: voiBounds, label: `VOI (${voi.shape.kind === "sphere" ? "Kugel" : voi.shape.kind === "box" ? "Quader" : "gezeichnet"}) auf ${datasetModality(active.dataset)}` }
+      : null,
+  );
+  const overviewRows = useStableRows(
+    entries.flatMap((e) => {
+      const w2v = w2vById.get(e.id);
+      const u = unitFor(e);
+      return w2v ? [{ id: e.id, label: entryLabel(e), volume: e.dataset.current, matrix: e.matrix, w2v, scale: u.scale, unitLabel: u.label }] : [];
+    }),
+  );
   const hiddenEntries = entries.filter((e) => e.id !== reference?.id && !overlays.some((o) => o.id === e.id));
   const visibleStack = [reference, ...overlays].filter((e): e is Entry => !!e && e.display.visible);
   const viewTab = (
@@ -1389,17 +1403,28 @@ function App() {
       label: "Analyse",
       icon: BarChart3,
       disabled: !stats,
-      content: volume && stats && (
-        <AnalysisPanel
-          volume={volume}
-          stats={stats}
-          marker={parseInput(threshold) / scale}
-          scale={scale}
-          unitLabel={unitLabel}
-          unitMode={unitMode}
-          suv={activeSuv}
-          onUnitModeChange={handleUnitModeChange}
-        />
+      content: volume && stats && active && (
+        <>
+          <DatasetOverview
+            rows={overviewRows}
+            selectedId={active.id}
+            onSelect={switchActive}
+            voi={overviewVoi}
+          />
+          <section className="card">
+            <h3>Detailanalyse: {entryLabel(active)}</h3>
+            <AnalysisPanel
+              volume={volume}
+              stats={stats}
+              marker={parseInput(threshold) / scale}
+              scale={scale}
+              unitLabel={unitLabel}
+              unitMode={unitMode}
+              suv={activeSuv}
+              onUnitModeChange={handleUnitModeChange}
+            />
+          </section>
+        </>
       ),
     },
     {

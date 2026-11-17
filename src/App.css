@@ -1191,3 +1191,14 @@
   border-color: var(--border);
   color: var(--text-dim);
 }
+
+tr.clickable {
+  cursor: pointer;
+}
+tr.clickable:hover td {
+  background: var(--surface-3);
+}
+.overview-table td:first-child {
+  max-width: 160px;
+  overflow-wrap: anywhere;
+}
