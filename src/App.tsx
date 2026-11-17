@@ -6,6 +6,9 @@ import { DEFAULT_WARP } from "./normalization/warp";
 import { buildDeformationField, fieldCoverage, parseDeformationField } from "./normalization/yfield";
 import { DeformationFieldCard } from "./ui/DeformationFieldCard";
 import { CentiloidPanel, type CentiloidOutcome } from "./ui/CentiloidPanel";
+import { FusionExportCard, type FusionFormat, type FusionGridMode } from "./ui/FusionExportCard";
+import { axialGridCovering, buildFusionDicomSeries, buildFusionNifti, renderFusion } from "./export/fusionExport";
+import { buildZip } from "./export/zip";
 import { type CentiloidCalibration, acquisitionWindow, centiloidFromMeans, guessTracer, windowWarning } from "./centiloid/centiloid";
 import { type CentiloidVois, VOI_LABELS, type VoiName, loadVois, voiMeans, voiVolumeMl } from "./centiloid/vois";
 import { AtlasPanel, type RegionResult } from "./ui/AtlasPanel";
@@ -42,6 +45,7 @@ import type { ReconParams } from "./recon/volume";
 import { reconstructVolume } from "./workers/workerPool";
 import { Volume3D } from "./viewer/volume";
 import { Viewer } from "./viewer/Viewer";
+import { useShallowStable } from "./viewer/useShallowStable";
 import type { LayerDisplay, LayoutKind, ViewKind, ViewerLayer } from "./viewer/types";
 import { type Vec3, type WorldToVoxel, applyWorldToVoxel, voxelToWorld, volumeCenter, worldToVoxelTransform } from "./core/geometry";
 import {
@@ -101,7 +105,8 @@ function App() {
   const [projectionSet, setProjectionSet] = useState<SpectProjectionSet | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [referenceId, setReferenceId] = useState<string | null>(null);
-  const [overlayId, setOverlayId] = useState<string | null>(null);
+  /** Overlays drawn on top of the reference, bottom first. */
+  const [overlayIds, setOverlayIds] = useState<string[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [threshold, setThreshold] = useState("");
   const [newValue, setNewValue] = useState("0");
@@ -141,6 +146,8 @@ function App() {
   const [transferBusy, setTransferBusy] = useState(false);
   const [transferStatus, setTransferStatus] = useState<string | null>(null);
   const [fieldStatus, setFieldStatus] = useState<string | null>(null);
+  const [fusionBusy, setFusionBusy] = useState(false);
+  const [fusionStatus, setFusionStatus] = useState<string | null>(null);
   const [centiloidVois, setCentiloidVois] = useState<CentiloidVois | null>(null);
   const [centiloidRunning, setCentiloidRunning] = useState(false);
   const [centiloidStatus, setCentiloidStatus] = useState<string | null>(null);
@@ -169,7 +176,9 @@ function App() {
 
   const byId = (id: string | null) => entries.find((e) => e.id === id);
   const reference = byId(referenceId) ?? entries[0];
-  const overlay = overlayId && overlayId !== reference?.id ? byId(overlayId) : undefined;
+  const overlays = useShallowStable(overlayIds.flatMap((id) => (id !== reference?.id ? (byId(id) ?? []) : [])));
+  /** Top-most overlay (default target of registration and transfers). */
+  const overlay = overlays.at(-1);
   const active = byId(activeId) ?? reference;
   const dataset = active?.dataset ?? null;
   const volume = dataset?.current ?? null;
@@ -223,7 +232,7 @@ function App() {
       out.push({ id: e.id, label: datasetModality(e.dataset), volume: e.dataset.current, w2v, display: display ?? e.display, unit: layerUnits.get(e.id) });
     };
     add(reference, reference ? { ...reference.display, opacity: 1 } : undefined);
-    add(overlay);
+    for (const o of overlays) add(o);
     if (voiMaskData && volume && activeW2v)
       out.push({
         id: "voi",
@@ -234,10 +243,31 @@ function App() {
         hideInStatus: true,
       });
     return out;
-  }, [reference, overlay, w2vById, unitsKey, voiMaskData, volume, activeW2v, voi]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [reference, overlays, w2vById, unitsKey, voiMaskData, volume, activeW2v, voi]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function updateEntry(id: string, patch: Partial<Entry>) {
     setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+  }
+
+  /** Shows a dataset as overlay (on top of the others). */
+  function addOverlay(id: string) {
+    setOverlayIds((prev) => [...prev.filter((x) => x !== id), id]);
+  }
+
+  function removeOverlay(id: string) {
+    setOverlayIds((prev) => prev.filter((x) => x !== id));
+  }
+
+  /** Moves an overlay one position up (+1) or down (−1) in the stack. */
+  function moveOverlay(id: string, dir: 1 | -1) {
+    setOverlayIds((prev) => {
+      const i = prev.indexOf(id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
   }
 
   function setDataset(id: string, next: LoadedDataset) {
@@ -264,15 +294,15 @@ function App() {
     let list = [...entries, entry];
     if (!ref) {
       setReferenceId(entry.id);
-      setOverlayId(null);
+      setOverlayIds([]);
     } else if (anatomical && !isAnatomical(ref.dataset.source)) {
       // CT/MR becomes the display base; the previous reference is shown on top.
       list = list.map((e) => (e.id === ref.id ? { ...e, display: overlayDisplay(e) } : e));
       setReferenceId(entry.id);
-      setOverlayId(ref.id);
+      addOverlay(ref.id);
     } else {
       list = list.map((e) => (e.id === entry.id ? { ...e, display: overlayDisplay(e) } : e));
-      setOverlayId(entry.id);
+      addOverlay(entry.id);
     }
     setEntries(list);
     setCursor(null);
@@ -304,7 +334,7 @@ function App() {
     // Keep the displayed world point under the cursor.
     setCursor(null);
     setReferenceId(id);
-    setOverlayId(oldRefId);
+    setOverlayIds((prev) => [...prev.filter((x) => x !== id && x !== oldRefId), ...(oldRefId ? [oldRefId] : [])]);
   }
 
   function makeOverlay(id: string | null) {
@@ -313,7 +343,7 @@ function App() {
       const e = byId(id);
       if (e) updateEntry(id, { display: overlayDisplay(e) });
     }
-    setOverlayId(id);
+    if (id) addOverlay(id);
   }
 
   function switchActive(id: string) {
@@ -332,10 +362,10 @@ function App() {
       const inv = invert4(rest[0].matrix);
       setEntries(rest.map((e, i) => ({ ...e, matrix: i === 0 ? IDENTITY_MAT4 : multiply4(inv, e.matrix), display: i === 0 ? { ...e.display, opacity: 1, visible: true } : e.display })));
       setReferenceId(rest[0].id);
-      setOverlayId(rest[1]?.id ?? null);
+      setOverlayIds((prev) => prev.filter((x) => x !== id && x !== rest[0].id));
     } else {
       setEntries(rest);
-      if (id === overlay?.id) setOverlayId(rest.find((e) => e.id !== reference?.id)?.id ?? null);
+      removeOverlay(id);
     }
     if (id === active?.id) setActiveId(rest[0]?.id ?? null);
     if (voi?.entryId === id) setVoi(null);
@@ -668,6 +698,48 @@ function App() {
       });
   }
 
+  // ── Fusion export: the visible layers composited as in the viewer ──
+  async function exportFusion(format: FusionFormat, gridMode: FusionGridMode, anonymize: boolean) {
+    if (!reference) return;
+    setFusionBusy(true);
+    setFusionStatus("Wird berechnet …");
+    try {
+      await new Promise((r) => setTimeout(r, 0));
+      const base = reference.dataset.current;
+      const baseGrid = { nx: base.nx, ny: base.ny, nz: base.nz, geometry: base.geometry };
+      const grid = gridMode === "axial" ? axialGridCovering(baseGrid) : baseGrid;
+      const stack = [reference, ...overlays].filter((e) => e.display.visible);
+      const fusionLayers = stack.flatMap((e) => {
+        const w2v = w2vById.get(e.id);
+        return w2v ? [{ volume: e.dataset.current, w2v, display: e.id === reference.id ? { ...e.display, opacity: 1 } : e.display }] : [];
+      });
+      const rgb = renderFusion(fusionLayers, grid);
+      const name = `Fusion_${stack.map((e) => datasetModality(e.dataset)).join("_")}`.replace(/[^A-Za-z0-9_.-]+/g, "_");
+      let bytes: Uint8Array<ArrayBuffer>;
+      let fileName: string;
+      if (format === "nifti") {
+        bytes = buildFusionNifti(rgb, grid);
+        fileName = `${name}.nii`;
+      } else {
+        const src = reference.dataset.source.kind === "dicom" ? reference.dataset.source.files[0].dataSet : undefined;
+        const files = buildFusionDicomSeries(rgb, grid, { seriesDescription: `Fusion ${stack.map((e) => datasetModality(e.dataset)).join("+")}`, source: src, anonymize });
+        bytes = buildZip(files.map((f) => ({ name: `${name}/${f.name}`, bytes: f.bytes })));
+        fileName = `${name}.zip`;
+      }
+      const url = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(url);
+      setFusionStatus(`${fileName}: ${grid.nx} × ${grid.ny} × ${grid.nz}, ${grid.geometry.spacing.map((v) => v.toFixed(2)).join(" × ")} mm.`);
+    } catch (e) {
+      setFusionStatus(`Export fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setFusionBusy(false);
+    }
+  }
+
   // ── Centiloid ──
   async function loadCentiloidVois(files: File[]) {
     setCentiloidError(null);
@@ -867,7 +939,7 @@ function App() {
     const derived: LoadedDataset = { ...d, derivedFrom: { name: `${E.dataset.displayName} (SUVR, Referenz: ${refLabel})`, source: { kind: "reconstruction" }, space: E.dataset.derivedFrom?.space ?? "nativ", label: "SUVR" } };
     const id = `ds${nextEntryId++}`;
     setEntries((prev) => [...prev, { id, dataset: derived, display: { window: [0, 3], lut: "kidney", opacity: 0.6, visible: true }, matrix: E.matrix }]);
-    setOverlayId(id);
+    addOverlay(id);
     setActiveId(id);
   }
 
@@ -976,7 +1048,8 @@ function App() {
       }
       const overlayEntry = created.find((c) => !isAnatomical(unitSource(c.dataset))) ?? created[0];
       if (overlayEntry) {
-        setOverlayId(overlayEntry.id);
+        // New space: the previous overlays (native space) are replaced by the transferred dataset.
+        setOverlayIds([overlayEntry.id]);
         setEntries((prev) => prev.map((x) => (x.id === overlayEntry.id ? { ...x, display: overlayDisplay(x) } : x)));
       }
       setCursor(null);
@@ -1103,27 +1176,70 @@ function App() {
     </>
   );
 
-  const layerSettings = (e: Entry, isOverlay: boolean) => {
+  const entryLabel = (e: Entry) => `${datasetModality(e.dataset)} · ${e.dataset.displayName}`;
+  const layerSettings = (e: Entry, isOverlay: boolean, index = 0) => {
     const u = unitFor(e);
     return (
       <LayerSettings
         key={e.id}
-        title={`${datasetModality(e.dataset)}${overlay ? (isOverlay ? " · Overlay" : " · Basis") : ""}`}
+        title={`${entryLabel(e)}${isOverlay ? ` · Overlay ${overlays.length > 1 ? overlays.length - index : ""}` : overlays.length ? " · Basis" : ""}`}
         display={isOverlay ? e.display : { ...e.display, opacity: 1 }}
         onChange={(d) => updateEntry(e.id, { display: d })}
         scale={u.scale}
         unitLabel={u.label}
         presets={presetsFor(e)}
         showOpacity={isOverlay}
-        showVisibility={!!overlay}
-      />
+        showVisibility={overlays.length > 0}
+      >
+        {isOverlay && (
+          <div className="chip-row">
+            <button className="chip-btn" disabled={index === 0} title="eine Ebene nach oben" onClick={() => moveOverlay(e.id, 1)}>
+              ↑ nach oben
+            </button>
+            <button className="chip-btn" disabled={index === overlays.length - 1} title="eine Ebene nach unten" onClick={() => moveOverlay(e.id, -1)}>
+              ↓ nach unten
+            </button>
+            <button className="chip-btn" onClick={() => makeReference(e.id)}>
+              als Basis
+            </button>
+            <button className="chip-btn" onClick={() => removeOverlay(e.id)}>
+              aus Ansicht entfernen
+            </button>
+          </div>
+        )}
+      </LayerSettings>
     );
   };
 
+  const hiddenEntries = entries.filter((e) => e.id !== reference?.id && !overlays.some((o) => o.id === e.id));
+  const visibleStack = [reference, ...overlays].filter((e): e is Entry => !!e && e.display.visible);
   const viewTab = (
     <>
-      {overlay && layerSettings(overlay, true)}
+      {[...overlays].reverse().map((o, i) => layerSettings(o, true, i))}
       {reference && layerSettings(reference, false)}
+      {hiddenEntries.length > 0 && (
+        <section className="card">
+          <h3>Weitere Datensätze</h3>
+          {hiddenEntries.map((e) => (
+            <div key={e.id} className="layer-head">
+              <span>{entryLabel(e)}</span>
+              <button className="chip-btn" onClick={() => makeOverlay(e.id)}>
+                als Overlay einblenden
+              </button>
+            </div>
+          ))}
+        </section>
+      )}
+      {reference && (
+        <FusionExportCard
+          layerLabels={visibleStack.map((e) => datasetModality(e.dataset))}
+          baseLabel={`${reference.dataset.current.nx} × ${reference.dataset.current.ny} × ${reference.dataset.current.nz}`}
+          canDicomMeta={reference.dataset.source.kind === "dicom"}
+          busy={fusionBusy}
+          status={fusionStatus}
+          onExport={(f, g, a) => void exportFusion(f, g, a)}
+        />
+      )}
     </>
   );
 

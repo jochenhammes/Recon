@@ -11,7 +11,7 @@ export const IMPLEMENTATION_VERSION_NAME = "RECON_SPECT_01";
 
 const LONG_VR = new Set(["OB", "OW", "OF", "SQ", "UT", "UN"]);
 
-class ElementWriter {
+export class ElementWriter {
   private chunks: Uint8Array[] = [];
 
   private push(bytes: Uint8Array) {

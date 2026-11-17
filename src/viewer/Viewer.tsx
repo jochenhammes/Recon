@@ -1,3 +1,4 @@
+import { useShallowStable } from "./useShallowStable";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { Vec3 } from "../core/geometry";
 import { formatValue } from "../components/format";
@@ -223,13 +224,6 @@ interface PlaneViewProps {
   overlay?: ViewerProps["planeOverlay"];
 }
 
-/** Returns the previous array instance while its elements are unchanged (stable memo dependency). */
-function useShallowStable<T>(arr: T[]): T[] {
-  const ref = useRef(arr);
-  const prev = ref.current;
-  if (arr.length !== prev.length || arr.some((x, i) => x !== prev[i])) ref.current = arr;
-  return ref.current;
-}
 
 function PlaneView(props: PlaneViewProps) {
   const { kind, grid, layers, cursor, overlay } = props;
