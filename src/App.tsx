@@ -7,6 +7,8 @@ import { buildDeformationField, fieldCoverage, parseDeformationField } from "./n
 import { DeformationFieldCard } from "./ui/DeformationFieldCard";
 import { CentiloidPanel, type CentiloidOutcome } from "./ui/CentiloidPanel";
 import { TagInput } from "./ui/TagInput";
+import { LabelList } from "./ui/LabelList";
+import { filteredLabels, labelStats } from "./atlas/labelStats";
 import { TumorPanel, type TumorIndication, type TumorMode } from "./ui/TumorPanel";
 import { CtSegCard } from "./ui/CtSegCard";
 import { type CtSegRun, runCtSegmentation } from "./segmentation/ctSegment";
@@ -91,6 +93,8 @@ interface Entry {
   matrix: Mat4;
   /** User tag (e.g. "Baseline") shown wherever the dataset is named. */
   tag?: string;
+  /** Label images: labels shown in the viewer (undefined = all). */
+  labelFilter?: number[];
 }
 
 /** Name of a dataset in lists and selections: tag (if any), modality, file/series name. */
@@ -296,7 +300,8 @@ function App() {
     const add = (e: Entry | undefined, display?: LayerDisplay) => {
       const w2v = e && w2vById.get(e.id);
       if (!e || !w2v) return;
-      out.push({ id: e.id, label: datasetModality(e.dataset), volume: e.dataset.current, w2v, display: display ?? e.display, unit: layerUnits.get(e.id) });
+      const volume = e.dataset.atlas && e.labelFilter ? filteredLabels(e.dataset.current, e.labelFilter) : e.dataset.current;
+      out.push({ id: e.id, label: datasetModality(e.dataset), volume, w2v, display: display ?? e.display, unit: layerUnits.get(e.id) });
     };
     add(reference, reference ? { ...reference.display, opacity: 1 } : undefined);
     for (const o of overlays) add(o);
@@ -1584,6 +1589,25 @@ function App() {
     </>
   );
 
+  /** Region list of a label dataset (atlas, CT organs, Centiloid VOIs). */
+  const labelList = (e: Entry) => {
+    const stats = labelStats(e.dataset.current);
+    return (
+      <LabelList
+        names={e.dataset.atlas!.labels}
+        stats={stats}
+        visible={e.labelFilter}
+        onVisibleChange={(ids) => updateEntry(e.id, { labelFilter: ids })}
+        onGoto={(id) => {
+          const st = stats.get(id);
+          if (!st) return;
+          if (e.id !== reference?.id && !overlays.some((o) => o.id === e.id)) makeOverlay(e.id);
+          setCursor(applyMat4(e.matrix, st.centroid));
+        }}
+      />
+    );
+  };
+
   const layerSettings = (e: Entry, isOverlay: boolean, index = 0) => {
     const u = unitFor(e);
     return (
@@ -1599,6 +1623,7 @@ function App() {
         showVisibility={overlays.length > 0}
       >
         <TagInput value={e.tag ?? ""} onChange={(t) => updateEntry(e.id, { tag: t || undefined })} />
+        {e.dataset.atlas && labelList(e)}
         {isOverlay && (
           <div className="chip-row">
             <button className="chip-btn" disabled={index === 0} title="eine Ebene nach oben" onClick={() => moveOverlay(e.id, 1)}>
@@ -1864,6 +1889,13 @@ function App() {
           onRun={startCtSegmentation}
           onCancel={() => ctSegRun.current?.cancel()}
         />
+        {organEntry?.dataset.atlas && (
+          <section className="card">
+            <h3>Regionen · {entryLabel(organEntry)}</h3>
+            <p className="tool-hint">Klick auf eine Region setzt das Fadenkreuz hinein; Häkchen blenden Regionen im Bild ein oder aus.</p>
+            {labelList(organEntry)}
+          </section>
+        )}
         <TumorPanel
           targets={tumorTargets.map((e) => ({ id: e.id, label: entryLabel(e) }))}
           targetId={tumorEntry?.id ?? null}

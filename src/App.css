@@ -1331,3 +1331,51 @@ tr.excluded-row td {
   overflow-wrap: anywhere;
   white-space: normal;
 }
+
+/* Label list (atlas / organ regions) */
+.label-list {
+  margin-top: 8px;
+}
+.label-list-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.label-list-head input {
+  flex: 1;
+  min-width: 0;
+}
+.label-list-body {
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.label-row {
+  display: grid;
+  grid-template-columns: auto 12px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 3px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+.label-row:hover {
+  background: var(--surface-3);
+}
+.label-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+.label-name {
+  overflow-wrap: anywhere;
+  color: var(--text-h);
+}
+.label-ml {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
