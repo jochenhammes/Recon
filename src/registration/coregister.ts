@@ -355,18 +355,24 @@ function coarseSearch(
     base = { ...start, tx: start.tx + cf[0] - mapped[0], ty: start.ty + cf[1] - mapped[1], tz: start.tz + cf[2] - mapped[2] };
     consider(base);
   }
+  // Rotations about the center plus shifts along z and y: the center of mass is unreliable when the field
+  // of view differs (e.g. an MRI including the neck against a brain-only template).
   const angles = [-30, -15, 0, 15, 30];
-  for (const rx of angles)
-    for (const ry of angles)
-      for (const rz of angles) {
-        if (shouldStop?.()) break;
-        consider({ ...base, rx: base.rx + rx, ry: base.ry + ry, rz: base.rz + rz });
-      }
+  const shiftsZ = [-40, -20, 0, 20];
+  const shiftsY = [-20, 0, 20];
+  for (const dz of shiftsZ)
+    for (const dy of shiftsY)
+      for (const rx of angles)
+        for (const ry of angles)
+          for (const rz of angles) {
+            if (shouldStop?.()) break;
+            consider({ ...base, tz: base.tz + dz, ty: base.ty + dy, rx: base.rx + rx, ry: base.ry + ry, rz: base.rz + rz });
+          }
   candidates.sort((a, b) => a.cost - b.cost);
   report("Grobsuche", 0, candidates[0].cost);
-  // Refine the three best starting points (translation + rotation) and keep the best.
+  // Refine the five best starting points (translation + rotation) and keep the best.
   let best = candidates[0];
-  for (const c of candidates.slice(0, 3)) {
+  for (const c of candidates.slice(0, 5)) {
     const r = optimize(evaluator, c.params, center, RIGID_KEYS, sep * 2, report, "Grobsuche", shouldStop);
     if (r.cost < best.cost) best = r;
   }

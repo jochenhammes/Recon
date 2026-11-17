@@ -1139,3 +1139,48 @@
   color: var(--accent-strong);
   background: var(--accent-bg);
 }
+
+/* Centiloid */
+.subheading {
+  margin: 14px 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+.inline-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.4fr;
+  gap: 8px;
+}
+.inline-fields input {
+  width: 100%;
+  min-width: 0;
+}
+.warning-banner {
+  margin: 6px 0;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--warning);
+  color: var(--warning);
+  font-size: 12px;
+}
+.centiloid-result {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.centiloid-value {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.centiloid-number {
+  font-size: 34px;
+  font-weight: 700;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+.centiloid-unit {
+  font-size: 14px;
+  color: var(--text-dim);
+}

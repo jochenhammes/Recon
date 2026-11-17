@@ -5,6 +5,9 @@ import { type Normalization, REGULARIZATION_WEIGHT, sameGrid, describeCoregProgr
 import { DEFAULT_WARP } from "./normalization/warp";
 import { buildDeformationField, fieldCoverage, parseDeformationField } from "./normalization/yfield";
 import { DeformationFieldCard } from "./ui/DeformationFieldCard";
+import { CentiloidPanel, type CentiloidOutcome } from "./ui/CentiloidPanel";
+import { type CentiloidCalibration, acquisitionWindow, centiloidFromMeans, guessTracer, windowWarning } from "./centiloid/centiloid";
+import { type CentiloidVois, VOI_LABELS, type VoiName, loadVois, voiMeans, voiVolumeMl } from "./centiloid/vois";
 import { AtlasPanel, type RegionResult } from "./ui/AtlasPanel";
 import { atlasFromLabels, loadBundledAtlas, parseLabelTable, regionStats } from "./atlas/atlas";
 import { runWarp } from "./normalization/warpRunner";
@@ -138,6 +141,12 @@ function App() {
   const [transferBusy, setTransferBusy] = useState(false);
   const [transferStatus, setTransferStatus] = useState<string | null>(null);
   const [fieldStatus, setFieldStatus] = useState<string | null>(null);
+  const [centiloidVois, setCentiloidVois] = useState<CentiloidVois | null>(null);
+  const [centiloidRunning, setCentiloidRunning] = useState(false);
+  const [centiloidStatus, setCentiloidStatus] = useState<string | null>(null);
+  const [centiloidError, setCentiloidError] = useState<string | null>(null);
+  const [centiloidOutcome, setCentiloidOutcome] = useState<CentiloidOutcome | null>(null);
+  const centiloidCancelled = useRef(false);
   const normRun = useRef<{ cancel: () => void } | null>(null);
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     try {
@@ -242,13 +251,13 @@ function App() {
     setNewValue("0");
   }
 
-  function addDataset(next: LoadedDataset) {
+  function addDataset(next: LoadedDataset): Entry {
     const entry: Entry = { id: `ds${nextEntryId++}`, dataset: next, display: defaultDisplay(next.current, next.source), matrix: IDENTITY_MAT4 };
     if (next.atlas) entry.display = { window: [0, 255], lut: "labels", opacity: 0.45, visible: true };
     if ((next.template || next.atlas) && reference) {
       // Templates and atlases are added without changing reference, overlay or active dataset.
-      setEntries([...entries, entry]);
-      return;
+      setEntries((prev) => [...prev, entry]);
+      return entry;
     }
     const anatomical = isAnatomical(next.source) || next.template?.kind === "T1";
     const ref = reference;
@@ -276,6 +285,7 @@ function App() {
       if (!anatomical) setUnitMode(suv?.ok ? "suv" : "raw");
       resetEditInputs(next, !anatomical && suv?.ok ? suv.info.factor : 1);
     }
+    return entry;
   }
 
   /** Makes another dataset the reference: all matrices are re-expressed in its world. */
@@ -571,6 +581,69 @@ function App() {
   const normCost = sameContrast ? "ncc" : "nmi";
   const normFor = normalization && normSubject && normalization.subjectId === normSubject.id ? normalization : null;
 
+  /**
+   * Affine (+ optional nonlinear) normalization of subject S to template T in a worker; progress goes to the
+   * normalization panel, `normRun` holds the cancel handle.
+   */
+  async function estimateNormalization(
+    T: Entry,
+    S: Entry,
+    opts: { nonlinear: boolean; cost: "ncc" | "nmi"; mask?: Float32Array; regularization: Regularization },
+  ): Promise<Normalization> {
+    const affineShare = opts.nonlinear ? 0.4 : 1;
+    // Stage 1: whole head, NMI, coarse search (wide capture range); stage 2: brain mask, contrast cost.
+    const rough = runCoregistration(
+      T.dataset.current,
+      S.dataset.current,
+      { dof: 12, cost: "nmi", levels: [8, 4], coarseSearch: true, initial: IDENTITY_MAT4 },
+      (p) => setNormProgress({ ...describeCoregProgress(p, affineShare / 2), stage: `Affin grob · Stufe ${p.level}/${p.levels}` }),
+    );
+    normRun.current = rough;
+    const r0 = await rough.promise;
+    const run = runCoregistration(
+      T.dataset.current,
+      S.dataset.current,
+      { dof: 12, cost: opts.cost, levels: [4, 2], coarseSearch: false, initial: r0.matrix, fixedMask: opts.mask },
+      (p) => setNormProgress({ ...describeCoregProgress(p, affineShare / 2), fraction: affineShare / 2 + describeCoregProgress(p, affineShare / 2).fraction, stage: `Affin fein · Stufe ${p.level}/${p.levels}` }),
+    );
+    normRun.current = run;
+    const r = { ...(await run.promise), before: r0.before };
+    const grid = { nx: T.dataset.current.nx, ny: T.dataset.current.ny, nz: T.dataset.current.nz, geometry: T.dataset.current.geometry };
+    let n: Normalization = {
+      subjectId: S.id,
+      templateName: T.dataset.template?.name ?? T.dataset.displayName,
+      grid,
+      affine: r.matrix,
+      field: fieldFromAffine(grid, r.matrix),
+      kind: "affine",
+      cost: { name: r.cost.toUpperCase(), before: -r.before, after: -r.after },
+    };
+    if (opts.nonlinear) {
+      const t = T.dataset.current;
+      const s = S.dataset.current;
+      setNormProgress({ stage: "Nichtlinear", detail: "Vorbereitung", fraction: affineShare });
+      const warp = runWarp(
+        {
+          template: { data: t.data, dims: [t.nx, t.ny, t.nz], geometry: t.geometry },
+          subject: { data: s.data, dims: [s.nx, s.ny, s.nz], geometry: s.geometry },
+          affine: r.matrix,
+          weights: opts.mask,
+        },
+        { ...DEFAULT_WARP, regularization: REGULARIZATION_WEIGHT[opts.regularization] },
+        (p) => setNormProgress(describeWarpProgress(p, affineShare)),
+      );
+      normRun.current = warp;
+      const w = await warp.promise;
+      n = {
+        ...n,
+        field: w.field,
+        kind: "nonlinear",
+        warp: { foldedFraction: w.foldedFraction, maxDisplacementMm: w.maxDisplacementMm, costBefore: w.costBefore, costAfter: w.costAfter },
+      };
+    }
+    return n;
+  }
+
   function startNormalization() {
     const T = normTemplate;
     const S = normSubject;
@@ -579,50 +652,8 @@ function App() {
     setNormProgress(null);
     setNormRunning(true);
     const mask = normUseMask ? (T.dataset.template?.mask ?? undefined) : undefined;
-    const nonlinear = sameContrast && normMethod === "nonlinear";
-    const affineShare = nonlinear ? 0.4 : 1;
-    const run = runCoregistration(
-      T.dataset.current,
-      S.dataset.current,
-      { dof: 12, cost: normCost, levels: [8, 4, 2], coarseSearch: true, initial: IDENTITY_MAT4, fixedMask: mask ?? undefined },
-      (p) => setNormProgress(describeCoregProgress(p, affineShare)),
-    );
-    normRun.current = run;
-    run.promise
-      .then(async (r) => {
-        const grid = { nx: T.dataset.current.nx, ny: T.dataset.current.ny, nz: T.dataset.current.nz, geometry: T.dataset.current.geometry };
-        let n: Normalization = {
-          subjectId: S.id,
-          templateName: T.dataset.template?.name ?? T.dataset.displayName,
-          grid,
-          affine: r.matrix,
-          field: fieldFromAffine(grid, r.matrix),
-          kind: "affine",
-          cost: { name: r.cost.toUpperCase(), before: -r.before, after: -r.after },
-        };
-        if (nonlinear) {
-          const t = T.dataset.current;
-          const s = S.dataset.current;
-          setNormProgress({ stage: "Nichtlinear", detail: "Vorbereitung", fraction: affineShare });
-          const warp = runWarp(
-            {
-              template: { data: t.data, dims: [t.nx, t.ny, t.nz], geometry: t.geometry },
-              subject: { data: s.data, dims: [s.nx, s.ny, s.nz], geometry: s.geometry },
-              affine: r.matrix,
-              weights: mask ?? undefined,
-            },
-            { ...DEFAULT_WARP, regularization: REGULARIZATION_WEIGHT[normRegularization] },
-            (p) => setNormProgress(describeWarpProgress(p, affineShare)),
-          );
-          normRun.current = warp;
-          const w = await warp.promise;
-          n = {
-            ...n,
-            field: w.field,
-            kind: "nonlinear",
-            warp: { foldedFraction: w.foldedFraction, maxDisplacementMm: w.maxDisplacementMm, costBefore: w.costBefore, costAfter: w.costAfter },
-          };
-        }
+    estimateNormalization(T, S, { nonlinear: sameContrast && normMethod === "nonlinear", cost: normCost, mask, regularization: normRegularization })
+      .then(async (n) => {
         setNormalization(n);
         // Quality check: show the normalized subject on the template right away.
         await transferToStandardSpace(n, [S.id], "linear", T);
@@ -634,6 +665,136 @@ function App() {
         setNormRunning(false);
         normRun.current = null;
       });
+  }
+
+  // ── Centiloid ──
+  async function loadCentiloidVois(files: File[]) {
+    setCentiloidError(null);
+    try {
+      const v = await loadVois(await Promise.all(files.map(async (f) => ({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) }))));
+      setCentiloidVois(v);
+    } catch (e) {
+      setCentiloidError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  /** Adds the VOIs as a label dataset (1 = ctx, 2 = whole cerebellum, 3 = pons) for visual QC. */
+  function showCentiloidVois() {
+    if (!centiloidVois) return;
+    const base = centiloidVois.volumes.ctx!;
+    const labels = new Float32Array(base.data.length);
+    const order: [VoiName, number][] = [["WhlCblBrnStm", 4], ["WhlCbl", 2], ["Pons", 3], ["ctx", 1]];
+    for (const [name, value] of order) {
+      const v = centiloidVois.volumes[name];
+      if (!v || v.data.length !== labels.length) continue;
+      for (let i = 0; i < labels.length; i++) if (v.data[i] > 0.5) labels[i] = value;
+    }
+    const table = new Map([[1, VOI_LABELS.ctx], [2, VOI_LABELS.WhlCbl], [3, VOI_LABELS.Pons], [4, "Hirnstamm (WhlCblBrnStm ohne Kleinhirn)"]]);
+    const d = createDataset(base.withData(labels), { kind: "reconstruction" }, "Centiloid-VOIs");
+    addDataset({ ...d, atlas: { name: "Centiloid-VOIs (GAAIN)", labels: table } });
+  }
+
+  /** VOI means, SUVR, CL and plausibility warnings for a dataset in MNI space. */
+  function evaluateCentiloid(target: Entry, calibration: CentiloidCalibration, pipeline: string, extraWarnings: string[] = []): CentiloidOutcome {
+    if (!centiloidVois) throw new Error("Zuerst die Centiloid-VOIs laden.");
+    const means = voiMeans(target.dataset.current, centiloidVois);
+    const result = centiloidFromMeans(means, calibration);
+    const warnings = [...extraWarnings];
+    const ctx = means.find((m) => m.name === "ctx");
+    const ctxMl = centiloidVois.volumes.ctx ? voiVolumeMl(centiloidVois.volumes.ctx) : 0;
+    if (ctx && ctxMl > 0 && ctx.volumeMl < 0.9 * ctxMl) warnings.push(`Nur ${Math.round((100 * ctx.volumeMl) / ctxMl)} % der Kortex-VOI liegen im Datensatz – liegt er im MNI-Raum?`);
+    if (!Number.isFinite(result.centiloid)) warnings.push("Referenzregion ohne Daten – Centiloid nicht berechenbar.");
+    const src = unitSource(target.dataset);
+    if (src.kind === "dicom") {
+      const w = acquisitionWindow(src.files[0].dataSet);
+      if ("reason" in w) warnings.push(`Aufnahmezeitfenster nicht prüfbar: ${w.reason}`);
+      else {
+        const msg = windowWarning(w, calibration);
+        if (msg) warnings.push(msg);
+        const tracer = guessTracer(w.tracerName);
+        if (tracer && calibration.tracer !== "custom" && tracer !== calibration.tracer) warnings.push(`Header nennt „${w.tracerName}“, Kalibrierung ist für ${calibration.tracer}.`);
+      }
+    }
+    return { result, datasetLabel: target.dataset.derivedFrom?.name ?? target.dataset.displayName, pipeline, warnings };
+  }
+
+  function evaluateExisting(targetId: string, calibration: CentiloidCalibration) {
+    const e = byId(targetId);
+    if (!e) return;
+    setCentiloidError(null);
+    try {
+      setCentiloidOutcome(evaluateCentiloid(e, calibration, "vorhandener Datensatz im MNI-Raum"));
+    } catch (err) {
+      setCentiloidError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  /**
+   * Full pipeline. With T1: PET → T1 rigid (NMI), T1 → MNI T1 template (affine + nonlinear, brain mask),
+   * PET through both into MNI. Without T1: PET → PET template directly. Then VOI evaluation.
+   */
+  async function runCentiloidPipeline(petId: string, t1Id: string | null, calibration: CentiloidCalibration) {
+    const pet = byId(petId);
+    const t1 = t1Id ? byId(t1Id) : null;
+    if (!pet || centiloidRunning) return;
+    centiloidCancelled.current = false;
+    setCentiloidRunning(true);
+    setCentiloidError(null);
+    setCentiloidOutcome(null);
+    const warnings: string[] = [];
+    try {
+      const overrides = new Map<string, Mat4>();
+      let n: Normalization;
+      let template: Entry;
+      let pipeline: string;
+      if (t1) {
+        template = templateEntries.find((e) => e.dataset.template?.kind === "T1") ?? (setCentiloidStatus("MNI-Vorlage wird geladen …"), addDataset(await loadBundledMni()));
+        setCentiloidStatus("1/4 PET → T1 coregistrieren …");
+        const differentStudy = !!pet.dataset.current.geometry.frameOfReferenceUid && pet.dataset.current.geometry.frameOfReferenceUid !== t1.dataset.current.geometry.frameOfReferenceUid;
+        const run = runCoregistration(t1.dataset.current, pet.dataset.current, {
+          dof: 6,
+          cost: "nmi",
+          levels: [8, 4, 2],
+          coarseSearch: differentStudy,
+          initial: multiply4(invert4(t1.matrix), pet.matrix),
+        });
+        normRun.current = run;
+        const reg = await run.promise;
+        const petMatrix = multiply4(t1.matrix, reg.matrix);
+        updateEntry(pet.id, { matrix: petMatrix });
+        overrides.set(pet.id, petMatrix);
+        setCentiloidStatus("2/4 T1 → MNI (affin + nichtlinear) …");
+        n = await estimateNormalization(template, t1, { nonlinear: true, cost: "ncc", mask: template.dataset.template?.mask ?? undefined, regularization: normRegularization });
+        pipeline = `MRT-Pipeline (${n.kind === "nonlinear" ? "nichtlinear" : "affin"})`;
+      } else {
+        const tpl = templateEntries.find((e) => e.dataset.template?.kind === "PET");
+        if (!tpl) throw new Error("Für PET-only wird eine PET-Vorlage benötigt.");
+        template = tpl;
+        setCentiloidStatus("1/3 PET → PET-Vorlage (affin + nichtlinear) …");
+        n = await estimateNormalization(template, pet, { nonlinear: true, cost: "ncc", mask: template.dataset.template?.mask ?? undefined, regularization: normRegularization });
+        pipeline = "PET-only";
+        warnings.push("PET-only: bei ausgeprägter Atrophie oder vaskulären Läsionen Normalisierung besonders prüfen.");
+      }
+      if (centiloidCancelled.current) return;
+      if (n.warp && n.warp.foldedFraction > 0) warnings.push(`Verformung faltet sich in ${(100 * n.warp.foldedFraction).toFixed(2)} % der Hirnvoxel.`);
+      setNormalization(n);
+      setNormSubjectId(n.subjectId);
+      setNormTemplateId(template.id);
+      setCentiloidStatus(`${t1 ? "3/4" : "2/3"} In den MNI-Raum übertragen …`);
+      const ids = t1 ? [t1.id, pet.id] : [pet.id];
+      const created = await transferToStandardSpace(n, ids, "linear", template, overrides);
+      const petStd = created.at(-1);
+      if (!petStd) throw new Error("Übertragung in den MNI-Raum fehlgeschlagen.");
+      setCentiloidStatus(`${t1 ? "4/4" : "3/3"} VOIs auswerten …`);
+      setCentiloidOutcome(evaluateCentiloid(petStd, calibration, pipeline, warnings));
+      setCentiloidStatus(null);
+    } catch (e) {
+      setCentiloidStatus(null);
+      if (!(e instanceof DOMException && e.name === "AbortError")) setCentiloidError(`Centiloid-Bestimmung fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setCentiloidRunning(false);
+      normRun.current = null;
+    }
   }
 
   // ── Atlas / SUVR ──
@@ -766,9 +927,17 @@ function App() {
    * Resamples datasets into the template space through the subject's deformation and adds them as new
    * datasets; the template becomes the reference and the first transferred non-anatomical dataset the overlay.
    */
-  async function transferToStandardSpace(n: Normalization, ids: string[], method: Interpolation, templateEntry = normTemplate) {
+  async function transferToStandardSpace(
+    n: Normalization,
+    ids: string[],
+    method: Interpolation,
+    templateEntry = normTemplate,
+    /** Placements that changed in the same async flow (React state not yet updated). */
+    matrixOverrides?: Map<string, Mat4>,
+  ): Promise<Entry[]> {
     const subject = byId(n.subjectId);
-    if (!subject) return;
+    if (!subject) return [];
+    const matrixOf = (e: Entry) => matrixOverrides?.get(e.id) ?? e.matrix;
     // The loaded template becomes the reference only if its grid is the field's grid (an imported CAT12
     // field may use another resolution); otherwise the transferred datasets carry the standard space.
     const tpl =
@@ -779,12 +948,12 @@ function App() {
     setTransferStatus(null);
     try {
       // Subject native → reference world: positions for every template voxel.
-      const points = pullbackPositions(n, subject.matrix);
+      const points = pullbackPositions(n, matrixOf(subject));
       const { nx, ny, nz, geometry } = n.grid;
       const created: Entry[] = [];
       for (const [i, id] of ids.entries()) {
         const e = byId(id);
-        const w2v = e && w2vById.get(id);
+        const w2v = e && (matrixOverrides?.has(id) ? transformedWorldToVoxel(worldToVoxelTransform(e.dataset.current.geometry), matrixOf(e)) : w2vById.get(id));
         if (!e || !w2v) continue;
         setTransferStatus(`${i + 1}/${ids.length}: ${datasetModality(e.dataset)} wird übertragen …`);
         const data = await runResample(e.dataset.current, w2v, points, method, (f) => setTransferStatus(`${i + 1}/${ids.length}: ${datasetModality(e.dataset)} ${Math.round(f * 100)} %`));
@@ -810,9 +979,11 @@ function App() {
       }
       setCursor(null);
       setTransferStatus(`${created.length} Datensatz/Datensätze im Standardraum angelegt (${nx} × ${ny} × ${nz}).`);
+      return created;
     } catch (e) {
       setTransferStatus(null);
       setNormError(`Übertragung fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
+      return [];
     } finally {
       setTransferBusy(false);
     }
@@ -1031,6 +1202,36 @@ function App() {
         onImport={(f) => void importDeformationField(f)}
         onExport={exportDeformationField}
         status={fieldStatus}
+      />
+      <CentiloidPanel
+        voisLoaded={
+          centiloidVois
+            ? `VOIs geladen (${centiloidVois.resolutionMm} mm): ${Object.keys(centiloidVois.volumes)
+                .map((k) => VOI_LABELS[k as VoiName])
+                .join(", ")}`
+            : null
+        }
+        onLoadVois={(f) => void loadCentiloidVois(f)}
+        onShowVois={showCentiloidVois}
+        pets={subjectCandidates.filter((e) => !isAnatomical(unitSource(e.dataset))).map((e) => ({ id: e.id, label: `${datasetModality(e.dataset)} · ${e.dataset.displayName}` }))}
+        defaultPetId={subjectCandidates.find((e) => datasetModality(e.dataset) === "PT")?.id ?? null}
+        t1s={subjectCandidates.map((e) => ({ id: e.id, label: `${datasetModality(e.dataset)} · ${e.dataset.displayName}` }))}
+        defaultT1Id={subjectCandidates.find((e) => datasetModality(e.dataset) === "MR")?.id ?? null}
+        petTemplateLabel={templateEntries.find((e) => e.dataset.template?.kind === "PET")?.dataset.template?.name ?? null}
+        standardTargets={entries
+          .filter((e) => e.dataset.derivedFrom && !e.dataset.derivedFrom.label && !isAnatomical(unitSource(e.dataset)))
+          .map((e) => ({ id: e.id, label: `${datasetModality(e.dataset)} · ${e.dataset.displayName}` }))}
+        defaultStandardId={entries.findLast((e) => e.dataset.derivedFrom && !e.dataset.derivedFrom.label && !isAnatomical(unitSource(e.dataset)))?.id ?? null}
+        running={centiloidRunning}
+        status={centiloidStatus ? `${centiloidStatus}${normProgress && centiloidRunning ? ` (${normProgress.stage} · ${normProgress.detail})` : ""}` : null}
+        onRun={(p, t, c) => void runCentiloidPipeline(p, t, c)}
+        onEvaluate={evaluateExisting}
+        onCancel={() => {
+          centiloidCancelled.current = true;
+          normRun.current?.cancel();
+        }}
+        outcome={centiloidOutcome}
+        error={centiloidError}
       />
       <AtlasPanel
         atlases={entries.filter((e) => e.dataset.atlas).map((e) => ({ id: e.id, label: e.dataset.atlas!.name, atlas: e.dataset.atlas! }))}
