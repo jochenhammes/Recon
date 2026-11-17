@@ -21,10 +21,10 @@ export function Histogram({ data, marker, scale: valueScale = 1 }: HistogramProp
   const fv = (x: number) => formatValue(x * valueScale);
   const [bins, setBins] = useState(128);
   const [logScale, setLogScale] = useState(true);
-  const [excludeZero, setExcludeZero] = useState(false);
+  const [excludeLowestBin, setExcludeLowestBin] = useState(false);
   const [hover, setHover] = useState<number | null>(null);
 
-  const hist = useMemo(() => computeHistogram(data, { bins, excludeZero }), [data, bins, excludeZero]);
+  const hist = useMemo(() => computeHistogram(data, { bins, excludeLowestBin }), [data, bins, excludeLowestBin]);
   const lo = hist.edges[0];
   const hi = hist.edges[hist.edges.length - 1];
   const plotW = WIDTH - PAD_LEFT - PAD_RIGHT;
@@ -58,7 +58,7 @@ export function Histogram({ data, marker, scale: valueScale = 1 }: HistogramProp
           <input type="checkbox" checked={logScale} onChange={(e) => setLogScale(e.target.checked)} /> log
         </label>
         <label>
-          <input type="checkbox" checked={excludeZero} onChange={(e) => setExcludeZero(e.target.checked)} /> ohne 0
+          <input type="checkbox" checked={excludeLowestBin} onChange={(e) => setExcludeLowestBin(e.target.checked)} /> ohne unterste Bin
         </label>
       </div>
       <svg

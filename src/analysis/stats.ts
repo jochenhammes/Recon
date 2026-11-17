@@ -97,6 +97,8 @@ export interface HistogramOptions {
   max?: number;
   /** Skip voxels whose value is exactly 0 (typical empty background in nuclear medicine). */
   excludeZero?: boolean;
+  /** Leave out the lowest bin (background: zeros, noise, air), counted as out of range. */
+  excludeLowestBin?: boolean;
 }
 
 export function computeHistogram(data: ArrayLike<number>, opts: HistogramOptions): Histogram {
@@ -134,6 +136,10 @@ export function computeHistogram(data: ArrayLike<number>, opts: HistogramOptions
     let b = Math.floor((v - lo) / width);
     if (b >= bins) b = bins - 1;
     counts[b]++;
+  }
+  if (opts.excludeLowestBin) {
+    outOfRange += counts[0];
+    counts[0] = 0;
   }
   return { edges, counts, outOfRange };
 }

@@ -53,4 +53,10 @@ describe("computeHistogram", () => {
     expect(Array.from(h.counts)).toEqual([1, 1]);
     expect(h.outOfRange).toBe(1);
   });
+
+  it("can leave out the lowest bin", () => {
+    const h = computeHistogram(Float32Array.from([0, 0.1, 0.2, 3, 4]), { bins: 4, min: 0, max: 4, excludeLowestBin: true });
+    expect(Array.from(h.counts)).toEqual([0, 0, 0, 2]);
+    expect(h.outOfRange).toBe(3);
+  });
 });
