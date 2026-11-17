@@ -1036,3 +1036,35 @@
 .scope-note {
   color: var(--text-dim);
 }
+
+.card.highlighted {
+  border-color: var(--accent-border);
+}
+
+.role-badges {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.role-badge {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  text-transform: none;
+}
+
+.role-badge.reference {
+  border-color: var(--accent-border);
+  color: var(--accent-strong);
+}
+
+.role-badge.overlay {
+  border-color: rgba(242, 179, 74, 0.6);
+  color: var(--warning);
+}

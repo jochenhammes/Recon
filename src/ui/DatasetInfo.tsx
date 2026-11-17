@@ -1,15 +1,25 @@
 import { X } from "lucide-react";
+import type { ReactNode } from "react";
 import type { LoadedDataset } from "../dataset/types";
 import { modalityLabel, seriesDescription } from "../dataset/describe";
 
 /** Compact description of a loaded dataset (source, matrix, voxel size, geometry). */
-export function DatasetInfo({ dataset, title, onRemove }: { dataset: LoadedDataset; title: string; onRemove?: () => void }) {
+export interface DatasetInfoProps {
+  dataset: LoadedDataset;
+  title: ReactNode;
+  onRemove?: () => void;
+  /** Extra controls below the summary (e.g. role buttons). */
+  children?: ReactNode;
+  highlighted?: boolean;
+}
+
+export function DatasetInfo({ dataset, title, onRemove, children, highlighted }: DatasetInfoProps) {
   const v = dataset.current;
   const [sx, sy, sz] = v.geometry.spacing;
   const src = dataset.source;
   const files = src.kind === "dicom" ? `${src.files.length} ${src.files.length === 1 ? "Datei" : "Dateien"}` : src.kind === "nifti" ? "NIfTI" : "Rekonstruktion";
   return (
-    <section className="card">
+    <section className={highlighted ? "card highlighted" : "card"}>
       <div className="layer-head">
         <h3>{title}</h3>
         {onRemove && (
@@ -50,6 +60,7 @@ export function DatasetInfo({ dataset, title, onRemove }: { dataset: LoadedDatas
           </>
         )}
       </dl>
+      {children}
     </section>
   );
 }

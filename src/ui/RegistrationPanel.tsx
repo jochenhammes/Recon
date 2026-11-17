@@ -1,27 +1,29 @@
-import type { RigidParams } from "../core/geometry";
-import { IDENTITY_RIGID } from "../core/geometry";
+import { IDENTITY_PARAMS, type TransformParams } from "../core/transform";
 
-const TRANSLATIONS: [keyof RigidParams, string][] = [
+const TRANSLATIONS: [keyof TransformParams, string][] = [
   ["tx", "Rechts ↔ Links (x)"],
   ["ty", "Anterior ↔ Posterior (y)"],
   ["tz", "Fuß ↔ Kopf (z)"],
 ];
-const ROTATIONS: [keyof RigidParams, string][] = [
+const ROTATIONS: [keyof TransformParams, string][] = [
   ["rx", "Kippen (um x)"],
   ["ry", "Neigen (um y)"],
   ["rz", "Drehen (um z)"],
 ];
 
 export interface RegistrationPanelProps {
-  params: RigidParams;
-  onChange: (p: RigidParams) => void;
+  params: TransformParams;
+  onChange: (p: TransformParams) => void;
   /** Warning if the frames of reference differ / are unknown. */
   frameNote?: string;
+  title: string;
+  /** Affine parameters (scale/shear) present: show them read-only. */
+  children?: React.ReactNode;
 }
 
 /** Manual rigid fine registration of the functional layer relative to the CT. */
-export function RegistrationPanel({ params, onChange, frameNote }: RegistrationPanelProps) {
-  const row = (key: keyof RigidParams, label: string, range: number, step: number, unit: string) => (
+export function RegistrationPanel({ params, onChange, frameNote, title, children }: RegistrationPanelProps) {
+  const row = (key: keyof TransformParams, label: string, range: number, step: number, unit: string) => (
     <label key={key} className="field slider-field">
       <span className="slider-label">
         {label}
@@ -47,11 +49,12 @@ export function RegistrationPanel({ params, onChange, frameNote }: RegistrationP
   );
   return (
     <section className="card">
-      <h3>Registrierung (PET/SPECT relativ zum CT)</h3>
+      <h3>{title}</h3>
       {frameNote && <p className="hint">{frameNote}</p>}
       {TRANSLATIONS.map(([k, l]) => row(k, l, 60, 0.5, "mm"))}
       {ROTATIONS.map(([k, l]) => row(k, l, 20, 0.5, "°"))}
-      <button className="secondary-btn" onClick={() => onChange(IDENTITY_RIGID)}>
+      {children}
+      <button className="secondary-btn" onClick={() => onChange(IDENTITY_PARAMS)}>
         Registrierung zurücksetzen
       </button>
     </section>

@@ -240,23 +240,7 @@ export function niftiQformFromGeometry(g: VolumeGeometry): { b: number; c: numbe
   return { b, c, d, qfac, offset: [-g.origin[0], -g.origin[1], g.origin[2]] };
 }
 
-// ─── Rigid registration ──────────────────────────────────────────────────────
-
-/** Manual rigid registration: translation in mm and rotations in degrees about the LPS axes. */
-export interface RigidParams {
-  tx: number;
-  ty: number;
-  tz: number;
-  rx: number;
-  ry: number;
-  rz: number;
-}
-
-export const IDENTITY_RIGID: RigidParams = { tx: 0, ty: 0, tz: 0, rx: 0, ry: 0, rz: 0 };
-
-export function isIdentityRigid(p: RigidParams): boolean {
-  return p.tx === 0 && p.ty === 0 && p.tz === 0 && p.rx === 0 && p.ry === 0 && p.rz === 0;
-}
+// ─── Rotation ────────────────────────────────────────────────────────────────
 
 /** Row-major rotation matrix R = Rz · Ry · Rx (angles in degrees). */
 export function rotationMatrix(rxDeg: number, ryDeg: number, rzDeg: number): number[] {
@@ -267,34 +251,4 @@ export function rotationMatrix(rxDeg: number, ryDeg: number, rzDeg: number): num
     sc * cb, sc * sb * sa + cc * ca, sc * sb * ca - cc * sa,
     -sb, cb * sa, cb * ca,
   ];
-}
-
-function mul3(a: number[], b: number[]): number[] {
-  const r = new Array(9).fill(0);
-  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) for (let k = 0; k < 3; k++) r[i * 3 + j] += a[i * 3 + k] * b[k * 3 + j];
-  return r;
-}
-
-function apply3(m: number[], v: Vec3): Vec3 {
-  return [m[0] * v[0] + m[1] * v[1] + m[2] * v[2], m[3] * v[0] + m[4] * v[1] + m[5] * v[2], m[6] * v[0] + m[7] * v[1] + m[8] * v[2]];
-}
-
-/** Moves a world point with the registration: p' = R·(p − c) + c + t. */
-export function applyRigid(p: RigidParams, center: Vec3, point: Vec3): Vec3 {
-  const R = rotationMatrix(p.rx, p.ry, p.rz);
-  return add(add(apply3(R, sub(point, center)), center), [p.tx, p.ty, p.tz]);
-}
-
-/**
- * World→voxel transform of a volume that is displayed moved by a rigid registration about `center`:
- * the voxel shown at world p is the one originally at R⁻¹·(p − c − t) + c.
- */
-export function registeredWorldToVoxel(base: WorldToVoxel, p: RigidParams, center: Vec3): WorldToVoxel {
-  if (isIdentityRigid(p)) return base;
-  const R = rotationMatrix(p.rx, p.ry, p.rz);
-  const Rt = [R[0], R[3], R[6], R[1], R[4], R[7], R[2], R[5], R[8]];
-  const m = mul3(base.m, Rt);
-  const t: Vec3 = [p.tx, p.ty, p.tz];
-  const origin = sub(add(center, t), apply3(R, sub(center, base.origin)));
-  return { m, origin };
 }
