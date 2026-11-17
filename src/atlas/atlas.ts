@@ -1,3 +1,4 @@
+import { csvWithInfo } from "../core/csv";
 import { quickselect } from "../analysis/stats";
 import type { LoadedDataset } from "../dataset/types";
 import { createDataset } from "../dataset/types";
@@ -147,14 +148,13 @@ export function presetIndices(atlas: AtlasInfo, preset: ReferencePreset): Set<nu
 /** CSV (semicolon separated, decimal comma for German spreadsheets) of regional values and SUVR. */
 export function regionCsv(stats: RegionStat[], refMean: number, meta: { dataset: string; atlas: string; reference: string; unit: string }): string {
   const f = (v: number, d = 4) => (Number.isFinite(v) ? v.toFixed(d).replace(".", ",") : "");
-  const head = [
-    `# Datensatz: ${meta.dataset}`,
-    `# Atlas: ${meta.atlas}`,
-    `# Referenzregion: ${meta.reference} (Mittelwert ${f(refMean)} ${meta.unit})`,
-    ["Index", "Region", "Voxel", "Volumen_ml", `Mittel_${meta.unit}`, "Median", "SD", "Varianz", "Min", "Max", "SUVR"].join(";"),
-  ];
+  const head = [["Index", "Region", "Voxel", "Volumen_ml", `Mittel_${meta.unit}`, "Median", "SD", "Varianz", "Min", "Max", "SUVR"].join(";")];
   const rows = stats.map((r) => [r.index, `"${r.name.replace(/"/g, "'")}"`, r.voxels, f(r.volumeMl, 2), f(r.mean), f(r.median), f(r.sd), f(r.variance, 6), f(r.min), f(r.max), f(r.mean / refMean)].join(";"));
-  return [...head, ...rows].join("\n") + "\n";
+  return csvWithInfo([...head, ...rows], [
+    ["Datensatz", meta.dataset],
+    ["Atlas", meta.atlas],
+    ["Referenzregion", `${meta.reference} (Mittelwert ${f(refMean)} ${meta.unit})`],
+  ]);
 }
 
 /** CSV of a label-based analysis (semicolon separated, decimal comma): one row per region. */
@@ -162,13 +162,16 @@ export function labelStatsCsv(stats: RegionStat[], meta: { dataset: string; atla
   const f = (v: number, d = 4) => (Number.isFinite(v) ? v.toFixed(d).replace(".", ",") : "");
   const u = meta.unit ? `_${meta.unit}` : "";
   const head = [
-    `# Datensatz: ${meta.dataset}`,
-    `# Labels: ${meta.atlas}`,
-    ...(meta.note ? [`# ${meta.note}`] : []),
     ["Index", "Region", "Voxel", "Volumen_ml", `Mittel${u}`, `SD${u}`, `Varianz${u}${u ? "²" : ""}`, `Median${u}`, `Min${u}`, `Max${u}`].join(";"),
   ];
   const rows = stats.map((r) => [r.index, `"${r.name.replace(/"/g, "'")}"`, r.voxels, f(r.volumeMl, 3), f(r.mean), f(r.sd), f(r.variance, 6), f(r.median), f(r.min), f(r.max)].join(";"));
-  return [...head, ...rows].join("\n") + "\n";
+  return csvWithInfo([...head, ...rows], [
+    ["Datensatz", meta.dataset],
+    ["Labels", meta.atlas],
+    ["Einheit", meta.unit || "Originalwerte"],
+    ["SD/Varianz", "Stichprobe (n − 1)"],
+    ...(meta.note ? [["Hinweis", meta.note] as [string, string]] : []),
+  ]);
 }
 
 /** Values of `values` inside the given regions (labels on the same grid), e.g. for a histogram. */
@@ -245,14 +248,16 @@ export function labelHistogramCsv(
   const f = (v: number, d = 4) => (Number.isFinite(v) ? Number(v.toPrecision(6)).toFixed(d).replace(".", ",") : "");
   const u = meta.unit ? ` ${meta.unit}` : "";
   const head = [
-    `# Datensatz: ${meta.dataset}`,
-    `# Labels: ${meta.atlas}`,
-    ...(meta.note ? [`# ${meta.note}`] : []),
-    `# ${bins} Bins von ${f(lo)} bis ${f(hi)}${u} (Breite ${f(width, 6)}); Spaltenkopf = Bin-Untergrenze; Werte außerhalb in der ersten/letzten Bin; ${opts.relative ? "Anteil der Voxel der Region in %" : "Anzahl Voxel"}`,
     ["Index", "Region", "Voxel", ...Array.from({ length: bins }, (_, b) => f(lo + b * width))].join(";"),
   ];
   const rows = regions.map((r, i) =>
     [r.index, `"${r.name.replace(/"/g, "'")}"`, totals[i], ...Array.from(counts[i], (c) => (opts.relative ? f(totals[i] ? (100 * c) / totals[i] : 0, 4) : String(c)))].join(";"),
   );
-  return [...head, ...rows].join("\n") + "\n";
+  return csvWithInfo([...head, ...rows], [
+    ["Datensatz", meta.dataset],
+    ["Labels", meta.atlas],
+    ["Bins", `${bins} von ${f(lo)} bis ${f(hi)}${u} (Breite ${f(width, 6)}); Spaltenkopf = Bin-Untergrenze; Werte außerhalb in der ersten/letzten Bin`],
+    ["Werte", opts.relative ? "Anteil der Voxel der Region in %" : "Anzahl Voxel"],
+    ...(meta.note ? [["Hinweis", meta.note] as [string, string]] : []),
+  ]);
 }

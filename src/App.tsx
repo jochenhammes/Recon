@@ -12,7 +12,7 @@ import { filteredLabels, labelStats } from "./atlas/labelStats";
 import { TumorPanel, type TumorIndication, type TumorMode } from "./ui/TumorPanel";
 import { CtSegCard } from "./ui/CtSegCard";
 import type { SegmentProgress } from "./segmentation/infer";
-import { type CtSegRun, runCtSegmentation } from "./segmentation/ctSegment";
+import { type CtSegRun, loadModelMeta, runCtSegmentation } from "./segmentation/ctSegment";
 import { type Lesion, type ThresholdMethod, lesionStats } from "./tumor/segment";
 import { burdenCsv, splitBurden, tumorBurden } from "./tumor/metrics";
 import { EXCLUSION_PRESETS, annotateLesions, autoLiverCenter, organsOnGrid } from "./tumor/organs";
@@ -28,6 +28,7 @@ import { type CentiloidCalibration, acquisitionWindow, centiloidFromMeans, guess
 import { type CentiloidVois, VOI_LABELS, type VoiName, loadVois, voiMeans, voiVolumeMl } from "./centiloid/vois";
 import { AtlasPanel, type RegionResult } from "./ui/AtlasPanel";
 import { atlasFromLabels, loadBundledAtlas, parseLabelTable, pickAtlasEntries, regionStats } from "./atlas/atlas";
+import { parseXmlLabelTable } from "./atlas/labelNifti";
 import { LabelAnalysis, type LabelAnalysisResult } from "./ui/LabelAnalysis";
 import { listZip } from "./core/unzip";
 import { runWarp } from "./normalization/warpRunner";
@@ -1345,6 +1346,30 @@ function App() {
     return { stats, unit: rawUnitLabel(unitSource(E.dataset)), datasetLabel: E.dataset.displayName };
   }
 
+  /** Gives a label image without table its region names (TotalSegmentator organs or a label table file). */
+  async function assignAtlasNames(entryId: string, src: "totalseg" | File) {
+    setAtlasError(null);
+    try {
+      let table: Map<number, string>;
+      let name: string | undefined;
+      if (src === "totalseg") {
+        const meta = await loadModelMeta();
+        table = new Map(Object.entries(meta.labels).map(([k, v]) => [Number(k), v] as [number, string]).filter(([k]) => k > 0));
+        name = "CT-Organe (TotalSegmentator)";
+      } else {
+        const text = await src.text();
+        table = /<Label\b/.test(text) ? parseXmlLabelTable(text) : parseLabelTable(text);
+        if (!table.size) throw new Error(`In „${src.name}“ wurden keine Labels erkannt.`);
+      }
+      const e = live.current.entries.find((x) => x.id === entryId);
+      if (!e?.dataset.atlas) return;
+      const atlas = atlasFromLabels(e.dataset.current.data, name ?? e.dataset.atlas.name, table);
+      setDataset(entryId, { ...e.dataset, atlas: { ...atlas, attribution: src === "totalseg" ? "TotalSegmentator total (Wasserthal et al. 2023), Apache-2.0" : e.dataset.atlas.attribution } });
+    } catch (err) {
+      setAtlasError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   /** Label-based analysis: statistics of a dataset per region of a label image (display units, e.g. SUV). */
   function computeLabelAnalysis(atlasId: string, targetId: string): LabelAnalysisResult {
     const A = byId(atlasId);
@@ -2005,6 +2030,7 @@ function App() {
             cerebraLoading={atlasBusy}
             onLoadOwn={(f) => void addOwnAtlas(f)}
             loadError={atlasError}
+            onAssignNames={(id, src) => void assignAtlasNames(id, src)}
           />
           <section className="card">
             <h3>Detailanalyse: {entryLabel(active)}</h3>

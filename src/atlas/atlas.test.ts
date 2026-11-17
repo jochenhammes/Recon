@@ -36,7 +36,10 @@ describe("regional statistics and SUVR", () => {
     expect(pooledMean(stats, presetIndices(atlas, REFERENCE_PRESETS[3]))).toBeCloseTo((2 + 4 + 3 + 10) / 6, 10);
     const csv = regionCsv(stats, ref, { dataset: "d", atlas: "a", reference: "r", unit: "Bq/ml" });
     expect(csv).toContain('1;"Cortex";2;0,02;3,0000;3,0000');
-    expect(csv.trim().split("\n").at(-1)!.endsWith("10,0000")).toBe(true);
+    expect(csv.split("\n")[0].startsWith("Index;Region")).toBe(true);
+    const lines = csv.split("\n");
+    expect(lines[lines.indexOf("") - 1].endsWith("10,0000")).toBe(true);
+    expect(lines.at(-2)).toContain('"Referenzregion"');
   });
 
   it("bundled CerebrA atlas lies on the template grid and inside the brain", () => {
@@ -71,7 +74,7 @@ describe("label-based analysis", () => {
     expect(b.variance).toBe(0);
     const csv = labelStatsCsv([a, b], { dataset: "PET", atlas: "t", unit: "SUV" });
     expect(csv).toContain("Varianz_SUV²");
-    expect(csv.split("\n")[3]).toBe('1;"A";4;2,000;2,5000;1,2910;1,666667;2,5000;1,0000;4,0000');
+    expect(csv.split("\n")[1]).toBe('1;"A";4;2,000;2,5000;1,2910;1,666667;2,5000;1,0000;4,0000');
     expect([...regionValues(values, labels, new Set([2]))]).toEqual([10, 10]);
   });
 
@@ -91,10 +94,10 @@ describe("label histogram CSV", () => {
     const labels = Float32Array.from([1, 1, 1, 2, 2, 2, 0]);
     const regions = [{ index: 1, name: "A" }, { index: 2, name: "B" }];
     const csv = labelHistogramCsv(values, labels, regions, { bins: 3 }, { dataset: "d", atlas: "a", unit: "SUV" }).trim().split("\n");
-    expect(csv[3]).toBe("Index;Region;Voxel;0,0000;3,0000;6,0000");
-    expect(csv[4]).toBe('1;"A";3;3;0;0');
-    expect(csv[5]).toBe('2;"B";3;0;2;1');
+    expect(csv[0]).toBe("Index;Region;Voxel;0,0000;3,0000;6,0000");
+    expect(csv[1]).toBe('1;"A";3;3;0;0');
+    expect(csv[2]).toBe('2;"B";3;0;2;1');
     const rel = labelHistogramCsv(values, labels, regions, { bins: 3, min: 0, max: 6, relative: true }, { dataset: "d", atlas: "a", unit: "" }).trim().split("\n");
-    expect(rel[5]).toBe('2;"B";3;0,0000;66,6667;33,3333');
+    expect(rel[2]).toBe('2;"B";3;0,0000;66,6667;33,3333');
   });
 });

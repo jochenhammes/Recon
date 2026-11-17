@@ -1,3 +1,4 @@
+import { csvWithInfo } from "../core/csv";
 import type { Lesion } from "./segment";
 
 export interface TumorBurden {
@@ -44,13 +45,19 @@ export function tumorBurden(all: Lesion[]): TumorBurden {
 export function burdenCsv(b: TumorBurden, lesions: Lesion[], meta: { dataset: string; method: string; tlgLabel: string }): string {
   const f = (v: number, d = 2) => (Number.isFinite(v) ? v.toFixed(d).replace(".", ",") : "");
   const lines = [
-    `# Datensatz: ${meta.dataset}`,
-    `# Methode: ${meta.method}`,
-    `# Läsionen: ${b.lesions}; TMTV ml: ${f(b.tmtv)}; ${meta.tlgLabel}: ${f(b.tlg)}; SUVmax: ${f(b.suvMax)}; Dmax mm: ${f(b.dmax, 1)}; Dmax_bulk mm: ${f(b.dmaxBulk, 1)}`,
     ["Nr", "einbezogen", "Volumen_ml", "SUVmax", "SUVpeak", "SUVmean", meta.tlgLabel, "x_mm", "y_mm", "z_mm", "Ort", "Knochen", "Hinweis"].join(";"),
     ...lesions.map((l) => [l.id, l.included ? "ja" : "nein", f(l.volumeMl), f(l.suvMax), f(l.suvPeak), f(l.suvMean), f(l.tlg), ...l.centroid.map((c) => f(c, 1)), l.organ ?? "", l.bone ? "ja" : "", l.note ?? ""].join(";")),
   ];
-  return lines.join("\n") + "\n";
+  return csvWithInfo(lines, [
+    ["Datensatz", meta.dataset],
+    ["Methode", meta.method],
+    ["Läsionen", String(b.lesions)],
+    ["TMTV ml", f(b.tmtv)],
+    [meta.tlgLabel, f(b.tlg)],
+    ["SUVmax", f(b.suvMax)],
+    ["Dmax mm", f(b.dmax, 1)],
+    ["Dmax_bulk mm", f(b.dmaxBulk, 1)],
+  ]);
 }
 
 /** Burden split into bone and soft-tissue lesions (PSMA). */

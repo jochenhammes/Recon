@@ -32,7 +32,12 @@ export interface LabelAnalysisProps {
   /** Label image (NIfTI) with optional table, or a ZIP (e.g. AAL3 download). */
   onLoadOwn: (files: File[]) => void;
   loadError?: string | null;
+  /** Names for a label image without a table: TotalSegmentator organ names or a label table file. */
+  onAssignNames: (labelSetId: string, source: "totalseg" | File) => void;
 }
+
+/** True if the regions carry only placeholder names ("Region 5"). */
+const unnamed = (a: AtlasInfo) => [...a.labels.values()].every((n) => /^Region \d+$/.test(n));
 
 type SortKey = "index" | "name" | "mean" | "volume";
 
@@ -41,6 +46,7 @@ const AAL_URL = "https://www.gin.cnrs.fr/en/tools/aal/";
 /** Region-wise statistics and histograms of any dataset within the regions of a label image (atlas, segmentation). */
 export function LabelAnalysis(props: LabelAnalysisProps) {
   const fileInput = useRef<HTMLInputElement>(null);
+  const tableInput = useRef<HTMLInputElement>(null);
   const [setId, setSetId] = useState<string | null>(null);
   const [targetId, setTargetId] = useState<string | null>(null);
   const [result, setResult] = useState<(LabelAnalysisResult & { setId: string; targetId: string }) | null>(null);
@@ -212,6 +218,32 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
               ))}
             </select>
           </label>
+          {labelSet && unnamed(labelSet.atlas) && (
+            <div className="warning-banner">
+              Diese Labels haben keine Namen (z. B. mit einer älteren Version exportiert).
+              <div className="button-row">
+                {Math.max(...labelSet.atlas.labels.keys()) <= 117 && (
+                  <button className="secondary-btn" onClick={() => props.onAssignNames(labelSet.id, "totalseg")}>
+                    TotalSegmentator-Organnamen zuweisen
+                  </button>
+                )}
+                <button className="secondary-btn" onClick={() => tableInput.current?.click()}>
+                  Labeltabelle laden …
+                </button>
+                <input
+                  ref={tableInput}
+                  type="file"
+                  hidden
+                  accept=".txt,.csv,.tsv,.lut,.label,.xml"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) props.onAssignNames(labelSet.id, f);
+                    e.target.value = "";
+                  }}
+                />
+              </div>
+            </div>
+          )}
           <label className="field">
             Datensatz
             <select value={target?.id ?? ""} onChange={(e) => setTargetId(e.target.value)}>
