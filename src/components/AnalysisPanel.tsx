@@ -22,7 +22,6 @@ export function AnalysisPanel({ volume, stats, marker, scale, unitLabel, unitMod
   const v = (x: number) => formatValue(x * scale) + (unitLabel ? ` ${unitLabel}` : "");
   return (
     <div className="tool-panel">
-      <h2>Analyse</h2>
       {suv && (
         <div className="unit-switch">
           <label>

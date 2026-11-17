@@ -46,7 +46,7 @@ export function ReconControls({ projectionSet, busy, progress, onStart, onCancel
 
   return (
     <div className="recon-controls">
-      <h2>Akquisition</h2>
+      <h3>Akquisition</h3>
       <dl className="summary-list">
         <dt>Datei(en)</dt>
         <dd>{projectionSet.meta.sourceFileName}</dd>
@@ -90,7 +90,7 @@ export function ReconControls({ projectionSet, busy, progress, onStart, onCancel
         )}
       </dl>
 
-      <h2>Rekonstruktion</h2>
+      <h3>Rekonstruktion</h3>
       <label className="field">
         Algorithmus
         <select value={algorithm} onChange={(e) => setAlgorithm(e.target.value as "fbp" | "osem")} disabled={busy}>

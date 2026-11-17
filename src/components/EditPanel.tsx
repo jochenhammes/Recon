@@ -59,7 +59,6 @@ export function EditPanel(props: EditPanelProps) {
 
   return (
     <div className="tool-panel">
-      <h2>Bearbeiten</h2>
       <p className="tool-hint">Alle Bildpunkte mit Wert ≥ Grenzwert im gesamten 3D-Datensatz auf einen festen Wert setzen.</p>
       <label className="field">
         Grenzwert (≥){unit}

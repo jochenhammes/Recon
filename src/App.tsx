@@ -1,9 +1,12 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { BarChart3, Download, Eye, FolderOpen, Wand2 } from "lucide-react";
+import { AppShell, type ShellTab } from "./ui/AppShell";
+import { DatasetInfo } from "./ui/DatasetInfo";
+import { LayerSettings, type WindowPreset } from "./ui/ViewSettingsPanel";
+import { defaultDisplay, modalityLabel, rawUnitLabel, suvForSource } from "./dataset/describe";
 import { AnalysisPanel } from "./components/AnalysisPanel";
 import { EditPanel } from "./components/EditPanel";
 import { computeStats } from "./analysis/stats";
-import { type SuvResult, computeSuv } from "./analysis/suv";
-import type { VolumeSource } from "./dataset/types";
 import { type UnitMode, formatInput, parseInput } from "./components/format";
 import { type LoadedDataset, createDataset } from "./dataset/types";
 import { type EditOp, applyEdit } from "./edit/operations";
@@ -18,7 +21,6 @@ import { reconstructVolume } from "./workers/workerPool";
 import { Volume3D } from "./viewer/volume";
 import { Viewer } from "./viewer/Viewer";
 import type { LayerDisplay, LayoutKind, ViewKind, ViewerLayer } from "./viewer/types";
-import type { ColorLut } from "./viewer/volume";
 import { type Vec3, worldToVoxelTransform } from "./core/geometry";
 import type { SpectProjectionSet } from "./dicom/types";
 import "./App.css";
@@ -33,6 +35,24 @@ function App() {
   const [layout, setLayout] = useState<LayoutKind>("grid");
   const [focusView, setFocusView] = useState<ViewKind>("axial");
   const [display, setDisplay] = useState<LayerDisplay | null>(null);
+  const [activeTab, setActiveTab] = useState("data");
+  const [panelOpen, setPanelOpen] = useState(true);
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    try {
+      return localStorage.getItem("recon-studio-theme") === "light" ? "light" : "dark";
+    } catch {
+      return "dark";
+    }
+  });
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try {
+      localStorage.setItem("recon-studio-theme", theme);
+    } catch {
+      /* storage unavailable: theme is not remembered */
+    }
+  }, [theme]);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -54,7 +74,7 @@ function App() {
   const layers = useMemo<ViewerLayer[]>(
     () =>
       volume && w2v && display
-        ? [{ id: "functional", label: modalityLabel(dataset?.source) ?? "Volumen", volume, w2v, display, unit }]
+        ? [{ id: "functional", label: modalityLabel(dataset?.source), volume, w2v, display, unit }]
         : [],
     [volume, w2v, display, unit, dataset?.source],
   );
@@ -62,7 +82,7 @@ function App() {
   function showDataset(next: LoadedDataset) {
     setDataset(next);
     setCursor(null);
-    setDisplay(defaultDisplay(next.current));
+    setDisplay(defaultDisplay(next.current, next.source));
     const s = computeStats(next.current.data);
     const nextSuv = suvForSource(next.source);
     const nextScale = nextSuv?.ok ? nextSuv.info.factor : 1;
@@ -144,118 +164,149 @@ function App() {
     abortRef.current?.abort();
   }
 
-  return (
-    <div className="app-root">
-      <header className="app-header">
-        <h1>SPECT-Rekonstruktion</h1>
-      </header>
-      <div className="app-body">
-        <aside className="app-sidebar">
-          <UploadPanel onLoaded={handleLoaded} />
-          <div className="upload-separator"><span>oder</span></div>
-          <VolumeUploadPanel onLoaded={handleVolumeLoaded} />
-          {projectionSet && (
-            <ReconControls
-              projectionSet={projectionSet}
-              busy={busy}
-              progress={progress}
-              onStart={handleStart}
-              onCancel={handleCancel}
-            />
-          )}
-          {dataset && <ExportPanel dataset={dataset} />}
-          {error && <div className="error-banner">{error}</div>}
-        </aside>
-        <main className="app-main">
-          {layers.length > 0 && display ? (
-            <Viewer
-              layers={layers}
-              activeLayerId="functional"
-              cursor={cursor}
-              onCursorChange={setCursor}
-              onWindowChange={(_, window) => setDisplay({ ...display, window })}
-              layout={layout}
-              focusView={focusView}
-              onLayoutChange={(l, f) => {
-                setLayout(l);
-                setFocusView(f);
-              }}
-              toolbar={
-                <>
-                  <select value={display.lut} onChange={(e) => setDisplay({ ...display, lut: e.target.value as ColorLut })} aria-label="Farbtabelle">
-                    <option value="gray">Grau</option>
-                    <option value="inverted">Invertiert</option>
-                    <option value="rainbow">Regenbogen</option>
-                    <option value="kidney">Hot</option>
-                  </select>
-                  <button onClick={() => volume && setDisplay({ ...display, window: defaultDisplay(volume).window })}>Fenster zurücksetzen</button>
-                </>
-              }
-            />
-          ) : (
-            <div className="empty-state">
-              {projectionSet
-                ? "Rohdaten geladen. Rekonstruktion starten, um die Ansicht zu sehen."
-                : "Bitte SPECT-Rohdaten hochladen, um zu beginnen."}
-            </div>
-          )}
-        </main>
-        {dataset && volume && stats && (
-          <aside className="app-tools">
-            <AnalysisPanel
-              volume={volume}
-              stats={stats}
-              marker={parseInput(threshold) / scale}
-              scale={scale}
-              unitLabel={unitLabel}
-              unitMode={unitMode}
-              suv={suv}
-              onUnitModeChange={handleUnitModeChange}
-            />
-            <EditPanel
-              volume={volume}
-              stats={stats}
-              edits={dataset.edits}
-              scale={scale}
-              unitLabel={unitLabel}
-              threshold={threshold}
-              onThresholdChange={setThreshold}
-              value={newValue}
-              onValueChange={setNewValue}
-              onApply={handleApplyEdit}
-              onUndo={handleUndo}
-              onReset={handleReset}
-            />
-          </aside>
+  const presets: WindowPreset[] = volume
+    ? [
+        { label: "Auto", window: defaultDisplay(volume, dataset?.source).window },
+        ...(suv?.ok ? [5, 10, 15].map((m) => ({ label: `SUV 0–${m}`, window: [0, m / suv.info.factor] as [number, number] })) : []),
+      ]
+    : [];
+
+  const dataTab = (
+    <>
+      <VolumeUploadPanel onLoaded={handleVolumeLoaded} />
+      {dataset && <DatasetInfo dataset={dataset} title="Geladener Datensatz" />}
+      <details className="card collapsible" open={!dataset || !!projectionSet}>
+        <summary>SPECT-Rohdaten rekonstruieren</summary>
+        <UploadPanel onLoaded={handleLoaded} />
+        {projectionSet && (
+          <ReconControls projectionSet={projectionSet} busy={busy} progress={progress} onStart={handleStart} onCancel={handleCancel} />
         )}
-      </div>
-    </div>
+      </details>
+      {error && <div className="error-banner">{error}</div>}
+    </>
   );
-}
 
-function modalityLabel(source: VolumeSource | undefined): string | undefined {
-  if (!source) return undefined;
-  if (source.kind === "reconstruction") return "SPECT";
-  if (source.kind === "nifti") return "NIfTI";
-  return source.files[0].dataSet.string("x00080060")?.trim() || "DICOM";
-}
+  const tabs: ShellTab[] = [
+    { id: "data", label: "Daten", icon: FolderOpen, content: dataTab },
+    {
+      id: "view",
+      label: "Ansicht",
+      icon: Eye,
+      disabled: !display,
+      content: display && (
+        <LayerSettings
+          title={modalityLabel(dataset?.source)}
+          display={display}
+          onChange={setDisplay}
+          scale={scale}
+          unitLabel={unitLabel}
+          presets={presets}
+        />
+      ),
+    },
+    {
+      id: "analysis",
+      label: "Analyse",
+      icon: BarChart3,
+      disabled: !stats,
+      content: volume && stats && (
+        <AnalysisPanel
+          volume={volume}
+          stats={stats}
+          marker={parseInput(threshold) / scale}
+          scale={scale}
+          unitLabel={unitLabel}
+          unitMode={unitMode}
+          suv={suv}
+          onUnitModeChange={handleUnitModeChange}
+        />
+      ),
+    },
+    {
+      id: "edit",
+      label: "Bearbeiten",
+      icon: Wand2,
+      disabled: !stats,
+      badge: dataset?.edits.length,
+      content: dataset && volume && stats && (
+        <EditPanel
+          volume={volume}
+          stats={stats}
+          edits={dataset.edits}
+          scale={scale}
+          unitLabel={unitLabel}
+          threshold={threshold}
+          onThresholdChange={setThreshold}
+          value={newValue}
+          onValueChange={setNewValue}
+          onApply={handleApplyEdit}
+          onUndo={handleUndo}
+          onReset={handleReset}
+        />
+      ),
+    },
+    { id: "export", label: "Export", icon: Download, disabled: !dataset, content: dataset && <ExportPanel dataset={dataset} /> },
+  ];
 
-/** Initial window: from 0 (or the minimum, if negative) to the 99.5th percentile. */
-function defaultDisplay(volume: Volume3D): LayerDisplay {
-  const hi = volume.percentile(99.5);
-  let lo = 0;
-  for (let i = 0; i < volume.data.length; i += 97) if (volume.data[i] < lo) lo = volume.data[i];
-  return { window: [lo, hi > lo ? hi : lo + 1], lut: "gray", opacity: 1, visible: true };
-}
-
-function suvForSource(source: VolumeSource): SuvResult | null {
-  return source.kind === "dicom" ? computeSuv(source.files[0].dataSet) : null;
-}
-
-function rawUnitLabel(source: VolumeSource): string {
-  if (source.kind !== "dicom") return "";
-  const units = source.files[0].dataSet.string("x00541001")?.trim();
-  return units === "BQML" ? "Bq/ml" : (units ?? "");
+  return (
+    <AppShell
+      tabs={tabs}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+      panelOpen={panelOpen}
+      onPanelOpenChange={setPanelOpen}
+      theme={theme}
+      onThemeChange={setTheme}
+      headerInfo={
+        dataset && (
+          <span className="dataset-chip" title={dataset.displayName}>
+            <span className="badge">{modalityLabel(dataset.source)}</span>
+            <span className="chip-name">{dataset.displayName}</span>
+            {dataset.edits.length > 0 && <span className="chip-edited">bearbeitet</span>}
+          </span>
+        )
+      }
+    >
+      {layers.length > 0 && display ? (
+        <Viewer
+          layers={layers}
+          activeLayerId="functional"
+          cursor={cursor}
+          onCursorChange={setCursor}
+          onWindowChange={(_, window) => setDisplay({ ...display, window })}
+          layout={layout}
+          focusView={focusView}
+          onLayoutChange={(l, f) => {
+            setLayout(l);
+            setFocusView(f);
+          }}
+        />
+      ) : (
+        <div className="welcome">
+          <div className="welcome-card">
+            <h2>Willkommen in Recon Studio</h2>
+            <p>
+              {projectionSet
+                ? "Rohdaten geladen – im Panel „Daten“ die Rekonstruktion starten."
+                : "PET-, SPECT- oder CT-Daten als DICOM (einzeln oder als Serie) bzw. NIfTI laden, SPECT-Rohdaten rekonstruieren, analysieren, bearbeiten, mit CT fusionieren und exportieren."}
+            </p>
+            {!projectionSet && (
+              <button
+                className="primary-btn"
+                onClick={() => {
+                  setActiveTab("data");
+                  setPanelOpen(true);
+                }}
+              >
+                Daten laden
+              </button>
+            )}
+            <p className="welcome-note">Alle Daten werden ausschließlich lokal im Browser verarbeitet.</p>
+          </div>
+        </div>
+      )}
+    </AppShell>
+  );
 }
 
 export default App;

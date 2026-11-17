@@ -112,7 +112,6 @@ export function ExportPanel({ dataset }: ExportPanelProps) {
 
   return (
     <div className="export-panel">
-      <h2>Export</h2>
       <button className="secondary-btn" onClick={exportDicom}>
         {source.kind === "dicom"
           ? source.files.length > 1

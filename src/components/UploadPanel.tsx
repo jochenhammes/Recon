@@ -31,8 +31,7 @@ export function UploadPanel({ onLoaded }: UploadPanelProps) {
 
   return (
     <div className="upload-panel">
-      <h2>SPECT-Rohdaten hochladen</h2>
-      <p>
+            <p className="hint">
         Multi-Frame DICOM-Datei (Modality NM) mit den Projektionen beider Detektorköpfe. Falls jeder Kopf als
         eigene Datei exportiert wurde, können auch zwei Dateien gleichzeitig ausgewählt werden.
       </p>

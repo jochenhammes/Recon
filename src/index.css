@@ -1,25 +1,30 @@
+/* Recon Studio design tokens. Dark is the default (workstation style); light via data-theme. */
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --panel-bg: #f8f7fb;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --danger: #d23a3a;
-  --danger-bg: rgba(210, 58, 58, 0.1);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+  --bg: #0f1015;
+  --surface: #15171e;
+  --surface-2: #1b1e27;
+  --surface-3: #232733;
+  --border: #2a2e3a;
+  --border-strong: #3a3f4e;
+  --text: #a2a7b6;
+  --text-h: #eceef4;
+  --text-dim: #6f7484;
+  --accent: #9b7be0;
+  --accent-strong: #b79cf2;
+  --accent-bg: rgba(155, 123, 224, 0.14);
+  --accent-border: rgba(155, 123, 224, 0.55);
+  --danger: #ff6b6b;
+  --danger-bg: rgba(255, 107, 107, 0.12);
+  --warning: #f2b34a;
+  --success: #4fd18b;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --radius: 8px;
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+  --sans: Inter, system-ui, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", Consolas, monospace;
 
-  font: 16px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
+  font: 14px/1.45 var(--sans);
+  color-scheme: dark;
   color: var(--text);
   background: var(--bg);
   font-synthesis: none;
@@ -28,65 +33,82 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --panel-bg: #1b1c24;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --danger: #ff8080;
-    --danger-bg: rgba(255, 128, 128, 0.12);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
+:root[data-theme="light"] {
+  --bg: #f4f5f8;
+  --surface: #ffffff;
+  --surface-2: #f7f7fa;
+  --surface-3: #eceef3;
+  --border: #e1e3ea;
+  --border-strong: #c9ccd6;
+  --text: #555a69;
+  --text-h: #12141b;
+  --text-dim: #8b90a0;
+  --accent: #7a4fd6;
+  --accent-strong: #6338c4;
+  --accent-bg: rgba(122, 79, 214, 0.1);
+  --accent-border: rgba(122, 79, 214, 0.45);
+  --danger: #d23a3a;
+  --danger-bg: rgba(210, 58, 58, 0.08);
+  --warning: #b7791f;
+  --success: #1f9d5c;
+  --shadow: 0 8px 24px rgba(20, 22, 30, 0.08);
+  color-scheme: light;
 }
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
-}
-
-#root {
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
+  background: var(--bg);
 }
 
 h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
+h2,
+h3 {
+  font-family: var(--sans);
+  font-weight: 600;
   color: var(--text-h);
+  margin: 0;
 }
 
 h1 {
-  font-size: 22px;
-  margin: 0;
+  font-size: 16px;
+  letter-spacing: 0.2px;
 }
 
 h2 {
-  font-size: 16px;
-  line-height: 118%;
-  margin: 0 0 12px;
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+
+h3 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-dim);
+  margin: 18px 0 8px;
 }
 
 p {
-  margin: 0;
+  margin: 0 0 10px;
 }
 
 code {
   font-family: var(--mono);
-  font-size: 14px;
-  border-radius: 4px;
-  padding: 2px 6px;
-  background: var(--code-bg);
-  color: var(--text-h);
+  font-size: 12px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--surface-3);
+  border-radius: 5px;
+  border: 2px solid var(--surface);
 }

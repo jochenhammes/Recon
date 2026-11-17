@@ -28,8 +28,8 @@ export function VolumeUploadPanel({ onLoaded }: VolumeUploadPanelProps) {
 
   return (
     <div className="upload-panel">
-      <h2>Rekonstruiertes Volumen laden</h2>
-      <p>NIfTI (.nii, .nii.gz) oder rekonstruiertes DICOM – einzeln oder als Serie.</p>
+      <h3>Volumen laden</h3>
+      <p>PET, SPECT oder CT als DICOM (Datei oder ganze Serie) bzw. NIfTI (.nii, .nii.gz).</p>
       <div
         className="dropzone"
         onDragOver={(e) => e.preventDefault()}
