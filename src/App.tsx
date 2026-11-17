@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BarChart3, Brain, Crosshair, Download, Eye, FileCode2, FolderOpen, Wand2 } from "lucide-react";
 import { NormalizationPanel, type NormMethod, type Regularization } from "./ui/NormalizationPanel";
-import { type Normalization, describeCoregProgress, fieldFromAffine, pullbackPositions } from "./normalization/model";
+import { type Normalization, REGULARIZATION_WEIGHT, describeCoregProgress, describeWarpProgress, fieldFromAffine, pullbackPositions } from "./normalization/model";
+import { DEFAULT_WARP } from "./normalization/warp";
+import { runWarp } from "./normalization/warpRunner";
 import { runResample } from "./resample/runner";
 import type { Interpolation } from "./resample/resample";
 import { CoregPanel, type CoregSettings } from "./ui/CoregPanel";
@@ -568,17 +570,19 @@ function App() {
     setNormProgress(null);
     setNormRunning(true);
     const mask = normUseMask ? (T.dataset.template?.mask ?? undefined) : undefined;
+    const nonlinear = sameContrast && normMethod === "nonlinear";
+    const affineShare = nonlinear ? 0.4 : 1;
     const run = runCoregistration(
       T.dataset.current,
       S.dataset.current,
       { dof: 12, cost: normCost, levels: [8, 4, 2], coarseSearch: true, initial: IDENTITY_MAT4, fixedMask: mask ?? undefined },
-      (p) => setNormProgress(describeCoregProgress(p)),
+      (p) => setNormProgress(describeCoregProgress(p, affineShare)),
     );
     normRun.current = run;
     run.promise
       .then(async (r) => {
         const grid = { nx: T.dataset.current.nx, ny: T.dataset.current.ny, nz: T.dataset.current.nz, geometry: T.dataset.current.geometry };
-        const n: Normalization = {
+        let n: Normalization = {
           subjectId: S.id,
           templateName: T.dataset.template?.name ?? T.dataset.displayName,
           grid,
@@ -587,6 +591,29 @@ function App() {
           kind: "affine",
           cost: { name: r.cost.toUpperCase(), before: -r.before, after: -r.after },
         };
+        if (nonlinear) {
+          const t = T.dataset.current;
+          const s = S.dataset.current;
+          setNormProgress({ stage: "Nichtlinear", detail: "Vorbereitung", fraction: affineShare });
+          const warp = runWarp(
+            {
+              template: { data: t.data, dims: [t.nx, t.ny, t.nz], geometry: t.geometry },
+              subject: { data: s.data, dims: [s.nx, s.ny, s.nz], geometry: s.geometry },
+              affine: r.matrix,
+              weights: mask ?? undefined,
+            },
+            { ...DEFAULT_WARP, regularization: REGULARIZATION_WEIGHT[normRegularization] },
+            (p) => setNormProgress(describeWarpProgress(p, affineShare)),
+          );
+          normRun.current = warp;
+          const w = await warp.promise;
+          n = {
+            ...n,
+            field: w.field,
+            kind: "nonlinear",
+            warp: { foldedFraction: w.foldedFraction, maxDisplacementMm: w.maxDisplacementMm, costBefore: w.costBefore, costAfter: w.costAfter },
+          };
+        }
         setNormalization(n);
         // Quality check: show the normalized subject on the template right away.
         await transferToStandardSpace(n, [S.id], "linear", T);
@@ -833,7 +860,7 @@ function App() {
       onSubjectKindChange={setNormSubjectKindOverride}
       method={sameContrast ? normMethod : "affine"}
       onMethodChange={setNormMethod}
-      nonlinearAvailable={sameContrast && false}
+      nonlinearAvailable={sameContrast}
       regularization={normRegularization}
       onRegularizationChange={setNormRegularization}
       useMask={normUseMask}

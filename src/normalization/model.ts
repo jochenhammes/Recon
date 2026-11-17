@@ -2,6 +2,7 @@ import { type Vec3, voxelToWorld } from "../core/geometry";
 import { type Mat4, applyMat4, invert4 } from "../core/transform";
 import type { TargetGrid } from "../resample/resample";
 import type { CoregProgress } from "../registration/coregister";
+import type { WarpProgress } from "./warp";
 
 /**
  * Spatial normalization of a subject dataset (usually a T1 MRI) to a template.
@@ -21,6 +22,8 @@ export interface Normalization {
   kind: "affine" | "nonlinear" | "imported";
   /** Similarity before/after (for display). */
   cost?: { name: string; before: number; after: number };
+  /** Diagnostics of the nonlinear stage. */
+  warp?: { foldedFraction: number; maxDisplacementMm: number; costBefore: number; costAfter: number };
 }
 
 /** Pull-back field of an affine normalization: subject position = affine⁻¹ · template world. */
@@ -64,7 +67,15 @@ export function pullbackAt(n: Normalization, i: number, j: number, k: number): V
   return [n.field[idx], n.field[idx + 1], n.field[idx + 2]];
 }
 
-/** Progress text for the affine stage of a normalization. */
-export function describeCoregProgress(p: CoregProgress): { stage: string; detail: string; fraction: number } {
-  return { stage: `Affin · Stufe ${p.level}/${p.levels}`, detail: `${p.stage}, Iteration ${p.iteration + 1}`, fraction: (p.level - 1) / p.levels + 0.5 / p.levels };
+/** Progress text for the affine stage of a normalization (`share`: fraction of the whole run). */
+export function describeCoregProgress(p: CoregProgress, share = 1): { stage: string; detail: string; fraction: number } {
+  return { stage: `Affin · Stufe ${p.level}/${p.levels}`, detail: `${p.stage}, Iteration ${p.iteration + 1}`, fraction: share * ((p.level - 1) / p.levels + 0.5 / p.levels) };
 }
+
+/** Progress text for the nonlinear stage, mapped to the range [start, 1]. */
+export function describeWarpProgress(p: WarpProgress, start = 0.5): { stage: string; detail: string; fraction: number } {
+  return { stage: "Nichtlinear", detail: `Iteration ${p.iteration}/${p.iterations}`, fraction: start + (1 - start) * (p.iteration / p.iterations) };
+}
+
+/** Regularization presets (relative weight of the bending energy). */
+export const REGULARIZATION_WEIGHT = { light: 0.01, medium: 0.1, heavy: 1 } as const;

@@ -147,7 +147,14 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
               Aktuelle Normalisierung: {normalization.kind === "affine" ? "affin" : normalization.kind === "nonlinear" ? "affin + nichtlinear" : "importiertes Verformungsfeld"} →{" "}
               {normalization.templateName}
               {normalization.cost && ` (${normalization.cost.name}: ${normalization.cost.before.toFixed(3)} → ${normalization.cost.after.toFixed(3)})`}
+              {normalization.warp &&
+                `; nichtlinear: max. Verschiebung ${normalization.warp.maxDisplacementMm.toFixed(1)} mm, Restfehler ${(100 * (normalization.warp.costAfter / normalization.warp.costBefore)).toFixed(0)} % des Ausgangswerts`}
             </p>
+          )}
+          {normalization?.warp && normalization.warp.foldedFraction > 0 && (
+            <div className="error-banner">
+              Verformung faltet sich in {(100 * normalization.warp.foldedFraction).toFixed(2)} % der Hirnvoxel (Jacobi-Determinante ≤ 0) – stärkere Regularisierung wählen.
+            </div>
           )}
           {props.error && <div className="error-banner">{props.error}</div>}
         </section>
