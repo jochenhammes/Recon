@@ -106,6 +106,7 @@ export function ExportPanel({ dataset, fusion }: ExportPanelProps) {
           derivationDescription: edited ? editDescription : undefined,
           adjustWindow: edited && adjustWindow,
           anonymize: anonOptions,
+          headerEdits: dataset.headerEdits,
         });
         downloadFiles(files, outBase);
         return warnings;
@@ -115,6 +116,7 @@ export function ExportPanel({ dataset, fusion }: ExportPanelProps) {
           seriesDescription: `${source.files[0].dataSet.string("x0008103e")?.trim() ?? ""} [bearbeitet]`.trim(),
           derivationDescription: editDescription,
           anonymize: anonOptions,
+          headerEdits: dataset.headerEdits,
         });
         downloadFiles(files, outBase);
         return ["Neue Serie mit verändertem Voxelraster auf Basis des Original-Headers erzeugt.", ...warnings];
@@ -156,6 +158,7 @@ export function ExportPanel({ dataset, fusion }: ExportPanelProps) {
         derivationDescription: `Auf das Voxelraster des CT resampelt${fusion.functional.edits.length ? `; ${fusion.functional.edits.map((e) => describeEdit(e)).join("; ")}` : ""}`,
         frameOfReferenceUid: fusion.anatomical.current.geometry.frameOfReferenceUid,
         anonymize: anonOptions,
+        headerEdits: fusion.functional.headerEdits,
       });
       downloadFiles(files, `${outBase}_auf_CT`);
       return [`${files.length} Schichten auf dem CT-Raster (${resampled.nx} × ${resampled.ny} × ${resampled.nz}).`, ...warnings];

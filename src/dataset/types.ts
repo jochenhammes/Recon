@@ -2,6 +2,7 @@ import type { DataSet } from "dicom-parser";
 import type { ReconParams } from "../recon/volume";
 import type { Volume3D } from "../viewer/volume";
 import type { EditOp } from "../edit/operations";
+import type { HeaderEdit } from "../header/headerModel";
 
 /** How stored DICOM sample values map to real values: real = stored * slope + intercept. */
 export interface DicomPixelEncoding {
@@ -50,10 +51,12 @@ export interface LoadedDataset {
   current: Volume3D;
   /** Applied edits in order; `current` = original with all edits replayed (undo = replay one less). */
   edits: EditOp[];
+  /** Pending DICOM header changes (header editor), applied on DICOM export. */
+  headerEdits: HeaderEdit[];
   source: VolumeSource;
   displayName: string;
 }
 
 export function createDataset(volume: Volume3D, source: VolumeSource, displayName: string): LoadedDataset {
-  return { original: volume, current: volume, edits: [], source, displayName };
+  return { original: volume, current: volume, edits: [], headerEdits: [], source, displayName };
 }

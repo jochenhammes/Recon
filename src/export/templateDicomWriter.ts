@@ -18,6 +18,7 @@ import {
 import { type ExportedFile, T, pixelValue, realWindow } from "./editedDicomExport";
 import { encodePixels } from "./pixelEncode";
 import { generateUid } from "./uid";
+import { type HeaderEdit, applyHeaderEdits } from "../header/headerModel";
 
 export interface TemplateSeriesOptions {
   seriesDescription?: string;
@@ -25,6 +26,8 @@ export interface TemplateSeriesOptions {
   /** Frame of reference of the written geometry (e.g. the CT's for fused exports). */
   frameOfReferenceUid?: string;
   anonymize?: AnonymizeOptions;
+  /** User header changes (header editor); file-specific edits refer to the template file 0. */
+  headerEdits?: HeaderEdit[];
 }
 
 const G = {
@@ -151,6 +154,7 @@ export function buildTemplateSeries(volume: Volume3D, template: DicomSourceFile,
       ];
       overrides.set(G.DetectorInformationSequence, sequenceValue([concat(item)]));
     }
+    applyHeaderEdits(overrides, opts.headerEdits, 0);
     return { files: [{ name: "IM00001.dcm", bytes: rewriteDicom(template, overrides) }], warnings: dedupe(warnings) };
   }
 
@@ -162,6 +166,7 @@ export function buildTemplateSeries(volume: Volume3D, template: DicomSourceFile,
     overrides.set(G.InstanceNumber, stringValue("IS", String(k + 1)));
     if (dataSet.elements[G.ImageIndex]) overrides.set(G.ImageIndex, usValue(k + 1));
     if (dataSet.elements[G.NumberOfSlices]) overrides.set(G.NumberOfSlices, usValue(nz));
+    applyHeaderEdits(overrides, opts.headerEdits?.filter((e) => e.scope === "all" || e.scope === 0), 0);
     files.push({ name: `IM${String(k + 1).padStart(5, "0")}.dcm`, bytes: rewriteDicom(template, overrides) });
   }
   return { files, warnings: dedupe(warnings) };

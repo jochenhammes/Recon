@@ -10,6 +10,8 @@ export interface ShellTab {
   disabled?: boolean;
   /** Small badge on the nav item (e.g. number of edits). */
   badge?: string | number;
+  /** Use a wider side panel (e.g. header table). */
+  wide?: boolean;
 }
 
 export interface AppShellProps {
@@ -83,7 +85,7 @@ export function AppShell(props: AppShellProps) {
           </button>
         </nav>
         {panelOpen && (
-          <aside className="side-panel" aria-label={current.label}>
+          <aside className={current.wide ? "side-panel wide" : "side-panel"} aria-label={current.label}>
             <div className="side-panel-head">
               <h2>{current.label}</h2>
             </div>

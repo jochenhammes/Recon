@@ -4,6 +4,7 @@ import { type EncodedPixels, encodePixels } from "./pixelEncode";
 import { EXPLICIT_VR_LE, type TagOverrides, formatDS, rewriteDicom, stringValue, tagKey, usValue } from "./dicomRewriter";
 import { type AnonymizeContext, type AnonymizeOptions, addAnonymizationOverrides, createAnonymizeContext } from "./anonymize";
 import { generateUid } from "./uid";
+import { type HeaderEdit, applyHeaderEdits } from "../header/headerModel";
 
 export type DicomSource = Extract<VolumeSource, { kind: "dicom" }>;
 
@@ -19,6 +20,8 @@ export interface EditedDicomOptions {
   adjustWindow?: boolean;
   /** De-identify patient, institution and device information; files are renamed IM00001.dcm, … */
   anonymize?: AnonymizeOptions;
+  /** User header changes (header editor), applied last. */
+  headerEdits?: HeaderEdit[];
 }
 
 export interface ExportedFile {
@@ -90,6 +93,7 @@ export function buildEditedDicomFiles(volume: Volume3D, source: DicomSource, opt
   const anon = opts.anonymize ? createAnonymizeContext(opts.anonymize) : undefined;
   const files = source.files.map((file, i) => {
     const { overrides, warning } = buildFileOverrides(file, encodedFiles[i], seriesUid, series, opts, anon);
+    applyHeaderEdits(overrides, opts.headerEdits, i);
     if (warning) warnings.push(anon ? `Datei ${i + 1}: ${warning.slice(file.fileName.length + 2)}` : warning);
     const name = anon ? `IM${String(i + 1).padStart(5, "0")}.dcm` : uniqueName(file.fileName, usedNames);
     return { name, bytes: rewriteDicom(file, overrides) };

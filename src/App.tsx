@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, Download, Eye, FolderOpen, Wand2 } from "lucide-react";
+import { BarChart3, Download, Eye, FileCode2, FolderOpen, Wand2 } from "lucide-react";
+import { HeaderPanel } from "./ui/HeaderPanel";
 import { AppShell, type ShellTab } from "./ui/AppShell";
 import { DatasetInfo } from "./ui/DatasetInfo";
 import { LayerSettings, type WindowPreset } from "./ui/ViewSettingsPanel";
@@ -517,6 +518,15 @@ function App() {
           {error && <div className="error-banner">{error}</div>}
         </>
       ),
+    },
+    {
+      id: "header",
+      label: "Header",
+      icon: FileCode2,
+      wide: true,
+      disabled: dataset?.source.kind !== "dicom",
+      badge: dataset?.headerEdits.length,
+      content: dataset && <HeaderPanel key={`${role}-${dataset.displayName}`} dataset={dataset} onEditsChange={(headerEdits) => setDataset(role, { ...dataset, headerEdits })} />,
     },
     {
       id: "export",
