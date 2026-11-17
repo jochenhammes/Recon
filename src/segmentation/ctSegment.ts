@@ -18,6 +18,11 @@ export async function loadModelMeta(): Promise<ModelMeta> {
 /** Model bytes from the browser cache, or downloaded once (with progress) and cached. */
 export async function loadModelBytes(meta: ModelMeta, onProgress?: (loaded: number, total: number) => void): Promise<ArrayBuffer> {
   const cache = typeof caches !== "undefined" ? await caches.open(CACHE).catch(() => null) : null;
+  // Remove older versions of the model (different checksum) from the cache.
+  if (cache) {
+    const tag = `sha=${meta.sha256.slice(0, 16)}`;
+    for (const req of await cache.keys().catch(() => [] as Request[])) if (req.url.includes(MODEL_BASE) && !req.url.includes(tag)) await cache.delete(req).catch(() => false);
+  }
   const chunks: Uint8Array[] = [];
   let loaded = 0;
   for (const part of meta.parts) {
@@ -60,6 +65,8 @@ export interface CtSegResult {
   /** Model grid in the CT's own patient coordinates. */
   grid: TargetGrid;
   backend: string;
+  /** e.g. WebGPU fallback notice. */
+  note?: string;
   meta: ModelMeta;
 }
 
@@ -90,12 +97,12 @@ export function runCtSegmentation(ct: Volume3D, backend: "auto" | "wasm", onProg
       }
       if (cancelled) return;
       worker = new Worker(new URL("../workers/ctseg.worker.ts", import.meta.url), { type: "module" });
-      worker.onmessage = (e: MessageEvent<{ type: string; progress?: SegmentProgress; labels?: Uint8Array; backend?: string; error?: string; abort?: boolean }>) => {
+      worker.onmessage = (e: MessageEvent<{ type: string; progress?: SegmentProgress; labels?: Uint8Array; backend?: string; note?: string; error?: string; abort?: boolean }>) => {
         const m = e.data;
         if (m.type === "progress" && m.progress) onProgress(m.progress);
         else if (m.type === "result" && m.labels) {
           worker?.terminate();
-          resolve({ labels: m.labels, grid, backend: m.backend ?? "", meta });
+          resolve({ labels: m.labels, grid, backend: m.backend ?? "", note: m.note || undefined, meta });
         } else if (m.type === "error") {
           worker?.terminate();
           reject(m.abort ? new DOMException("Segmentierung abgebrochen.", "AbortError") : new Error(m.error));

@@ -1113,7 +1113,9 @@ function App() {
         addOverlay(entry.id);
         let n = 0;
         for (const v of r.labels) if (v) n++;
-        setCtSegStatus(`Fertig in ${((performance.now() - t0) / 1000).toFixed(0)} s (${r.backend === "webgpu" ? "WebGPU" : "CPU"}): ${new Set(r.labels).size - 1} Strukturen, ${((n * g.spacing[0] * g.spacing[1] * g.spacing[2]) / 1e6).toFixed(1)} l segmentiert.`);
+        setCtSegStatus(
+          `Fertig in ${((performance.now() - t0) / 1000).toFixed(0)} s (${r.backend === "webgpu" ? "WebGPU" : "CPU"}): ${new Set(r.labels).size - 1} Strukturen, ${((n * g.spacing[0] * g.spacing[1] * g.spacing[2]) / 1e6).toFixed(1)} l segmentiert.${r.note ? ` ${r.note}.` : ""}`,
+        );
       })
       .catch((e) => {
         if (!(e instanceof DOMException && e.name === "AbortError")) setCtSegError(`CT-Segmentierung fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);

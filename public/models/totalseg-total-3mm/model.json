@@ -5,8 +5,8 @@
  "parts": [
   "model.onnx.part0"
  ],
- "bytes": 66226832,
- "sha256": "8f600490036cc0acca5a694797b433bd4280cd4bba23911a67cab90afa8d3463",
+ "bytes": 66250556,
+ "sha256": "1f7b20c7d514065969bc53c966e2b7534322e2cf59b73409ab8445ad1042e573",
  "patchSize": [
   112,
   112,
