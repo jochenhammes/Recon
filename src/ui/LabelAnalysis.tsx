@@ -288,7 +288,7 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
             </button>
           </div>
           <h4 className="subheading">Histogramme je Label exportieren</h4>
-          <div className="inline-fields">
+          <div className="inline-fields hist-export-fields">
             <label className="field">
               Bins
               <select value={hBins} onChange={(e) => setHBins(Number(e.target.value))}>

@@ -335,6 +335,7 @@
 
 .checkbox-field input {
   accent-color: var(--accent);
+  flex: 0 0 auto;
 }
 
 .primary-btn,
@@ -1221,7 +1222,7 @@ tr.excluded-row td {
 }
 .reg-row {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 8px;
   align-items: start;
   padding: 8px;
@@ -1246,17 +1247,23 @@ tr.excluded-row td {
   color: var(--text-dim);
 }
 .reg-row-actions {
-  margin-top: 6px;
+  grid-column: 1 / -1;
+  margin-top: 2px;
+}
+.reg-row-actions button {
+  white-space: nowrap;
 }
 .reg-status {
   font-size: 11px;
   text-align: right;
   white-space: nowrap;
+  max-width: 96px;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 .reg-status small {
+  white-space: normal;
   color: var(--text-dim);
   font-size: 10px;
 }
@@ -1316,7 +1323,7 @@ tr.excluded-row td {
   white-space: nowrap;
 }
 .field select,
-.field input {
+.field input:not([type="checkbox"]):not([type="radio"]) {
   width: 100%;
   min-width: 0;
   max-width: 100%;
@@ -1405,4 +1412,7 @@ tr.excluded-row td {
 .label-stats-table td:not(:first-child) {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+.hist-export-fields {
+  grid-template-columns: 1fr 1fr;
 }

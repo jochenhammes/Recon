@@ -87,21 +87,21 @@ export function RegistrationSetup(props: RegistrationSetupProps) {
                   {!r.passive && ` · ${props.autoCostFor(r.id).toUpperCase()}`}
                   {r.passive && " · wird nicht automatisch ausgewählt (Labels/Vorlage/abgeleitet)"}
                 </div>
-                {r.status === "pending" && (
-                  <div className="button-row reg-row-actions">
-                    <button className="secondary-btn toggled" onClick={(e) => (e.stopPropagation(), props.onAccept(r.id))}>
-                      Übernehmen
-                    </button>
-                    <button className="secondary-btn" onClick={(e) => (e.stopPropagation(), props.onDiscard(r.id))}>
-                      Verwerfen
-                    </button>
-                  </div>
-                )}
               </div>
               <div className={`reg-status reg-${r.status}`}>
                 {STATUS[r.status]}
                 {r.detail && <small>{r.detail}</small>}
               </div>
+              {r.status === "pending" && (
+                <div className="button-row reg-row-actions">
+                  <button className="secondary-btn toggled" onClick={(e) => (e.stopPropagation(), props.onAccept(r.id))}>
+                    Übernehmen
+                  </button>
+                  <button className="secondary-btn" onClick={(e) => (e.stopPropagation(), props.onDiscard(r.id))}>
+                    Verwerfen
+                  </button>
+                </div>
+              )}
             </div>
           ))}
           {props.rows.length === 0 && <p className="tool-hint">Nur ein Datensatz geladen.</p>}
