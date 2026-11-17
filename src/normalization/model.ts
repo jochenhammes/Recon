@@ -79,3 +79,10 @@ export function describeWarpProgress(p: WarpProgress, start = 0.5): { stage: str
 
 /** Regularization presets (relative weight of the bending energy). */
 export const REGULARIZATION_WEIGHT = { light: 0.01, medium: 0.1, heavy: 1 } as const;
+
+/** Whether a volume lies exactly on a grid (dimensions and geometry within 1e-3 mm). */
+export function sameGrid(g: TargetGrid, v: { nx: number; ny: number; nz: number; geometry: TargetGrid["geometry"] }): boolean {
+  if (g.nx !== v.nx || g.ny !== v.ny || g.nz !== v.nz) return false;
+  const close = (a: readonly number[], b: readonly number[]) => a.every((x, i) => Math.abs(x - b[i]) < 1e-3);
+  return close(g.geometry.origin, v.geometry.origin) && close(g.geometry.spacing, v.geometry.spacing) && g.geometry.axes.every((a, i) => close(a, v.geometry.axes[i]));
+}

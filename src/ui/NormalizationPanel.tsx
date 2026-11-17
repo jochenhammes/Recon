@@ -78,6 +78,8 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
         )}
       </section>
 
+      {props.templates.length === 0 && props.error && <div className="error-banner">{props.error}</div>}
+
       {props.templates.length > 0 && (
         <section className="card">
           <h3>Normalisierung schätzen</h3>

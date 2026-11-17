@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BarChart3, Brain, Crosshair, Download, Eye, FileCode2, FolderOpen, Wand2 } from "lucide-react";
 import { NormalizationPanel, type NormMethod, type Regularization } from "./ui/NormalizationPanel";
-import { type Normalization, REGULARIZATION_WEIGHT, describeCoregProgress, describeWarpProgress, fieldFromAffine, pullbackPositions } from "./normalization/model";
+import { type Normalization, REGULARIZATION_WEIGHT, sameGrid, describeCoregProgress, describeWarpProgress, fieldFromAffine, pullbackPositions } from "./normalization/model";
 import { DEFAULT_WARP } from "./normalization/warp";
+import { buildDeformationField, fieldCoverage, parseDeformationField } from "./normalization/yfield";
+import { DeformationFieldCard } from "./ui/DeformationFieldCard";
 import { runWarp } from "./normalization/warpRunner";
 import { runResample } from "./resample/runner";
 import type { Interpolation } from "./resample/resample";
@@ -25,7 +27,7 @@ import type { SuvResult } from "./analysis/suv";
 import { type UnitMode, formatInput, parseInput } from "./components/format";
 import { type LoadedDataset, createDataset } from "./dataset/types";
 import { type EditOp, type VoiAction, changesGrid, countAffected } from "./edit/operations";
-import type { LoadedVolume } from "./viewer/volumeLoader";
+import { type LoadedVolume, decompressGzip } from "./viewer/volumeLoader";
 import { UploadPanel } from "./components/UploadPanel";
 import { VolumeUploadPanel } from "./components/VolumeUploadPanel";
 import { ReconControls } from "./components/ReconControls";
@@ -132,6 +134,7 @@ function App() {
   const [normError, setNormError] = useState<string | null>(null);
   const [transferBusy, setTransferBusy] = useState(false);
   const [transferStatus, setTransferStatus] = useState<string | null>(null);
+  const [fieldStatus, setFieldStatus] = useState<string | null>(null);
   const normRun = useRef<{ cancel: () => void } | null>(null);
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     try {
@@ -627,19 +630,79 @@ function App() {
       });
   }
 
+  /** Imports an SPM / CAT12 y_*.nii as the normalization of the selected subject. */
+  async function importDeformationField(file: File) {
+    const S = normSubject;
+    if (!S) return;
+    setNormError(null);
+    setFieldStatus("Wird gelesen …");
+    try {
+      let buffer = await file.arrayBuffer();
+      const head = new Uint8Array(buffer, 0, 2);
+      if (head[0] === 0x1f && head[1] === 0x8b) buffer = await decompressGzip(buffer);
+      const parsed = parseDeformationField(buffer);
+      const coverage = fieldCoverage(parsed.field, S.dataset.current);
+      if (coverage < 0.3) {
+        setFieldStatus(null);
+        setNormError(
+          `Das Feld zeigt nur zu ${Math.round(coverage * 100)} % in das Bild von „${S.dataset.displayName}“. Falsches Subjekt, ein inverses Feld (iy_*.nii statt y_*.nii) oder ein anders orientiertes Bild?`,
+        );
+        return;
+      }
+      const tpl = templateEntries.find((e) => sameGrid(parsed.grid, e.dataset.current));
+      const n: Normalization = {
+        subjectId: S.id,
+        templateName: tpl?.dataset.template?.name ?? file.name.replace(/\.nii(\.gz)?$/i, ""),
+        grid: parsed.grid,
+        affine: IDENTITY_MAT4,
+        field: parsed.field,
+        kind: "imported",
+      };
+      setNormalization(n);
+      const { nx, ny, nz, geometry } = parsed.grid;
+      setFieldStatus(
+        `${file.name}: ${nx} × ${ny} × ${nz}, ${geometry.spacing.map((v) => v.toFixed(2)).join(" × ")} mm; ${Math.round(coverage * 100)} % im Bild des Subjekts` +
+          (parsed.invalidFraction > 0 ? `, ${(parsed.invalidFraction * 100).toFixed(1)} % ohne Zuordnung` : "") +
+          (tpl ? ` – passt zur Vorlage ${tpl.dataset.template?.name}.` : " – Raster weicht von den geladenen Vorlagen ab; die übertragenen Datensätze bilden den Standardraum."),
+      );
+      await transferToStandardSpace(n, [S.id], "linear", tpl);
+    } catch (e) {
+      setFieldStatus(null);
+      setNormError(`Verformungsfeld nicht lesbar: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  function exportDeformationField() {
+    if (!normFor) return;
+    const subject = byId(normFor.subjectId);
+    const bytes = buildDeformationField(normFor);
+    const url = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `y_${(subject?.dataset.displayName ?? "subject").replace(/\.nii(\.gz)?$/i, "").replace(/[^A-Za-z0-9_.-]+/g, "_")}.nii`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   /**
    * Resamples datasets into the template space through the subject's deformation and adds them as new
    * datasets; the template becomes the reference and the first transferred non-anatomical dataset the overlay.
    */
   async function transferToStandardSpace(n: Normalization, ids: string[], method: Interpolation, templateEntry = normTemplate) {
     const subject = byId(n.subjectId);
-    if (!subject || !templateEntry) return;
+    if (!subject) return;
+    // The loaded template becomes the reference only if its grid is the field's grid (an imported CAT12
+    // field may use another resolution); otherwise the transferred datasets carry the standard space.
+    const tpl =
+      (templateEntry && sameGrid(n.grid, templateEntry.dataset.current) ? templateEntry : undefined) ??
+      entries.find((e) => (e.dataset.template || e.dataset.derivedFrom) && sameGrid(n.grid, e.dataset.current)) ??
+      null;
     setTransferBusy(true);
     setTransferStatus(null);
     try {
       // Subject native → reference world: positions for every template voxel.
       const points = pullbackPositions(n, subject.matrix);
-      const T = templateEntry.dataset.current;
+      const { nx, ny, nz, geometry } = n.grid;
       const created: Entry[] = [];
       for (const [i, id] of ids.entries()) {
         const e = byId(id);
@@ -647,23 +710,28 @@ function App() {
         if (!e || !w2v) continue;
         setTransferStatus(`${i + 1}/${ids.length}: ${datasetModality(e.dataset)} wird übertragen …`);
         const data = await runResample(e.dataset.current, w2v, points, method, (f) => setTransferStatus(`${i + 1}/${ids.length}: ${datasetModality(e.dataset)} ${Math.round(f * 100)} %`));
-        const vol = T.withData(data);
-        const source = templateEntry.dataset.source.kind === "nifti" ? templateEntry.dataset.source : ({ kind: "reconstruction" } as const);
+        const vol = tpl ? tpl.dataset.current.withData(data) : new Volume3D(data, nz, ny, nx, [geometry.spacing[2], geometry.spacing[1], geometry.spacing[0]], geometry);
+        const source = tpl?.dataset.source.kind === "nifti" ? tpl.dataset.source : ({ kind: "reconstruction" } as const);
         const d = createDataset(vol, source, `${e.dataset.displayName} · ${n.templateName}`);
         const derived: LoadedDataset = { ...d, derivedFrom: { name: e.dataset.displayName, source: unitSource(e.dataset), space: n.templateName } };
-        created.push({ id: `ds${nextEntryId++}`, dataset: derived, display: { ...e.display, opacity: 1, visible: true }, matrix: templateEntry.matrix });
+        created.push({ id: `ds${nextEntryId++}`, dataset: derived, display: { ...e.display, opacity: 1, visible: true }, matrix: IDENTITY_MAT4 });
       }
-      // Switch the display to the template space.
-      const inv = invert4(templateEntry.matrix);
-      setEntries((prev) => [...prev.map((x) => ({ ...x, matrix: x.id === templateEntry.id ? IDENTITY_MAT4 : multiply4(inv, x.matrix) })), ...created.map((c) => ({ ...c, matrix: IDENTITY_MAT4 }))]);
-      setReferenceId(templateEntry.id);
+      // Switch the display to the standard space.
+      if (tpl) {
+        const inv = invert4(tpl.matrix);
+        setEntries((prev) => [...prev.map((x) => ({ ...x, matrix: x.id === tpl.id ? IDENTITY_MAT4 : multiply4(inv, x.matrix) })), ...created]);
+        setReferenceId(tpl.id);
+      } else if (created.length) {
+        setEntries((prev) => [...prev, ...created]);
+        setReferenceId((created.find((c) => isAnatomical(unitSource(c.dataset))) ?? created[0]).id);
+      }
       const overlayEntry = created.find((c) => !isAnatomical(unitSource(c.dataset))) ?? created[0];
       if (overlayEntry) {
         setOverlayId(overlayEntry.id);
         setEntries((prev) => prev.map((x) => (x.id === overlayEntry.id ? { ...x, display: overlayDisplay(x) } : x)));
       }
       setCursor(null);
-      setTransferStatus(`${created.length} Datensatz/Datensätze im Standardraum angelegt (${T.nx} × ${T.ny} × ${T.nz}).`);
+      setTransferStatus(`${created.length} Datensatz/Datensätze im Standardraum angelegt (${nx} × ${ny} × ${nz}).`);
     } catch (e) {
       setTransferStatus(null);
       setNormError(`Übertragung fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
@@ -877,7 +945,16 @@ function App() {
       transferStatus={transferStatus}
       transferBusy={transferBusy}
       error={normError}
-    />
+    >
+      <DeformationFieldCard
+        subjectLabel={normSubject?.dataset.displayName ?? null}
+        canExport={!!normFor}
+        busy={normRunning || transferBusy}
+        onImport={(f) => void importDeformationField(f)}
+        onExport={exportDeformationField}
+        status={fieldStatus}
+      />
+    </NormalizationPanel>
   );
 
   const tabs: ShellTab[] = [
