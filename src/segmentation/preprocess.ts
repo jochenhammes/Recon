@@ -19,6 +19,8 @@ export interface ModelMeta {
   spacing: [number, number, number];
   normalization: { clip: [number, number]; mean: number; std: number };
   labels: Record<string, string>;
+  /** Model output format: logits (default) or the top-k classes with probabilities. */
+  output?: { kind: "topk"; k: number };
 }
 
 /** RAS-aligned grid (in LPS coordinates) covering a volume placed by `toWorld` voxel → world. */
@@ -223,4 +225,45 @@ export function topKLabels(topk: TopKAccumulator, voxels: number): Uint8Array {
     out[v] = c;
   }
   return out;
+}
+
+/**
+ * Adds one tile from a model that already returns the top-K classes per voxel as
+ * [class₁, p₁, class₂, p₂, …] (2·K channels, channel-major); same weighting as `accumulateTile`.
+ */
+export function accumulateTopKTile(out: Float32Array, kOut: number, gauss: Float32Array, start: Vec3, patch: [number, number, number], dims: Vec3, topk: TopKAccumulator): void {
+  const [nx, ny, nz] = dims;
+  const [pz, py, px] = patch;
+  const plane = pz * py * px;
+  const K = topk.k;
+  for (let z = 0, o = 0; z < pz; z++) {
+    const kk = start[2] + z;
+    for (let y = 0; y < py; y++) {
+      const j = start[1] + y;
+      for (let x = 0; x < px; x++, o++) {
+        const i = start[0] + x;
+        if (i < 0 || j < 0 || kk < 0 || i >= nx || j >= ny || kk >= nz) continue;
+        const w = gauss[o];
+        const base = ((kk * ny + j) * nx + i) * K;
+        for (let t = 0; t < kOut; t++) {
+          const c = out[2 * t * plane + o];
+          const p = w * out[(2 * t + 1) * plane + o];
+          if (!(c >= 0) || !(p > 0)) continue;
+          let slot = -1, minSlot = 0;
+          for (let s = 0; s < K; s++) {
+            if (topk.acc[base + s] > 0 && topk.cls[base + s] === c) {
+              slot = s;
+              break;
+            }
+            if (topk.acc[base + s] < topk.acc[base + minSlot]) minSlot = s;
+          }
+          if (slot >= 0) topk.acc[base + slot] += p;
+          else if (p > topk.acc[base + minSlot]) {
+            topk.acc[base + minSlot] = p;
+            topk.cls[base + minSlot] = c;
+          }
+        }
+      }
+    }
+  }
 }

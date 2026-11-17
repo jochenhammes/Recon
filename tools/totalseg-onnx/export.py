@@ -81,21 +81,136 @@ def replace_transposed(module: torch.nn.Module) -> int:
 
 print("replaced ConvTranspose3d:", replace_transposed(net))
 
+
+class Conv3dAs2d(torch.nn.Module):
+    """Conv3d (k×k×k) as k 2-D convolutions over (H, W) with the depth folded into the batch, summed over the
+    depth offsets. ONNX Runtime's WebGPU backend has optimized 2-D convolutions but only a naive 3-D kernel."""
+
+    def __init__(self, c: torch.nn.Conv3d):
+        super().__init__()
+        assert c.groups == 1 and tuple(c.dilation) == (1, 1, 1)
+        self.kd, self.sd, self.pd = c.kernel_size[0], c.stride[0], c.padding[0]
+        self.cout = c.out_channels
+        self.convs = torch.nn.ModuleList()
+        for k in range(self.kd):
+            c2 = torch.nn.Conv2d(c.in_channels, c.out_channels, c.kernel_size[1:], stride=c.stride[1:], padding=c.padding[1:], bias=(k == 0 and c.bias is not None))
+            c2.weight.data = c.weight.data[:, :, k].clone()
+            if k == 0 and c.bias is not None:
+                c2.bias.data = c.bias.data.clone()
+            self.convs.append(c2)
+
+    def forward(self, x):
+        n, ci, d, h, w = x.shape
+        if self.pd:
+            x = torch.nn.functional.pad(x, (0, 0, 0, 0, self.pd, self.pd))
+        do = (d + 2 * self.pd - self.kd) // self.sd + 1
+        out = None
+        for k, conv in enumerate(self.convs):
+            xs = x[:, :, k : k + self.sd * (do - 1) + 1 : self.sd].transpose(1, 2).reshape(n * do, ci, h, w)
+            y = conv(xs)
+            out = y if out is None else out + y
+        ho, wo = out.shape[-2:]
+        return out.reshape(n, do, self.cout, ho, wo).transpose(1, 2)
+
+
+def replace_conv3d(module: torch.nn.Module) -> int:
+    count = 0
+    for name, child in module.named_children():
+        if isinstance(child, torch.nn.Conv3d) and child.kernel_size[0] > 1:
+            setattr(module, name, Conv3dAs2d(child))
+            count += 1
+        else:
+            count += replace_conv3d(child)
+    return count
+
+
+AS_2D = "--no-2d" not in sys.argv
+if AS_2D:
+    print("replaced Conv3d by 2-D convolutions:", replace_conv3d(net))
+
+TOPK = 3
+
+
+class TopKHead(torch.nn.Module):
+    """Network + the TOPK most probable classes per voxel as [class₁, p₁, class₂, p₂, …] (float), output
+    (1, 2·TOPK, D, H, W) instead of (1, C, D, H, W) logits – far less data to copy back.
+
+    Memory-light: the final 1×1×1 classification conv is evaluated in blocks of BLOCK classes; per block the
+    block's top-k and log-sum-exp are merged into running results, so no tensor of all C logits exists.
+    Only ReduceMax/Equal/Where/Exp/Log/ReduceSum/Concat are used (WebGPU has no TopK)."""
+
+    BLOCK = 30
+
+    def __init__(self, net, classes):
+        super().__init__()
+        seg = net.decoder.seg_layers[-1]
+        net.decoder.seg_layers[-1] = torch.nn.Identity()  # network now returns the final feature maps
+        self.net = net
+        self.blocks = torch.nn.ModuleList()
+        self.offsets = []
+        for a in range(0, classes, self.BLOCK):
+            b = min(classes, a + self.BLOCK)
+            conv = torch.nn.Conv3d(seg.in_channels, b - a, 1)
+            conv.weight.data = seg.weight.data[a:b].clone()
+            conv.bias.data = seg.bias.data[a:b].clone()
+            self.blocks.append(conv)
+            self.offsets.append(a)
+            self.register_buffer(f"cls{a}", torch.arange(a, b, dtype=torch.float32).view(1, b - a, 1, 1, 1))
+
+    @staticmethod
+    def _topk(values, labels):
+        """TOPK largest of `values` (channel axis) with their labels, via repeated max + masking."""
+        vals, idxs = [], []
+        cur = values
+        for _ in range(TOPK):
+            m = cur.amax(1, keepdim=True)
+            eq = cur == m
+            vals.append(m)
+            idxs.append(torch.where(eq, labels, torch.tensor(-1.0)).amax(1, keepdim=True))
+            cur = torch.where(eq, torch.tensor(-1e9), cur)
+        return vals, idxs
+
+    def forward(self, x):
+        feat = self.net(x)
+        run_v = run_i = lse = None
+        for conv, a in zip(self.blocks, self.offsets):
+            logits = conv(feat)
+            m = logits.amax(1, keepdim=True)
+            block_lse = m + torch.log(torch.exp(logits - m).sum(1, keepdim=True))
+            v, i = self._topk(logits, getattr(self, f"cls{a}"))
+            if run_v is None:
+                run_v, run_i, lse = v, i, block_lse
+            else:
+                mx = torch.where(lse > block_lse, lse, block_lse)  # no Max op on WebGPU
+                lse = mx + torch.log(torch.exp(lse - mx) + torch.exp(block_lse - mx))
+                vv, ii = self._topk(torch.cat(run_v + v, 1), torch.cat(run_i + i, 1))
+                run_v, run_i = vv, ii
+        outs = []
+        for v, i in zip(run_v, run_i):
+            outs += [i, torch.exp(v - lse)]
+        return torch.cat(outs, 1)
+
+
+head = TopKHead(net, n_classes).eval()
+
 patch = list(cm.patch_size)
 dummy = torch.randn(1, 1, *patch)
 onnx_path = out / "model.onnx"
 torch.onnx.export(
-    net, dummy, onnx_path, input_names=["input"], output_names=["logits"], opset_version=17,
+    head, dummy, onnx_path, input_names=["input"], output_names=["logits"], opset_version=17,
     dynamic_axes=None, do_constant_folding=True, dynamo=False,
 )
 
 # Check against PyTorch.
 with torch.no_grad():
-    ref = reference_net(dummy).numpy()
-    print("max abs diff rewritten vs original torch:", float(np.abs(net(dummy).numpy() - ref).max()))
+    ref_logits = reference_net(dummy)
+    ref = head(dummy).numpy()
+    p_ref = torch.softmax(ref_logits, 1).amax(1)[0].numpy()
+    print("max abs diff of top-1 probability vs original softmax:", float(np.abs(ref[0, 1] - p_ref).max()))
+    print("top-1 agreement with original argmax:", float((ref[0, 0] == ref_logits.argmax(1)[0].numpy()).mean()))
 sess = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
 got = sess.run(None, {"input": dummy.numpy()})[0]
-print("max abs diff vs torch:", float(np.abs(ref - got).max()), "argmax agreement:", float((ref.argmax(1) == got.argmax(1)).mean()))
+print("max abs diff vs torch:", float(np.abs(ref - got).max()), "top-1 agreement:", float((ref[0, 0] == got[0, 0]).mean()))
 
 data = onnx_path.read_bytes()
 part = 90 * 1024 * 1024
@@ -119,6 +234,8 @@ meta = {
     "axes": "RAS (array z = superior, y = anterior, x = right)",
     "normalization": {"clip": [intensity["percentile_00_5"], intensity["percentile_99_5"]], "mean": intensity["mean"], "std": intensity["std"]},
     "labels": {str(v): k for k, v in labels.items()},
+    # Output: (1, 2·k, D, H, W) = [class₁, p₁, class₂, p₂, …] per voxel.
+    "output": {"kind": "topk", "k": TOPK},
 }
 (out / "model.json").write_text(json.dumps(meta, indent=1))
 print("written", parts, len(data) / 1e6, "MB")

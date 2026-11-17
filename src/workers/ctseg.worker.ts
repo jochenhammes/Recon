@@ -10,6 +10,8 @@ export interface CtSegJob {
   patch: [number, number, number];
   classes: number;
   bodyThreshold: number;
+  /** Model output: top-k classes with probabilities instead of logits. */
+  topkOutput?: number;
   /** "webgpu" | "wasm" | "auto" */
   backend: string;
 }
@@ -48,7 +50,7 @@ self.onmessage = async (event: MessageEvent<CtSegJob | { type: "stop" }>) => {
             t.dispose?.();
             return data;
           },
-          { bodyThreshold: msg.bodyThreshold, onProgress: (p) => post({ type: "progress", progress: { ...p, stage: `Inferenz (${label})` } }), shouldStop: () => stop },
+          { bodyThreshold: msg.bodyThreshold, topkOutput: msg.topkOutput, onProgress: (p) => post({ type: "progress", progress: { ...p, stage: `Inferenz (${label})` } }), shouldStop: () => stop },
         );
       } finally {
         await session.release().catch(() => undefined);

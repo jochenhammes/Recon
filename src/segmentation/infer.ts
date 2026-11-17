@@ -1,10 +1,13 @@
 import type { Vec3 } from "../core/geometry";
-import { accumulateTile, bodyBox, createTopK, extractPatch, gaussianMap, tileStarts, topKLabels } from "./preprocess";
+import { accumulateTile, accumulateTopKTile, bodyBox, createTopK, extractPatch, gaussianMap, tileStarts, topKLabels } from "./preprocess";
 
 export interface SegmentProgress {
   done: number;
   total: number;
   stage: string;
+  /** Seconds since the inference started and estimated remaining seconds (after the first tile). */
+  elapsed?: number;
+  remaining?: number;
 }
 
 /**
@@ -18,7 +21,14 @@ export async function slidingWindow(
   patch: [number, number, number],
   classes: number,
   runPatch: (input: Float32Array) => Promise<Float32Array>,
-  opts: { bodyThreshold: number; stepFraction?: number; onProgress?: (p: SegmentProgress) => void; shouldStop?: () => boolean },
+  opts: {
+    bodyThreshold: number;
+    stepFraction?: number;
+    /** Model returns [class, p] × k instead of logits. */
+    topkOutput?: number;
+    onProgress?: (p: SegmentProgress) => void;
+    shouldStop?: () => boolean;
+  },
 ): Promise<Uint8Array> {
   // Tile placement exactly as nnU-Net (whole image, centered padding): cropping to the body changes the
   // context of the tiles and with it ambiguous labels (e.g. vertebra numbering). The body box is only
@@ -34,16 +44,21 @@ export async function slidingWindow(
   const xs = starts(0, px), ys = starts(1, py), zs = starts(2, pz);
   const total = xs.length * ys.length * zs.length;
   let done = 0;
+  const t0 = performance.now();
+  const seconds = () => (performance.now() - t0) / 1000;
   for (const z of zs)
     for (const y of ys)
       for (const x of xs) {
         if (opts.shouldStop?.()) throw new DOMException("Segmentierung abgebrochen.", "AbortError");
         const start: Vec3 = [x, y, z];
+        // Report before the tile so a slow first tile (shader compilation) is visible.
+        opts.onProgress?.({ done, total, stage: "Inferenz", elapsed: seconds(), remaining: done ? (seconds() / done) * (total - done) : undefined });
         const input = extractPatch(data, dims, start, patch, 0);
-        const logits = await runPatch(input);
-        accumulateTile(logits, classes, gauss, start, patch, dims, topk);
+        const out = await runPatch(input);
+        if (opts.topkOutput) accumulateTopKTile(out, opts.topkOutput, gauss, start, patch, dims, topk);
+        else accumulateTile(out, classes, gauss, start, patch, dims, topk);
         done++;
-        opts.onProgress?.({ done, total, stage: "Inferenz" });
+        opts.onProgress?.({ done, total, stage: "Inferenz", elapsed: seconds(), remaining: (seconds() / done) * (total - done) });
       }
   return topKLabels(topk, data.length);
 }

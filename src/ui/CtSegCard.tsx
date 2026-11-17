@@ -1,17 +1,20 @@
 import { useState } from "react";
+import type { SegmentProgress } from "../segmentation/infer";
 import type { Option } from "./NormalizationPanel";
 
 export interface CtSegCardProps {
   cts: Option[];
   defaultCtId: string | null;
   running: boolean;
-  progress: { done: number; total: number; stage: string } | null;
+  progress: SegmentProgress | null;
   status: string | null;
   error: string | null;
   webgpu: boolean;
   onRun: (ctId: string, backend: "auto" | "wasm") => void;
   onCancel: () => void;
 }
+
+const fmtTime = (s: number) => (s < 90 ? `${Math.round(s)} s` : `${Math.floor(s / 60)} min ${Math.round(s % 60)} s`);
 
 /** Whole-body CT organ segmentation in the browser (TotalSegmentator "total", 3 mm, ONNX). */
 export function CtSegCard(props: CtSegCardProps) {
@@ -51,7 +54,13 @@ export function CtSegCard(props: CtSegCardProps) {
               <div className="progress-bar">
                 <div className="progress-bar-fill" style={{ width: `${Math.round(p && p.total > 0 ? (100 * p.done) / p.total : 3)}%` }} />
               </div>
-              <p className="tool-hint">{p ? `${p.stage}${p.stage.startsWith("Inferenz") ? ` · Kachel ${p.done}/${p.total}` : ""}` : "Vorbereitung …"}</p>
+              <p className="tool-hint">
+                {p
+                  ? p.stage.startsWith("Inferenz")
+                    ? `${p.stage} · Kachel ${Math.min(p.done + 1, p.total)}/${p.total}${p.elapsed !== undefined ? ` · ${fmtTime(p.elapsed)} vergangen` : ""}${p.remaining !== undefined ? ` · noch ca. ${fmtTime(p.remaining)}` : p.done === 0 ? " · erste Kachel dauert länger (Shader werden übersetzt)" : ""}`
+                    : p.stage
+                  : "Vorbereitung …"}
+              </p>
               <button className="secondary-btn" onClick={props.onCancel}>
                 Abbrechen
               </button>

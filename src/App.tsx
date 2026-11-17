@@ -11,6 +11,7 @@ import { LabelList } from "./ui/LabelList";
 import { filteredLabels, labelStats } from "./atlas/labelStats";
 import { TumorPanel, type TumorIndication, type TumorMode } from "./ui/TumorPanel";
 import { CtSegCard } from "./ui/CtSegCard";
+import type { SegmentProgress } from "./segmentation/infer";
 import { type CtSegRun, runCtSegmentation } from "./segmentation/ctSegment";
 import { type Lesion, type ThresholdMethod, lesionStats } from "./tumor/segment";
 import { burdenCsv, splitBurden, tumorBurden } from "./tumor/metrics";
@@ -194,7 +195,7 @@ function App() {
   const tumorScratch = useRef<Uint8Array | null>(null);
   const tumorStatsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [ctSegRunning, setCtSegRunning] = useState(false);
-  const [ctSegProgress, setCtSegProgress] = useState<{ done: number; total: number; stage: string } | null>(null);
+  const [ctSegProgress, setCtSegProgress] = useState<SegmentProgress | null>(null);
   const [ctSegStatus, setCtSegStatus] = useState<string | null>(null);
   const [ctSegError, setCtSegError] = useState<string | null>(null);
   const ctSegRun = useRef<CtSegRun | null>(null);

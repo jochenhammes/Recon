@@ -119,6 +119,7 @@ export function runCtSegmentation(ct: Volume3D, backend: "auto" | "wasm", onProg
         patch: meta.patchSize,
         classes: Object.keys(meta.labels).length,
         bodyThreshold: (-500 - mean) / std,
+        topkOutput: meta.output?.kind === "topk" ? meta.output.k : undefined,
         backend,
       };
       worker.postMessage(job, [model, data.buffer]);
