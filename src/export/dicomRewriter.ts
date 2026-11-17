@@ -7,8 +7,17 @@ export const EXPLICIT_VR_LE = "1.2.840.10008.1.2.1";
 /** VRs whose explicit-VR element header uses a 2-byte reserved field + 4-byte length (12-byte header). */
 const LONG_VR = new Set(["OB", "OD", "OF", "OL", "OV", "OW", "SQ", "SV", "UC", "UN", "UR", "UT", "UV"]);
 
-/** Replacement value for one element (value bytes without header), or null to delete it. */
-export type TagOverride = { vr: string; value: Uint8Array } | null;
+/** Replacement value for one element (value bytes without header). */
+export type ValueOverride = { vr: string; value: Uint8Array };
+
+/**
+ * Keeps an existing element byte-for-byte but overwrites bytes at absolute file offsets inside it
+ * (same length, so all lengths stay valid) — used to replace values nested in sequences.
+ */
+export type PatchOverride = { patches: { offset: number; bytes: Uint8Array }[] };
+
+/** Replacement, in-place patch, or null to delete the element. */
+export type TagOverride = ValueOverride | PatchOverride | null;
 
 /** Override map keyed by dicom-parser tag strings ("xGGGGEEEE", lower-case hex). */
 export type TagOverrides = Map<string, TagOverride>;
@@ -53,7 +62,7 @@ export function rewriteDicom(input: RewriteInput, overrides: TagOverrides): Uint
 
   const touchedGroups = new Set([...overrides.keys()].map(groupOf));
   const pendingInserts = [...overrides.entries()]
-    .filter(([tag, ov]) => ov !== null && !dataSet.elements[tag] && (hasMeta || groupOf(tag) !== 0x0002))
+    .filter(([tag, ov]) => ov !== null && "vr" in ov && !dataSet.elements[tag] && (hasMeta || groupOf(tag) !== 0x0002))
     .sort((a, b) => tagNumber(a[0]) - tagNumber(b[0]));
 
   const metaChunks: Uint8Array[] = [];
@@ -62,7 +71,7 @@ export function rewriteDicom(input: RewriteInput, overrides: TagOverrides): Uint
   const emitInsertsBefore = (tagNum: number) => {
     while (pendingInserts.length > 0 && tagNumber(pendingInserts[0][0]) < tagNum) {
       const [tag, ov] = pendingInserts.shift()!;
-      chunksFor(tag).push(encodeElement(tag, ov!, groupOf(tag) === 0x0002 || datasetExplicit));
+      if (ov && "vr" in ov) chunksFor(tag).push(encodeElement(tag, ov, groupOf(tag) === 0x0002 || datasetExplicit));
     }
   };
 
@@ -85,7 +94,17 @@ export function rewriteDicom(input: RewriteInput, overrides: TagOverrides): Uint
 
     if (overrides.has(tag)) {
       const ov = overrides.get(tag)!;
-      if (ov !== null) chunksFor(tag).push(encodeElement(tag, ov, group === 0x0002 || datasetExplicit));
+      if (ov === null) continue;
+      if ("vr" in ov) {
+        chunksFor(tag).push(encodeElement(tag, ov, group === 0x0002 || datasetExplicit));
+      } else {
+        const copy = bytes.slice(start, end);
+        for (const p of ov.patches) {
+          if (p.offset < start || p.offset + p.bytes.length > end) throw new Error(`Patch außerhalb von ${tag}.`);
+          copy.set(p.bytes, p.offset - start);
+        }
+        chunksFor(tag).push(copy);
+      }
       continue;
     }
     chunksFor(tag).push(bytes.subarray(start, end));
@@ -103,7 +122,7 @@ function headerLength(el: Element, datasetExplicit: boolean): number {
   return el.vr && LONG_VR.has(el.vr) ? 12 : 8;
 }
 
-function encodeElement(tag: string, ov: { vr: string; value: Uint8Array }, explicit: boolean): Uint8Array {
+function encodeElement(tag: string, ov: ValueOverride, explicit: boolean): Uint8Array {
   const n = tagNumber(tag);
   const group = (n >>> 16) & 0xffff;
   const elem = n & 0xffff;

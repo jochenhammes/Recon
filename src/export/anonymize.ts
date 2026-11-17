@@ -1,4 +1,4 @@
-import type { DataSet } from "dicom-parser";
+import type { DataSet, Element } from "dicom-parser";
 import { type TagOverrides, stringValue, tagKey } from "./dicomRewriter";
 import { IMPLEMENTATION_CLASS_UID, IMPLEMENTATION_VERSION_NAME } from "./dicomWriter";
 import { generateUid } from "./uid";
@@ -27,10 +27,12 @@ export interface AnonymizeOptions {
 export interface AnonymizeContext {
   options: AnonymizeOptions;
   uidMap: Map<string, string>;
+  /** Replacements for UIDs nested in kept sequences; same length as the original. */
+  nestedUidMap: Map<string, string>;
 }
 
 export function createAnonymizeContext(options: AnonymizeOptions): AnonymizeContext {
-  return { options, uidMap: new Map() };
+  return { options, uidMap: new Map(), nestedUidMap: new Map() };
 }
 
 const tag = tagKey;
@@ -146,6 +148,29 @@ const KEPT_SEQUENCES = new Set([
   tag(0x5200, 0x9230), // PerFrameFunctionalGroupsSequence
 ]);
 
+/**
+ * Instance UIDs that may appear inside kept sequences (e.g. Radiopharmaceutical Administration Event
+ * UID). Vendor UIDs embed an organization root and often the device serial number.
+ */
+const NESTED_INSTANCE_UIDS = new Set([
+  tag(0x0008, 0x0014), // InstanceCreatorUID
+  tag(0x0008, 0x0018), // SOPInstanceUID
+  tag(0x0008, 0x1155), // ReferencedSOPInstanceUID
+  tag(0x0008, 0x1195), // TransactionUID
+  tag(0x0008, 0x3012), // RadiopharmaceuticalAdministrationEventUID
+  tag(0x0020, 0x000d), // StudyInstanceUID
+  tag(0x0020, 0x000e), // SeriesInstanceUID
+  tag(0x0020, 0x0052), // FrameOfReferenceUID
+  tag(0x0040, 0xa124), // UID
+]);
+/** UI elements that identify standard definitions, not instances or devices. */
+const NON_IDENTIFYING_UIDS = new Set([
+  tag(0x0008, 0x0016), // SOPClassUID
+  tag(0x0008, 0x010c), // CodingSchemeUID
+  tag(0x0008, 0x1150), // ReferencedSOPClassUID
+  tag(0x0002, 0x0010), // TransferSyntaxUID
+]);
+
 const PATIENT_NAME = tag(0x0010, 0x0010);
 const PATIENT_ID = tag(0x0010, 0x0020);
 
@@ -188,6 +213,15 @@ export function addAnonymizationOverrides(dataSet: DataSet, ctx: AnonymizeContex
     overrides.set(t, stringValue("UI", replacement));
   }
 
+  // UIDs nested in kept sequences: overwritten in place with same-length replacements.
+  for (const t of KEPT_SEQUENCES) {
+    const el = dataSet.elements[t];
+    if (!el?.items) continue;
+    const patches: { offset: number; bytes: Uint8Array }[] = [];
+    collectNestedUidPatches(el.items, ctx, patches);
+    if (patches.length > 0) overrides.set(t, { patches });
+  }
+
   // The file is now written by this application: replace the original implementation identifiers
   // in the meta header, which name the vendor's software.
   if (present(tag(0x0002, 0x0012))) overrides.set(tag(0x0002, 0x0012), stringValue("UI", IMPLEMENTATION_CLASS_UID));
@@ -198,4 +232,52 @@ export function addAnonymizationOverrides(dataSet: DataSet, ctx: AnonymizeContex
     tag(0x0012, 0x0063), // DeidentificationMethod
     stringValue("LO", options.retainPatientCharacteristics ? "PS3.15 Basic, Retain Dates+Patient Chars, no Device" : "PS3.15 Basic, Retain Dates, no Device"),
   );
+}
+
+function collectNestedUidPatches(items: Element[], ctx: AnonymizeContext, patches: { offset: number; bytes: Uint8Array }[]): void {
+  for (const it of items) {
+    const ds = it.dataSet;
+    if (!ds) continue;
+    for (const el of Object.values(ds.elements)) {
+      if (el.items) {
+        collectNestedUidPatches(el.items, ctx, patches);
+        continue;
+      }
+      const isUid = NESTED_INSTANCE_UIDS.has(el.tag) || (el.vr === "UI" && !NON_IDENTIFYING_UIDS.has(el.tag));
+      if (!isUid || el.length < 8 || el.length === 0xffffffff) continue;
+      const raw = ds.byteArray.subarray(el.dataOffset, el.dataOffset + el.length);
+      let original = "";
+      for (const b of raw) original += String.fromCharCode(b);
+      let replacement = ctx.nestedUidMap.get(original);
+      if (!replacement) {
+        let textLength = original.length;
+        while (textLength > 0 && (original.charCodeAt(textLength - 1) === 0 || original[textLength - 1] === " ")) textLength--;
+        replacement = sameLengthUid(textLength).padEnd(original.length, String.fromCharCode(0));
+        ctx.nestedUidMap.set(original, replacement);
+      }
+      const bytes = new Uint8Array(replacement.length);
+      for (let i = 0; i < replacement.length; i++) bytes[i] = replacement.charCodeAt(i);
+      patches.push({ offset: el.dataOffset, bytes });
+    }
+  }
+}
+
+function randomDigits(n: number, firstMax = 9): string {
+  const buf = new Uint8Array(n);
+  crypto.getRandomValues(buf);
+  let s = String(1 + (buf[0] % firstMax));
+  for (let i = 1; i < n; i++) s += String(buf[i] % 10);
+  return s;
+}
+
+/**
+ * A random UID of exactly `length` characters under the 2.25 root (length >= 7). The first arc after
+ * 2.25 stays below 2^128; longer UIDs get an additional random arc.
+ */
+export function sameLengthUid(length: number): string {
+  const body = Math.max(length, 7) - 5; // characters after "2.25."
+  // A 39-digit arc must start with 1 to stay below 2^128 (≈ 3.4e38).
+  if (body <= 39) return `2.25.${randomDigits(body, body === 39 ? 1 : 9)}`;
+  // 38-digit first arc, then "." and at least one more digit.
+  return `2.25.${randomDigits(38)}.${randomDigits(body - 39)}`;
 }

@@ -326,7 +326,16 @@ describe("anonymization", () => {
     { tag: [0x0018, 0x1000], vr: "LO", value: s("LO", "SN-424242") },
     { tag: [0x0018, 0x1020], vr: "LO", value: s("LO", "VG80B") },
     { tag: [0x0020, 0x0052], vr: "UI", value: s("UI", "1.2.3.555") },
-    { tag: [0x0054, 0x0016], vr: "SQ", value: item(enc({ tag: [0x0018, 0x1074], vr: "DS", value: s("DS", "350000000") }, true)) },
+    {
+      tag: [0x0054, 0x0016],
+      vr: "SQ",
+      value: item(
+        concatBytes([
+          enc({ tag: [0x0008, 0x3012], vr: "UI", value: s("UI", "1.3.12.2.1107.5.1.4.10043.20261113075700123") }, true),
+          enc({ tag: [0x0018, 0x1074], vr: "DS", value: s("DS", "350000000") }, true),
+        ]),
+      ),
+    },
   ];
   const mk = (n: number) =>
     asFile(buildPart10({ rows: 2, cols: 2, frames: 1, pixels: [n, n, n, n], instanceNumber: n, extra: identifying }), `69094${n}.dcm`);
@@ -339,7 +348,8 @@ describe("anonymization", () => {
     expect(files.map((f) => f.name)).toEqual(["IM00001.dcm", "IM00002.dcm"]);
 
     const forbidden = ["Doe^Jane", "PID-777", "ACC123456", "ACME", "Musterstadt", "Referrer", "Olga", "PETCT01",
-      "SuperScan", "SN-424242", "VG80B", "19700101", "VENDOR PRIVATE", "SPECT AC", "1.2.3.100", "1.2.3.555", "9.9.9.9"];
+      "SuperScan", "SN-424242", "VG80B", "19700101", "VENDOR PRIVATE", "SPECT AC", "1.2.3.100", "1.2.3.555", "9.9.9.9",
+      "1.3.12.2.1107", "10043"];
     const datasets = files.map((f) => {
       const text = new TextDecoder("latin1").decode(f.bytes);
       for (const word of forbidden) expect(text, word).not.toContain(word);
@@ -356,6 +366,13 @@ describe("anonymization", () => {
     expect(ds.elements["x00081110"]).toBeUndefined();
     expect(ds.string("x00101030")).toBe("72.5"); // weight retained for SUV
     expect(ds.elements["x00540016"].items).toHaveLength(1); // radiopharmaceutical info kept
+    const rp = ds.elements["x00540016"].items![0].dataSet!;
+    expect(rp.string("x00181074")).toBe("350000000");
+    const eventUid = rp.string("x00083012")!;
+    expect(eventUid).toMatch(/^2\.25\.[1-9][0-9]*$/);
+    expect(eventUid).toHaveLength("1.3.12.2.1107.5.1.4.10043.20261113075700123".length);
+    // Same nested UID → same replacement in every file of the series.
+    expect(datasets[1].elements["x00540016"].items![0].dataSet!.string("x00083012")).toBe(eventUid);
     expect(ds.string("x00120062")).toBe("YES");
     // Replacement UIDs are consistent across the series.
     expect(datasets[1].string("x0020000d")).toBe(ds.string("x0020000d"));
@@ -373,5 +390,17 @@ describe("anonymization", () => {
     });
     const ds = dicomParser.parseDicom(files[0].bytes);
     expect(ds.elements["x00101030"]).toBeUndefined();
+  });
+});
+
+describe("sameLengthUid", () => {
+  it("produces valid UIDs of the requested length", async () => {
+    const { sameLengthUid } = await import("./anonymize");
+    for (let len = 7; len <= 64; len++) {
+      const uid = sameLengthUid(len);
+      expect(uid).toHaveLength(len);
+      expect(uid).toMatch(/^2\.25\.[1-9][0-9]*(\.[1-9][0-9]*)?$/);
+      expect(BigInt(uid.split(".")[2]) < 2n ** 128n).toBe(true);
+    }
   });
 });
