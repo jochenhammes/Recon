@@ -46,6 +46,7 @@ interface FileSpec {
   instanceNumber?: number;
   pixelRepresentation?: number;
   bitsAllocated?: number;
+  extra?: El[];
 }
 
 /** Builds a Part10 DICOM with meta header, a private tag, an undefined-length sequence and a defined-length sequence. */
@@ -105,6 +106,8 @@ function buildPart10(spec: FileSpec): Uint8Array<ArrayBuffer> {
     { tag: [0x0054, 0x0052], vr: "SQ", value: seqItem },
     { tag: [0x7fe0, 0x0010], vr: bits === 8 ? "OB" : "OW", value: pixelBytes },
   ];
+  if (spec.extra) elements.push(...spec.extra);
+  elements.sort((x, y) => x.tag[0] - y.tag[0] || x.tag[1] - y.tag[1]);
   const groupLength = enc({ tag: [0x0002, 0x0000], vr: "UL", value: u32le(meta.length) }, true);
   const preamble = new Uint8Array(128);
   const magic = Uint8Array.of(0x44, 0x49, 0x43, 0x4d);
@@ -303,5 +306,72 @@ describe("buildNiftiFromOriginalHeader", () => {
     expect(odv.getInt32(352, true)).toBe(16);
     const reparsed = parseNifti1(out.buffer);
     expect(Array.from(reparsed.volume.data)).toEqual([0, 20, 40, 60, 80, 1, 1, 1]);
+  });
+});
+
+describe("anonymization", () => {
+  const identifying: El[] = [
+    { tag: [0x0008, 0x0050], vr: "SH", value: s("SH", "ACC123456") },
+    { tag: [0x0008, 0x0070], vr: "LO", value: s("LO", "ACME MEDICAL") },
+    { tag: [0x0008, 0x0080], vr: "LO", value: s("LO", "Uniklinik Musterstadt") },
+    { tag: [0x0008, 0x0090], vr: "PN", value: s("PN", "Dr^Referrer") },
+    { tag: [0x0008, 0x1010], vr: "SH", value: s("SH", "PETCT01") },
+    { tag: [0x0008, 0x1030], vr: "LO", value: s("LO", "PET Ganzkoerper Musterstadt") },
+    { tag: [0x0008, 0x1070], vr: "PN", value: s("PN", "Operator^Olga") },
+    { tag: [0x0008, 0x1090], vr: "LO", value: s("LO", "SuperScan 9000") },
+    { tag: [0x0008, 0x1110], vr: "SQ", value: item(enc({ tag: [0x0008, 0x1155], vr: "UI", value: s("UI", "9.9.9.9") }, true)) },
+    { tag: [0x0010, 0x0020], vr: "LO", value: s("LO", "PID-777") },
+    { tag: [0x0010, 0x0030], vr: "DA", value: s("DA", "19700101") },
+    { tag: [0x0010, 0x1030], vr: "DS", value: s("DS", "72.5") },
+    { tag: [0x0018, 0x1000], vr: "LO", value: s("LO", "SN-424242") },
+    { tag: [0x0018, 0x1020], vr: "LO", value: s("LO", "VG80B") },
+    { tag: [0x0020, 0x0052], vr: "UI", value: s("UI", "1.2.3.555") },
+    { tag: [0x0054, 0x0016], vr: "SQ", value: item(enc({ tag: [0x0018, 0x1074], vr: "DS", value: s("DS", "350000000") }, true)) },
+  ];
+  const mk = (n: number) =>
+    asFile(buildPart10({ rows: 2, cols: 2, frames: 1, pixels: [n, n, n, n], instanceNumber: n, extra: identifying }), `69094${n}.dcm`);
+
+  it("removes patient, operator and device information everywhere in the file", async () => {
+    const loaded = await loadVolumeFromFiles([mk(1), mk(2)]);
+    const { files } = buildEditedDicomFiles(loaded.volume, loaded.source as DicomSource, {
+      anonymize: { pseudonym: "TEST01", retainPatientCharacteristics: true },
+    });
+    expect(files.map((f) => f.name)).toEqual(["IM00001.dcm", "IM00002.dcm"]);
+
+    const forbidden = ["Doe^Jane", "PID-777", "ACC123456", "ACME", "Musterstadt", "Referrer", "Olga", "PETCT01",
+      "SuperScan", "SN-424242", "VG80B", "19700101", "VENDOR PRIVATE", "SPECT AC", "1.2.3.100", "1.2.3.555", "9.9.9.9"];
+    const datasets = files.map((f) => {
+      const text = new TextDecoder("latin1").decode(f.bytes);
+      for (const word of forbidden) expect(text, word).not.toContain(word);
+      return dicomParser.parseDicom(f.bytes);
+    });
+
+    const ds = datasets[0];
+    expect(ds.string("x00100010")).toBe("TEST01");
+    expect(ds.string("x00100020")).toBe("TEST01");
+    expect(ds.elements["x00100030"].length).toBe(0); // Type 2: kept but empty
+    expect(ds.elements["x00080070"].length).toBe(0);
+    expect(ds.elements["x00081090"]).toBeUndefined();
+    expect(ds.elements["x00291010"]).toBeUndefined();
+    expect(ds.elements["x00081110"]).toBeUndefined();
+    expect(ds.string("x00101030")).toBe("72.5"); // weight retained for SUV
+    expect(ds.elements["x00540016"].items).toHaveLength(1); // radiopharmaceutical info kept
+    expect(ds.string("x00120062")).toBe("YES");
+    // Replacement UIDs are consistent across the series.
+    expect(datasets[1].string("x0020000d")).toBe(ds.string("x0020000d"));
+    expect(datasets[1].string("x00200052")).toBe(ds.string("x00200052"));
+    expect(datasets[1].string("x0020000e")).toBe(ds.string("x0020000e"));
+
+    const reloaded = await loadVolumeFromFiles(files.map((f) => asFile(f.bytes, f.name)));
+    expect(Array.from(reloaded.volume.data)).toEqual(Array.from(loaded.volume.data));
+  });
+
+  it("can drop patient characteristics too", async () => {
+    const loaded = await loadVolumeFromFiles([mk(1)]);
+    const { files } = buildEditedDicomFiles(loaded.volume, loaded.source as DicomSource, {
+      anonymize: { pseudonym: "X", retainPatientCharacteristics: false },
+    });
+    const ds = dicomParser.parseDicom(files[0].bytes);
+    expect(ds.elements["x00101030"]).toBeUndefined();
   });
 });

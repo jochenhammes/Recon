@@ -2,6 +2,7 @@ import type { DicomSourceFile, VolumeSource } from "../dataset/types";
 import type { Volume3D } from "../viewer/volume";
 import { type EncodedPixels, encodePixels } from "./pixelEncode";
 import { EXPLICIT_VR_LE, type TagOverrides, formatDS, rewriteDicom, stringValue, tagKey, usValue } from "./dicomRewriter";
+import { type AnonymizeContext, type AnonymizeOptions, addAnonymizationOverrides, createAnonymizeContext } from "./anonymize";
 import { generateUid } from "./uid";
 
 export type DicomSource = Extract<VolumeSource, { kind: "dicom" }>;
@@ -16,6 +17,8 @@ export interface EditedDicomOptions {
    * the original window, which no longer fits after an edit. Only applied where the original has a window.
    */
   adjustWindow?: boolean;
+  /** De-identify patient, institution and device information; files are renamed IM00001.dcm, … */
+  anonymize?: AnonymizeOptions;
 }
 
 export interface ExportedFile {
@@ -82,10 +85,12 @@ export function buildEditedDicomFiles(volume: Volume3D, source: DicomSource, opt
   const seriesUid = generateUid();
   const warnings: string[] = [];
   const usedNames = new Set<string>();
+  const anon = opts.anonymize ? createAnonymizeContext(opts.anonymize) : undefined;
   const files = source.files.map((file, i) => {
-    const { overrides, warning } = buildFileOverrides(file, encodedFiles[i], seriesUid, series, opts);
-    if (warning) warnings.push(warning);
-    return { name: uniqueName(file.fileName, usedNames), bytes: rewriteDicom(file, overrides) };
+    const { overrides, warning } = buildFileOverrides(file, encodedFiles[i], seriesUid, series, opts, anon);
+    if (warning) warnings.push(anon ? `Datei ${i + 1}: ${warning.slice(file.fileName.length + 2)}` : warning);
+    const name = anon ? `IM${String(i + 1).padStart(5, "0")}.dcm` : uniqueName(file.fileName, usedNames);
+    return { name, bytes: rewriteDicom(file, overrides) };
   });
   return { files, warnings };
 }
@@ -126,10 +131,19 @@ function pixelValue(v: number, pixelRepresentation: number): { vr: string; value
   return { vr: pixelRepresentation === 1 ? "SS" : "US", value };
 }
 
-function buildFileOverrides(file: DicomSourceFile, encoded: EncodedPixels, seriesUid: string, series: SeriesInfo, opts: EditedDicomOptions) {
+function buildFileOverrides(
+  file: DicomSourceFile,
+  encoded: EncodedPixels,
+  seriesUid: string,
+  series: SeriesInfo,
+  opts: EditedDicomOptions,
+  anon?: AnonymizeContext,
+) {
   const { dataSet } = file;
   const enc = encoded.encoding;
   const overrides: TagOverrides = new Map();
+  // De-identification first; the export-specific overrides below take precedence where they overlap.
+  if (anon) addAnonymizationOverrides(dataSet, anon, overrides);
   const notes: string[] = [];
 
   if (dataSet.elements[T.PixelData]?.encapsulatedPixelData) {
@@ -190,7 +204,10 @@ function buildFileOverrides(file: DicomSourceFile, encoded: EncodedPixels, serie
       overrides.set(T.ImageType, stringValue("CS", parts.join("\\")));
     }
   }
-  if (opts.seriesDescriptionSuffix) {
+  if (anon) {
+    // Free-text descriptions may name the site or scanner model.
+    overrides.set(T.SeriesDescription, stringValue("LO", `ANONYMISIERT${opts.seriesDescriptionSuffix ?? ""}`.slice(0, 64)));
+  } else if (opts.seriesDescriptionSuffix) {
     const desc = `${(dataSet.string(T.SeriesDescription) ?? "").trim()}${opts.seriesDescriptionSuffix}`.trim().slice(0, 64);
     overrides.set(T.SeriesDescription, stringValue("LO", desc));
   }

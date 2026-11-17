@@ -28,6 +28,10 @@ function describeRecon(params: ReconParams | undefined): string {
     : `OSEM (${params.numSubsets} Subsets, ${params.numIterations} Iterationen)`;
 }
 
+function safeFileName(s: string): string {
+  return s.trim().replace(/[^A-Za-z0-9_.-]+/g, "_");
+}
+
 function downloadBytes(bytes: Uint8Array<ArrayBuffer>, fileName: string, mimeType: string) {
   const blob = new Blob([bytes], { type: mimeType });
   const url = URL.createObjectURL(blob);
@@ -44,6 +48,9 @@ export function ExportPanel({ dataset }: ExportPanelProps) {
   const { source, current: volume, edits } = dataset;
   const [markSeries, setMarkSeries] = useState(true);
   const [adjustWindow, setAdjustWindow] = useState(true);
+  const [anonymize, setAnonymize] = useState(false);
+  const [pseudonym, setPseudonym] = useState("ANONYM");
+  const [retainPatientChars, setRetainPatientChars] = useState(true);
   const [messages, setMessages] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,9 +77,11 @@ export function ExportPanel({ dataset }: ExportPanelProps) {
           seriesDescriptionSuffix: markSeries && edited ? " [bearbeitet]" : undefined,
           derivationDescription: edited ? editDescription : undefined,
           adjustWindow: edited && adjustWindow,
+          anonymize: anonymize ? { pseudonym, retainPatientCharacteristics: retainPatientChars } : undefined,
         });
-        if (files.length === 1) downloadBytes(files[0].bytes, `${baseName}${suffix}.dcm`, "application/dicom");
-        else downloadBytes(buildZip(files), `${baseName}${suffix}.zip`, "application/zip");
+        const outBase = anonymize ? `${safeFileName(pseudonym) || "ANONYM"}${edited ? "_edited" : ""}` : `${baseName}${suffix}`;
+        if (files.length === 1) downloadBytes(files[0].bytes, `${outBase}.dcm`, "application/dicom");
+        else downloadBytes(buildZip(files), `${outBase}.zip`, "application/zip");
         return warnings;
       }
       const description =
@@ -114,6 +123,33 @@ export function ExportPanel({ dataset }: ExportPanelProps) {
       <button className="secondary-btn" onClick={exportNifti}>
         {source.kind === "nifti" ? "Als NIfTI speichern (Original-Header)" : "Als NIfTI speichern"}
       </button>
+      {source.kind === "dicom" && (
+        <div className="anonymize-box">
+          <label className="checkbox-field">
+            <input type="checkbox" checked={anonymize} onChange={(e) => setAnonymize(e.target.checked)} />
+            DICOM anonymisieren
+          </label>
+          {anonymize && (
+            <>
+              <label className="field">
+                Pseudonym (Patientenname/-ID)
+                <input type="text" value={pseudonym} onChange={(e) => setPseudonym(e.target.value)} />
+              </label>
+              <label className="checkbox-field">
+                <input type="checkbox" checked={retainPatientChars} onChange={(e) => setRetainPatientChars(e.target.checked)} />
+                Gewicht, Größe, Geschlecht, Alter behalten (für SUV)
+              </label>
+              <p className="export-note">
+                Entfernt bzw. geleert werden Patientendaten (Name, ID, Geburtsdatum, Adresse …), Betreiber (Institution,
+                Abteilung, Ärzte, Bediener, Station), Gerät (Hersteller, Modell, Seriennummern, Software, Kalibrierung),
+                Freitexte (Study-/Series-Beschreibung, Protokoll), Auftrags-/Referenz-Sequenzen und alle Private Tags.
+                Study-/Frame-of-Reference-UIDs werden ersetzt, Dateien heißen IM00001.dcm usw. Datum und Uhrzeit bleiben
+                erhalten (für Zerfallskorrektur/SUV).
+              </p>
+            </>
+          )}
+        </div>
+      )}
       {source.kind === "dicom" && edited && (
         <>
           <label className="checkbox-field">
@@ -127,7 +163,9 @@ export function ExportPanel({ dataset }: ExportPanelProps) {
         </>
       )}
       <p className="export-note">
-        {source.kind === "dicom"
+        {source.kind === "dicom" && anonymize
+          ? "Alle übrigen Header-Daten werden unverändert übernommen. Eingebrannte Beschriftungen im Bild werden nicht erkannt."
+          : source.kind === "dicom"
           ? "DICOM-Export übernimmt alle Header-Daten des Originals unverändert – inklusive Patientendaten. " +
             "Neu vergeben werden SOP- und Series-Instance-UID; ImageType wird auf DERIVED gesetzt, " +
             "kleinster/größter Pixelwert werden aktualisiert."

@@ -6,8 +6,8 @@ import { generateUid } from "./uid";
  *  SOP class for exporting derived (non-modality-acquired) pixel data. */
 const SOP_CLASS_UID = "1.2.840.10008.5.1.4.1.1.7.2";
 const TRANSFER_SYNTAX_EXPLICIT_VR_LE = "1.2.840.10008.1.2.1";
-const IMPLEMENTATION_CLASS_UID = "2.25.211738491552672508525331571830986184675";
-const IMPLEMENTATION_VERSION_NAME = "RECON_SPECT_01";
+export const IMPLEMENTATION_CLASS_UID = "2.25.211738491552672508525331571830986184675";
+export const IMPLEMENTATION_VERSION_NAME = "RECON_SPECT_01";
 
 const LONG_VR = new Set(["OB", "OW", "OF", "SQ", "UT", "UN"]);
 
