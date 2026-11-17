@@ -85,3 +85,15 @@ describe("resampling", () => {
     expect([iso.nx, iso.ny, iso.nz]).toEqual([100, 100, 75]);
   });
 });
+
+describe("worldToVoxelThrough", () => {
+  it("maps a target-native point to the source voxel via the target's placement", async () => {
+    const { worldToVoxelThrough } = await import("./transform");
+    const src = new Volume3D(new Float32Array(8), 2, 2, 2, [2, 2, 2]);
+    const srcW2v = worldToVoxelTransform(src.geometry);
+    const Mt = matrixFromParams(affine, center); // target native → reference
+    const q: [number, number, number] = [3, 1, -2];
+    const direct = applyWorldToVoxel(srcW2v, applyMat4(Mt, q));
+    close(applyWorldToVoxel(worldToVoxelThrough(srcW2v, Mt), q), direct, 9);
+  });
+});

@@ -182,3 +182,14 @@ export function parseTransformFile(text: string): TransformFile {
     throw new Error("Keine gültige Recon-Studio-Transformationsdatei.");
   return data as TransformFile;
 }
+
+/**
+ * World→voxel transform of a source volume as seen from another dataset's *own* coordinates:
+ * `w2v` maps reference-world points to source voxels and `M` places the other dataset in the reference
+ * world (its native → reference), so the result maps native points q to w2v(M·q).
+ */
+export function worldToVoxelThrough(w2v: WorldToVoxel, M: Mat4): WorldToVoxel {
+  if (isIdentityMat4(M)) return w2v;
+  const A = [M[0], M[1], M[2], M[4], M[5], M[6], M[8], M[9], M[10]];
+  return { m: mul3(w2v.m, A), origin: applyMat4(invert4(M), w2v.origin) };
+}

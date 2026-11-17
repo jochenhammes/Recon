@@ -1,5 +1,4 @@
 import { useState } from "react";
-import type { WorldToVoxel } from "../core/geometry";
 import type { LoadedDataset } from "../dataset/types";
 import { modalityLabel } from "../dataset/describe";
 import type { ReconParams } from "../recon/volume";
@@ -10,18 +9,13 @@ import { type ExportedFile, buildEditedDicomFiles } from "../export/editedDicomE
 import { buildNiftiFile, buildNiftiFromOriginalHeader } from "../export/niftiWriter";
 import { buildTemplateSeries } from "../export/templateDicomWriter";
 import { buildZip } from "../export/zip";
-import { resampleInto } from "../resample/resample";
-
-export interface FusionExportSource {
-  functional: LoadedDataset;
-  anatomical: LoadedDataset;
-  /** Functional world→voxel transform including the manual registration. */
-  functionalW2v: WorldToVoxel;
-}
+import { type SpaceDataset, SpaceExport } from "./SpaceExport";
 
 export interface ExportPanelProps {
   dataset: LoadedDataset;
-  fusion?: FusionExportSource;
+  /** All loaded datasets with their placement (for export into another dataset's space). */
+  spaces: SpaceDataset[];
+  activeId: string;
 }
 
 const FILTER_LABELS: Record<string, string> = {
@@ -62,7 +56,7 @@ function downloadFiles(files: ExportedFile[], base: string) {
   else downloadBytes(buildZip(files), `${base}.zip`, "application/zip");
 }
 
-export function ExportPanel({ dataset, fusion }: ExportPanelProps) {
+export function ExportPanel({ dataset, spaces, activeId }: ExportPanelProps) {
   const { source, current: volume, edits } = dataset;
   const [markSeries, setMarkSeries] = useState(true);
   const [adjustWindow, setAdjustWindow] = useState(true);
@@ -144,35 +138,6 @@ export function ExportPanel({ dataset, fusion }: ExportPanelProps) {
     });
   }
 
-  function fusedVolume() {
-    if (!fusion) throw new Error("Keine Fusion geladen.");
-    const target = fusion.anatomical.current;
-    return target.withData(resampleInto(fusion.functional.current, fusion.functionalW2v, target, "linear"));
-  }
-
-  function exportFusionDicom() {
-    run(() => {
-      if (!fusion || fusion.functional.source.kind !== "dicom") throw new Error("DICOM-Fusionsexport benötigt ein PET/SPECT aus DICOM.");
-      const resampled = fusedVolume();
-      const { files, warnings } = buildTemplateSeries(resampled, fusion.functional.source.files[0], {
-        seriesDescription: `${modalityLabel(fusion.functional.source)} auf CT-Raster`,
-        derivationDescription: `Auf das Voxelraster des CT resampelt${fusion.functional.edits.length ? `; ${fusion.functional.edits.map((e) => describeEdit(e)).join("; ")}` : ""}`,
-        frameOfReferenceUid: fusion.anatomical.current.geometry.frameOfReferenceUid,
-        anonymize: anonOptions,
-        headerEdits: fusion.functional.headerEdits,
-      });
-      downloadFiles(files, `${outBase}_auf_CT`);
-      return [`${files.length} Schichten auf dem CT-Raster (${resampled.nx} × ${resampled.ny} × ${resampled.nz}).`, ...warnings];
-    });
-  }
-
-  function exportFusionNifti() {
-    run(() => {
-      downloadBytes(buildNiftiFile(fusedVolume()), `${outBase}_auf_CT.nii`, "application/octet-stream");
-      return [];
-    });
-  }
-
   const dicomLabel =
     source.kind === "dicom"
       ? gridChanged
@@ -185,7 +150,7 @@ export function ExportPanel({ dataset, fusion }: ExportPanelProps) {
   return (
     <div className="export-panel">
       <section className="card">
-        <h3>Datensatz · {modalityLabel(source)}</h3>
+        <h3>Datensatz · {modalityLabel(source)} (eigener Raum)</h3>
         <button className="secondary-btn" disabled={working} onClick={exportDicom}>
           {dicomLabel}
         </button>
@@ -213,23 +178,9 @@ export function ExportPanel({ dataset, fusion }: ExportPanelProps) {
         </p>
       </section>
 
-      {fusion && (
-        <section className="card">
-          <h3>Fusion · {modalityLabel(fusion.functional.source)} auf CT-Raster</h3>
-          <p className="export-note">
-            {modalityLabel(fusion.functional.source)} inkl. Bearbeitungen und manueller Registrierung auf das Voxelraster des CT resampelt (
-            {fusion.anatomical.current.nx} × {fusion.anatomical.current.ny} × {fusion.anatomical.current.nz}).
-          </p>
-          <button className="secondary-btn" disabled={working || fusion.functional.source.kind !== "dicom"} onClick={exportFusionDicom}>
-            Als DICOM-Serie speichern
-          </button>
-          <button className="secondary-btn" disabled={working} onClick={exportFusionNifti}>
-            Als NIfTI speichern
-          </button>
-        </section>
-      )}
+      <SpaceExport key={activeId} spaces={spaces} activeId={activeId} anonymize={anonOptions} />
 
-      {(source.kind === "dicom" || fusion?.functional.source.kind === "dicom") && (
+      {spaces.some((sp) => sp.dataset.source.kind === "dicom") && (
         <section className="card">
           <label className="checkbox-field">
             <input type="checkbox" checked={anonymize} onChange={(e) => setAnonymize(e.target.checked)} />

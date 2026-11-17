@@ -609,10 +609,10 @@ function App() {
     </>
   );
 
-  const fusionExport =
-    overlay && reference && w2vById.get(overlay.id)
-      ? { functional: overlay.dataset, anatomical: reference.dataset, functionalW2v: w2vById.get(overlay.id)! }
-      : undefined;
+  const spaces = entries.flatMap((e) => {
+    const w2v = w2vById.get(e.id);
+    return w2v ? [{ id: e.id, label: `${modalityLabel(e.dataset.source)} · ${e.dataset.displayName}`, dataset: e.dataset, matrix: e.matrix, w2v }] : [];
+  });
 
   const registrationTab = reference && moving && movingCenter && (
     <>
@@ -750,7 +750,7 @@ function App() {
       label: "Export",
       icon: Download,
       disabled: !dataset,
-      content: dataset && <ExportPanel dataset={dataset} fusion={fusionExport} />,
+      content: dataset && active && <ExportPanel dataset={dataset} spaces={spaces} activeId={active.id} />,
     },
   ];
 

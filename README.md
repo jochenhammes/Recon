@@ -1,7 +1,7 @@
 # Recon Studio
 
 Browserbasierte Werkbank für nuklearmedizinische Bilddaten: SPECT-Rohdaten rekonstruieren, PET-, SPECT- und
-CT-Volumen ansehen, analysieren, bearbeiten, mit CT fusionieren und als DICOM oder NIfTI exportieren.
+CT- oder MRT-Volumen ansehen, analysieren, bearbeiten, coregistrieren, fusionieren und als DICOM oder NIfTI exportieren.
 Alles läuft clientseitig im Browser (Web Worker), es gibt keinen Server – die Daten verlassen den Rechner nicht.
 
 ## Funktionen
@@ -11,8 +11,9 @@ Alles läuft clientseitig im Browser (Web Worker), es gibt keinen Server – die
   Explicit/Implicit VR) und NIfTI (`.nii`, `.nii.gz`). Patientenkoordinaten werden aus ImagePositionPatient/
   ImageOrientationPatient (inkl. Functional Groups und NM Detector Information) bzw. NIfTI-sform/qform gelesen,
   Serien nach Position entlang der Schichtnormale sortiert.
-- **Zwei Datensätze**: funktionell (PET/SPECT) und anatomisch (CT/MR, wird über die Modalität erkannt). Ein Klick
-  auf einen Datensatz-Chip in der Kopfzeile wählt aus, worauf sich Analyse, Bearbeitung, Header und Export beziehen.
+- **Beliebig viele Datensätze** (z. B. PET + PET + MRT): einer ist die **Referenz** (Weltraum und Basis der Anzeige),
+  einer das **Overlay**; CT/MRT wird als Basis vorgeschlagen. Ein Klick auf einen Datensatz-Chip in der Kopfzeile
+  wählt aus, worauf sich Analyse, Bearbeitung, Header und Export beziehen.
 - **SPECT-Rekonstruktion** aus Rohdaten (Multi-Frame NM, ein oder zwei Detektorköpfe): FBP mit wählbarem Filter
   oder OSEM, parallel auf einem Worker-Pool.
 
@@ -25,10 +26,16 @@ Alles läuft clientseitig im Browser (Web Worker), es gibt keinen Server – die
 - Farbtabellen, Fenster-Eingabe und Presets (SUV 0–5/10/15, CT: Weichteil, Lunge, Knochen, Gehirn, Leber).
 - Screenshot der aktuellen Ansicht als PNG; dunkles und helles Design.
 
-### PET/SPECT-CT-Fusion
-- Ausrichtung über die Patientenkoordinaten; Hinweis bei abweichendem Frame of Reference.
-- PET/SPECT als farbiges, halbtransparentes Overlay über dem CT (Deckkraft, Sichtbarkeit je Layer).
-- **Manuelle Feinregistrierung**: Verschiebung (mm) und Drehung (°) des PET/SPECT um die Volumenmitte.
+### Fusion und Coregistrierung
+- Ausrichtung zunächst über die Patientenkoordinaten; Overlay farbig und halbtransparent (Deckkraft, Sichtbarkeit).
+- **Automatische Coregistrierung** beliebiger Paare (CT↔PET, PET↔PET, PET↔MRT …), angelehnt an SPM `spm_coreg` und
+  FSL FLIRT: Kostenfunktionen Normalisierte Mutual Information (Standard, Histogramm mit Partial-Volume-Verteilung und
+  Glättung), Mutual Information, Correlation Ratio, normalisierte Kreuzkorrelation (automatisch für gleiche
+  Modalität); robuste Intensitätsskalierung, Mehrstufen-Abtastung (8 → 4 → 2 mm) mit Jitter, Powell-Optimierung
+  mit Brent-Liniensuche; **rigide (6) oder affin (12 Parameter)**; optionale Grobsuche (Schwerpunkt + Rotationsraster
+  ±30°) für Daten aus verschiedenen Untersuchungen. Läuft im Web Worker mit Fortschritt und Abbruch; Ergebnis
+  übernehmen oder verwerfen.
+- **Manuelle Feinkorrektur** (Verschiebung/Drehung), Transformationsmatrix als JSON speichern und laden.
 
 ### Analyse
 - Anzahl Bildpunkte, Minimum, Mittelwert, Median, Maximum, Histogramm (Bins, log. Skala, ohne Nullwerte).
@@ -58,8 +65,10 @@ Alles läuft clientseitig im Browser (Web Worker), es gibt keinen Server – die
   Werte außerhalb des darstellbaren Bereichs liegen, wird neu skaliert (Intercept bleibt 0).
 - **Neue Serie aus Vorlage** nach Crop, Drehen oder Resampling: Original-Header als Vorlage, Geometrie- und
   Pixel-Tags neu (NM als Multi-Frame inkl. Detector Information).
-- **Fusion**: PET/SPECT inkl. Bearbeitungen und Registrierung auf das CT-Raster resampelt, als DICOM-Serie
-  (Frame of Reference des CT) oder NIfTI.
+- **In Zielraum exportieren**: beliebige Datensätze (inkl. Bearbeitungen und Registrierung) in den Raum eines anderen
+  Datensatzes resampeln – z. B. PET im MR-Raum oder MRT im PET-Raum – wahlweise mit eigener Matrix- oder Voxelgröße;
+  Interpolation nächster Nachbar, trilinear oder kubischer B-Spline; als DICOM-Serie (Header der Quelle, Geometrie und
+  Frame of Reference des Ziels) oder NIfTI.
 - **NIfTI** mit echter Orientierung (sform/qform); NIfTI-Quellen behalten ihren Original-Header.
 - **Anonymisierung** (optional): Patienten-, Betreiber- und Gerätedaten, Freitexte, Private Tags und Auftrags-/
   Referenzsequenzen werden entfernt oder geleert, UIDs ersetzt (auch in erhaltenen Sequenzen); Datum/Uhrzeit und
@@ -80,15 +89,17 @@ Ein Push auf `main` veröffentlicht die App über GitHub Pages.
 
 ## Architektur
 
-- `src/core/` – Patientengeometrie (LPS), Voxel↔Welt-Transformationen, DICOM-/NIfTI-Orientierung, Registrierung
+- `src/core/` – Patientengeometrie (LPS), Voxel↔Welt-Transformationen, DICOM-/NIfTI-Orientierung, affines
+  Transformationsmodell (12 Parameter, Matrix, JSON)
+- `src/registration/` – Coregistrierung (Kostenfunktionen, Powell/Brent, Mehrstufen-Ablauf, Worker-Runner)
+- `src/resample/` – Interpolation (NN/trilinear/B-Spline), Resampling in Zielraster, eigene Matrix-/Voxelgrößen
 - `src/dicom/` – DICOM-Parsing (Rohdaten), Pixel-Dekodierung inkl. JPEG Lossless
 - `src/recon/` – Sinogramm, FFT/Rampenfilter, FBP, OSEM
 - `src/viewer/` – Volume-Modell, Volumen-Loader, Ebenen-Abtastung im Weltkoordinatensystem, Layer-Komposition, Viewer, MIP
 - `src/dataset/` – Datenmodell geladener Volumen (Herkunft, Bearbeitungen, Header-Änderungen) und Hilfsfunktionen
 - `src/analysis/` – Statistik, Histogramm, SUV
 - `src/edit/` – Bearbeitungsoperationen, VOI, Filter, Geometrie-Operationen, Worker-Runner
-- `src/fusion/` – Resampling auf ein Zielraster
 - `src/header/` – Tag-Wörterbuch, Header-Modell, Validierung
 - `src/export/` – header-erhaltender DICOM-Rewriter, Vorlagen-Writer, Anonymisierung, Pixel-Kodierung, NIfTI, ZIP
-- `src/workers/` – Worker für Rekonstruktion und Bearbeitung
+- `src/workers/` – Worker für Rekonstruktion, Bearbeitung, Coregistrierung und Resampling
 - `src/ui/`, `src/components/` – Oberfläche (Shell, Panels)
