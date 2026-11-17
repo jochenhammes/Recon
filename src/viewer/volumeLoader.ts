@@ -225,9 +225,26 @@ interface ParsedDicomFile {
   frames: Float32Array[];
 }
 
-async function loadDicomVolume(files: File[]): Promise<LoadedVolume> {
+async function loadDicomVolume(input: File[]): Promise<LoadedVolume> {
+  // Files without extension are common for DICOM; skip hidden files and DICOMDIR index files.
+  const files = input.filter((f) => !f.name.startsWith(".") && f.name.toUpperCase() !== "DICOMDIR");
   if (files.length === 0) throw new VolumeLoadError("Keine Dateien ausgewählt.");
-  const parsed = await Promise.all(files.map(parseDicomFile));
+  // Tolerate non-image files in a folder (reports, text files …) as long as some files are images.
+  const results = await Promise.allSettled(files.map(parseDicomFile));
+  const ok = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+  if (ok.length === 0) {
+    const first = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
+    throw first?.reason instanceof Error ? first.reason : new VolumeLoadError("Keine lesbaren DICOM-Bilddateien gefunden.");
+  }
+  // Several series in one selection (e.g. a whole study folder): use the series with the most files.
+  const bySeries = new Map<string, ParsedDicomFile[]>();
+  for (const p of ok) {
+    const uid = p.file.dataSet.string("x0020000e")?.trim() ?? "";
+    const g = bySeries.get(uid);
+    if (g) g.push(p);
+    else bySeries.set(uid, [p]);
+  }
+  const parsed = [...bySeries.values()].sort((a, b) => b.length - a.length)[0];
 
   // Sort by position along the slice normal when patient coordinates are known, else by
   // InstanceNumber / SliceLocation.

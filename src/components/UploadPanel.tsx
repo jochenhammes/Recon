@@ -48,7 +48,6 @@ export function UploadPanel({ onLoaded }: UploadPanelProps) {
         <input
           ref={inputRef}
           type="file"
-          accept=".dcm,application/dicom"
           multiple
           hidden
           onChange={(e) => handleFiles(e.target.files)}
