@@ -1,0 +1,8 @@
+TotalSegmentator "total" task, 3 mm model (nnU-Net v2, Dataset297, fold 0), exported to ONNX for Recon Studio
+with tools/totalseg-onnx/export.py (no retraining, weights unchanged).
+
+Source: https://github.com/wasserth/TotalSegmentator — weights release v2.0.0-weights
+License: Apache License 2.0 (the "total" task is "openly available for any usage (Apache-2.0 license)").
+Please cite: Wasserthal J. et al., TotalSegmentator: Robust Segmentation of 104 Anatomic Structures in CT Images.
+Radiology: Artificial Intelligence 2023;5(5):e230024. https://doi.org/10.1148/ryai.230024
+nnU-Net: Isensee F. et al., Nature Methods 2021;18:203–211 (Apache License 2.0).

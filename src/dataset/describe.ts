@@ -14,6 +14,7 @@ export function modalityLabel(source: VolumeSource | undefined): string {
 /** Label for chips and lists: the modality, or "T1-Vorlage"/"PET-Vorlage" for templates. */
 export function datasetModality(d: LoadedDataset): string {
   if (d.template) return `${d.template.kind}-Vorlage`;
+  if (d.atlas) return "Labels";
   if (d.derivedFrom) return d.derivedFrom.label ?? modalityLabel(d.derivedFrom.source);
   return modalityLabel(d.source);
 }

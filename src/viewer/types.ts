@@ -12,6 +12,8 @@ export interface LayerDisplay {
   /** 0..1, used when the layer is drawn on top of another layer. */
   opacity: number;
   visible: boolean;
+  /** Nearest-neighbour sampling (label images: no blending of label numbers). */
+  nearest?: boolean;
 }
 
 /** Minimal voxel grid the viewer can sample (a Volume3D, or e.g. a VOI mask). */

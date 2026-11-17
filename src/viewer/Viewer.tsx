@@ -249,7 +249,11 @@ function PlaneView(props: PlaneViewProps) {
   const [gpuFailed, setGpuFailed] = useState(false);
   const gl = gpuFailed ? null : GlRenderer.get();
   const useGpu = !!gl && gl.canHost(volumes);
-  const samples = useMemo(() => (useGpu ? [] : volumes.map((v, i) => samplePlane(v, transforms[i], basis))), [useGpu, volumes, transforms, basis]);
+  const nearestKey = displays.map((d) => (d.nearest ? 1 : 0)).join("");
+  const samples = useMemo(
+    () => (useGpu ? [] : volumes.map((v, i) => samplePlane(v, transforms[i], basis, undefined, nearestKey[i] === "1"))),
+    [useGpu, volumes, transforms, basis, nearestKey],
+  );
   const image = useMemo(() => {
     if (useGpu) return { rgba: EMPTY_RGBA, width: basis.width, height: basis.height };
     const rgba = compositeLayers(

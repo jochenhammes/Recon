@@ -113,7 +113,7 @@ export function orientationLabels(kind: PlaneKind): [string, string, string, str
  * Samples a volume on a plane with trilinear interpolation. Points outside the volume become NaN
  * (rendered transparent). `w2v` maps world to continuous voxel index (may include registration).
  */
-export function samplePlane(volume: VoxelGrid, w2v: WorldToVoxel, b: PlaneBasis, out?: Float32Array): Float32Array {
+export function samplePlane(volume: VoxelGrid, w2v: WorldToVoxel, b: PlaneBasis, out?: Float32Array, nearest = false): Float32Array {
   const { width, height } = b;
   const res = out && out.length === width * height ? out : new Float32Array(width * height);
   const { nx, ny, nz, data } = volume;
@@ -142,6 +142,10 @@ export function samplePlane(volume: VoxelGrid, w2v: WorldToVoxel, b: PlaneBasis,
       const cx = x < 0 ? 0 : x > xMax ? xMax : x;
       const cy = y < 0 ? 0 : y > yMax ? yMax : y;
       const cz = z < 0 ? 0 : z > zMax ? zMax : z;
+      if (nearest) {
+        res[row + u] = data[Math.round(cz) * sliceSize + Math.round(cy) * nx + Math.round(cx)];
+        continue;
+      }
       const x0 = Math.floor(cx);
       const y0 = Math.floor(cy);
       const z0 = Math.floor(cz);

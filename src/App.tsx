@@ -7,6 +7,8 @@ import { buildDeformationField, fieldCoverage, parseDeformationField } from "./n
 import { DeformationFieldCard } from "./ui/DeformationFieldCard";
 import { CentiloidPanel, type CentiloidOutcome } from "./ui/CentiloidPanel";
 import { TumorPanel, type TumorIndication, type TumorMode } from "./ui/TumorPanel";
+import { CtSegCard } from "./ui/CtSegCard";
+import { type CtSegRun, runCtSegmentation } from "./segmentation/ctSegment";
 import { type Lesion, type ThresholdMethod, lesionStats } from "./tumor/segment";
 import { burdenCsv, tumorBurden } from "./tumor/metrics";
 import { runTumorSegmentation } from "./tumor/runner";
@@ -168,6 +170,20 @@ function App() {
   const tumorStroke = useRef<{ id: number; time: number } | null>(null);
   const tumorScratch = useRef<Uint8Array | null>(null);
   const tumorStatsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [ctSegRunning, setCtSegRunning] = useState(false);
+  const [ctSegProgress, setCtSegProgress] = useState<{ done: number; total: number; stage: string } | null>(null);
+  const [ctSegStatus, setCtSegStatus] = useState<string | null>(null);
+  const [ctSegError, setCtSegError] = useState<string | null>(null);
+  const ctSegRun = useRef<CtSegRun | null>(null);
+  // WebGPU only counts with a real adapter (navigator.gpu alone exists in many browsers without one).
+  const [webgpuAvailable, setWebgpuAvailable] = useState(false);
+  useEffect(() => {
+    const gpu = (navigator as unknown as { gpu?: { requestAdapter: () => Promise<unknown> } }).gpu;
+    gpu
+      ?.requestAdapter()
+      .then((a) => setWebgpuAvailable(!!a))
+      .catch(() => setWebgpuAvailable(false));
+  }, []);
   const [centiloidVois, setCentiloidVois] = useState<CentiloidVois | null>(null);
   const [centiloidRunning, setCentiloidRunning] = useState(false);
   const [centiloidStatus, setCentiloidStatus] = useState<string | null>(null);
@@ -273,7 +289,7 @@ function App() {
         label: "Läsionen",
         volume: { nx: tEntry.dataset.current.nx, ny: tEntry.dataset.current.ny, nz: tEntry.dataset.current.nz, data: tumorDisplay, geometry: tEntry.dataset.current.geometry },
         w2v: tW2v,
-        display: { window: [0, 255], lut: "labels", opacity: 0.55, visible: true },
+        display: { window: [0, 255], lut: "labels", opacity: 0.55, visible: true, nearest: true },
         hideInStatus: true,
       });
     if (voiMaskData && volume && activeW2v)
@@ -326,7 +342,7 @@ function App() {
 
   function addDataset(next: LoadedDataset): Entry {
     const entry: Entry = { id: `ds${nextEntryId++}`, dataset: next, display: defaultDisplay(next.current, next.source), matrix: IDENTITY_MAT4 };
-    if (next.atlas) entry.display = { window: [0, 255], lut: "labels", opacity: 0.45, visible: true };
+    if (next.atlas) entry.display = { window: [0, 255], lut: "labels", opacity: 0.45, visible: true, nearest: true };
     if ((next.template || next.atlas) && reference) {
       // Templates and atlases are added without changing reference, overlay or active dataset.
       setEntries((prev) => [...prev, entry]);
@@ -784,7 +800,18 @@ function App() {
   }
 
   // ── Tumor burden ──
-  const tumorTargets = entries.filter((e) => !e.dataset.template && !e.dataset.atlas && !isAnatomical(unitSource(e.dataset)));
+  /** CT datasets: DICOM modality CT, or other (e.g. NIfTI) volumes with air values (< −500 HU). */
+  const ctEntries = entries.filter((e) => {
+    if (e.dataset.template || e.dataset.atlas || e.dataset.derivedFrom) return false;
+    const m = datasetModality(e.dataset);
+    if (m === "CT") return true;
+    if (m !== "NIfTI") return false;
+    const d = e.dataset.current.data;
+    const step = Math.max(1, Math.floor(d.length / 20000));
+    for (let i = 0; i < d.length; i += step) if (d[i] < -500) return true;
+    return false;
+  });
+  const tumorTargets = entries.filter((e) => !e.dataset.template && !e.dataset.atlas && !isAnatomical(unitSource(e.dataset)) && !ctEntries.includes(e));
   const tumorEntry = byId(tumorTargetId) && tumorTargets.some((e) => e.id === tumorTargetId) ? byId(tumorTargetId) : (tumorTargets.find((e) => e.id === active?.id) ?? tumorTargets.find((e) => datasetModality(e.dataset) === "PT") ?? tumorTargets[0]);
   const tumorSuv = tumorEntry ? suvById.get(tumorEntry.id) : undefined;
   const tumorFactor = tumorSuv?.ok ? tumorSuv.info.factor : 1;
@@ -923,6 +950,40 @@ function App() {
     const data = new Float32Array(tumor.labels.length);
     for (let i = 0; i < data.length; i++) if (inc.has(tumor.labels[i])) data[i] = tumor.labels[i];
     downloadBytes(buildNiftiFile(e.dataset.current.withData(data)), `Laesionen_${e.dataset.displayName.replace(/\.nii(\.gz)?$/i, "").replace(/[^A-Za-z0-9_.-]+/g, "_")}.nii`);
+  }
+
+  // ── CT organ segmentation (browser, ONNX) ──
+  function startCtSegmentation(ctId: string, backend: "auto" | "wasm") {
+    const ct = byId(ctId);
+    if (!ct || ctSegRunning) return;
+    setCtSegRunning(true);
+    setCtSegError(null);
+    setCtSegStatus(null);
+    setCtSegProgress(null);
+    const t0 = performance.now();
+    const run = runCtSegmentation(ct.dataset.current, backend, setCtSegProgress);
+    ctSegRun.current = run;
+    run.promise
+      .then((r) => {
+        const g = r.grid.geometry;
+        const vol = new Volume3D(Float32Array.from(r.labels), r.grid.nz, r.grid.ny, r.grid.nx, [g.spacing[2], g.spacing[1], g.spacing[0]], { ...g, frameOfReferenceUid: ct.dataset.current.geometry.frameOfReferenceUid });
+        const labels = new Map(Object.entries(r.meta.labels).filter(([k]) => k !== "0").map(([k, v]) => [Number(k), v.replace(/_/g, " ")]));
+        const d = createDataset(vol, { kind: "reconstruction" }, `CT-Organe · ${ct.dataset.displayName}`);
+        const entry = addDataset({ ...d, atlas: { name: `CT-Organe (TotalSegmentator) · ${ct.dataset.displayName}`, labels, attribution: "TotalSegmentator total 3 mm (Wasserthal et al. 2023), Apache-2.0" } });
+        updateEntry(entry.id, { matrix: ct.matrix });
+        addOverlay(entry.id);
+        let n = 0;
+        for (const v of r.labels) if (v) n++;
+        setCtSegStatus(`Fertig in ${((performance.now() - t0) / 1000).toFixed(0)} s (${r.backend === "webgpu" ? "WebGPU" : "CPU"}): ${new Set(r.labels).size - 1} Strukturen, ${((n * g.spacing[0] * g.spacing[1] * g.spacing[2]) / 1e6).toFixed(1)} l segmentiert.`);
+      })
+      .catch((e) => {
+        if (!(e instanceof DOMException && e.name === "AbortError")) setCtSegError(`CT-Segmentierung fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
+      })
+      .finally(() => {
+        setCtSegRunning(false);
+        setCtSegProgress(null);
+        ctSegRun.current = null;
+      });
   }
 
   // ── Centiloid ──
@@ -1586,8 +1647,20 @@ function App() {
       label: "Tumorlast",
       shortLabel: "Tumor",
       icon: Target,
-      disabled: tumorTargets.length === 0,
+      disabled: tumorTargets.length === 0 && ctEntries.length === 0,
       content: (
+        <>
+        <CtSegCard
+          cts={ctEntries.map((e) => ({ id: e.id, label: entryLabel(e) }))}
+          defaultCtId={ctEntries[0]?.id ?? null}
+          running={ctSegRunning}
+          progress={ctSegProgress}
+          status={ctSegStatus}
+          error={ctSegError}
+          webgpu={webgpuAvailable}
+          onRun={startCtSegmentation}
+          onCancel={() => ctSegRun.current?.cancel()}
+        />
         <TumorPanel
           targets={tumorTargets.map((e) => ({ id: e.id, label: entryLabel(e) }))}
           targetId={tumorEntry?.id ?? null}
@@ -1615,6 +1688,7 @@ function App() {
           indication={tumorIndication}
           onIndicationChange={setTumorIndication}
         />
+        </>
       ),
     },
     {

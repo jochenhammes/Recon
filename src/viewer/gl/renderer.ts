@@ -17,10 +17,15 @@ void main() { gl_Position = vec4(aPos, 0.0, 1.0); }`;
 const SAMPLE = `
 uniform highp sampler3D uVol;
 uniform ivec3 uDims;
+uniform bool uNearest;
 bool sampleVol(vec3 p, out float val) {
   vec3 n = vec3(uDims);
   if (any(lessThan(p, vec3(-0.5))) || any(greaterThan(p, n - 0.5))) return false;
   vec3 c = clamp(p, vec3(0.0), n - 1.0);
+  if (uNearest) {
+    val = texelFetch(uVol, ivec3(floor(c + 0.5)), 0).r;
+    return true;
+  }
   ivec3 i0 = ivec3(floor(c));
   ivec3 i1 = min(i0 + 1, uDims - 1);
   vec3 f = c - vec3(i0);
@@ -169,7 +174,7 @@ export class GlRenderer {
     this.canvas = canvas;
     this.gl = gl;
     this.max3d = gl.getParameter(gl.MAX_3D_TEXTURE_SIZE) as number;
-    const uniforms = ["uVol", "uDims", "uLut", "uWindow", "uOpacity", "uBase", "uHeight"];
+    const uniforms = ["uVol", "uDims", "uNearest", "uLut", "uWindow", "uOpacity", "uBase", "uHeight"];
     this.plane = this.program(PLANE_FRAG, [...uniforms, "uWorld0", "uWorldDx", "uWorldDy", "uW2V", "uW2VOrigin"]);
     this.mip = this.program(MIP_FRAG, [...uniforms, "uImg0", "uImgD", "uImgSize", "uTheta", "uFlip"]);
     const buf = gl.createBuffer();
@@ -333,6 +338,7 @@ export class GlRenderer {
     gl.uniform2f(p.loc.uWindow, l.display.window[0], l.display.window[1]);
     gl.uniform1f(p.loc.uOpacity, Math.min(1, Math.max(0, l.display.opacity)));
     gl.uniform1i(p.loc.uBase, base ? 1 : 0);
+    gl.uniform1i(p.loc.uNearest, l.display.nearest ? 1 : 0);
   }
 
   /** Renders a plane view (layers bottom first, already filtered to visible ones). */
