@@ -10,7 +10,8 @@ import { TumorPanel, type TumorIndication, type TumorMode } from "./ui/TumorPane
 import { CtSegCard } from "./ui/CtSegCard";
 import { type CtSegRun, runCtSegmentation } from "./segmentation/ctSegment";
 import { type Lesion, type ThresholdMethod, lesionStats } from "./tumor/segment";
-import { burdenCsv, tumorBurden } from "./tumor/metrics";
+import { burdenCsv, splitBurden, tumorBurden } from "./tumor/metrics";
+import { EXCLUSION_PRESETS, annotateLesions, autoLiverCenter, organsOnGrid } from "./tumor/organs";
 import { runTumorSegmentation } from "./tumor/runner";
 import { transferVoi } from "./analysis/voiTransfer";
 import { DatasetOverview } from "./components/DatasetOverview";
@@ -166,6 +167,8 @@ function App() {
   const [tumorError, setTumorError] = useState<string | null>(null);
   const [tumorMode, setTumorMode] = useState<TumorMode>("none");
   const [tumorBrushMm, setTumorBrushMm] = useState(6);
+  const [tumorOrganId, setTumorOrganId] = useState<string | null | undefined>(undefined);
+  const [tumorAutoExclude, setTumorAutoExclude] = useState(true);
   const [liverRef, setLiverRef] = useState<{ entryId: string; mean: number; sd: number; ml: number } | null>(null);
   const tumorStroke = useRef<{ id: number; time: number } | null>(null);
   const tumorScratch = useRef<Uint8Array | null>(null);
@@ -816,6 +819,16 @@ function App() {
   const tumorSuv = tumorEntry ? suvById.get(tumorEntry.id) : undefined;
   const tumorFactor = tumorSuv?.ok ? tumorSuv.info.factor : 1;
 
+  const organEntries = entries.filter((e) => e.dataset.atlas);
+  const organEntry = tumorOrganId === null ? undefined : (byId(tumorOrganId ?? null) ?? organEntries.findLast((e) => e.dataset.displayName.startsWith("CT-Organe")));
+
+  /** Organ labels on the tumor PET grid (through both placements). */
+  function organLabelsFor(pet: Entry, organs: Entry): Uint8Array | null {
+    const w2v = w2vById.get(organs.id);
+    if (!w2v) return null;
+    return organsOnGrid(organs.dataset.current, transformedWorldToVoxel(w2v, invert4(pet.matrix)), pet.dataset.current);
+  }
+
   async function runTumor(method: ThresholdMethod, minVolumeMl: number) {
     const e = tumorEntry;
     if (!e) return;
@@ -823,7 +836,17 @@ function App() {
     setTumorError(null);
     try {
       const r = await runTumorSegmentation(e.dataset.current, { method, suvFactor: tumorFactor, minVolumeMl });
-      setTumor({ entryId: e.id, labels: r.labels, lesions: r.lesions, description: r.description, version: 0 });
+      let lesions = r.lesions;
+      let description = r.description;
+      if (organEntry?.dataset.atlas) {
+        const organs = organLabelsFor(e, organEntry);
+        if (organs) {
+          const excluded = new Set(tumorAutoExclude ? EXCLUSION_PRESETS[tumorIndication] : []);
+          lesions = annotateLesions(lesions, r.labels, organs, organEntry.dataset.atlas.labels, excluded);
+          if (tumorAutoExclude) description += `; automatisch ausgeschlossen: ${EXCLUSION_PRESETS[tumorIndication].map((n) => n.replace(/_/g, " ")).join(", ")}`;
+        }
+      }
+      setTumor({ entryId: e.id, labels: r.labels, lesions, description, version: 0 });
       setTumorMode("pick");
     } catch (err) {
       setTumorError(err instanceof Error ? err.message : String(err));
@@ -853,6 +876,43 @@ function App() {
     const mean = s / n;
     const [sx, sy, sz] = e.dataset.current.geometry.spacing;
     setLiverRef({ entryId: e.id, mean, sd: Math.sqrt(Math.max(0, ss / n - mean * mean)), ml: (n * sx * sy * sz) / 1000 });
+  }
+
+  /** Liver reference from the CT liver mask: 3 cm sphere in the right lobe, statistics on the PET. */
+  function autoLiver() {
+    const pet = tumorEntry;
+    const organs = organEntry;
+    const atlas = organs?.dataset.atlas;
+    if (!pet || !organs || !atlas) return;
+    const liverId = [...atlas.labels].find(([, n]) => n.replace(/ /g, "_") === "liver")?.[0];
+    if (liverId === undefined) {
+      setTumorError("Keine Leber in den Organmasken.");
+      return;
+    }
+    const c = autoLiverCenter(organs.dataset.current, liverId, 15);
+    if (!c) {
+      setTumorError("Leber zu klein für eine 3-cm-Referenzkugel.");
+      return;
+    }
+    const center = applyMat4(invert4(pet.matrix), applyMat4(organs.matrix, c));
+    const v = pet.dataset.current;
+    const mask = voiMask(v, { kind: "sphere", center, radius: 15 });
+    let n = 0, sum = 0, ss = 0;
+    for (let i = 0; i < mask.length; i++)
+      if (mask[i] && Number.isFinite(v.data[i])) {
+        const x = v.data[i] * tumorFactor;
+        n++;
+        sum += x;
+        ss += x * x;
+      }
+    if (!n) return;
+    const mean = sum / n;
+    const [sx, sy, sz] = v.geometry.spacing;
+    setLiverRef({ entryId: pet.id, mean, sd: Math.sqrt(Math.max(0, ss / n - mean * mean)), ml: (n * sx * sy * sz) / 1000 });
+    // Show the sphere for checking (as VOI on the PET) and move the crosshair there.
+    setVoi({ entryId: pet.id, shape: { kind: "sphere", center, radius: 15 }, version: (voi?.version ?? 0) + 1 });
+    setCursor(applyMat4(pet.matrix, center));
+    setTumorError(null);
   }
 
   /** Voxel index of a reference-world point on the tumor PET, or −1 outside. */
@@ -1687,6 +1747,14 @@ function App() {
           onClear={() => setTumor(null)}
           indication={tumorIndication}
           onIndicationChange={setTumorIndication}
+          organOptions={organEntries.map((e) => ({ id: e.id, label: e.dataset.displayName }))}
+          organId={organEntry?.id ?? null}
+          onOrganChange={(id) => setTumorOrganId(id)}
+          autoExclude={tumorAutoExclude}
+          onAutoExcludeChange={setTumorAutoExclude}
+          canAutoLiver={!!organEntry?.dataset.atlas && [...organEntry.dataset.atlas.labels.values()].some((n) => n.replace(/ /g, "_") === "liver")}
+          onAutoLiver={autoLiver}
+          split={tumor && tumorIndication === "psma" && organEntry ? splitBurden(tumor.lesions) : null}
         />
         </>
       ),

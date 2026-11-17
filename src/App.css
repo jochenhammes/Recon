@@ -1202,3 +1202,12 @@ tr.clickable:hover td {
   max-width: 160px;
   overflow-wrap: anywhere;
 }
+
+tr.excluded-row td {
+  color: var(--text-dim);
+  text-decoration: line-through;
+}
+.organ-cell {
+  font-size: 11px;
+  white-space: normal !important;
+}

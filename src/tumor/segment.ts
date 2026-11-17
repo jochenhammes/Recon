@@ -40,6 +40,10 @@ export interface Lesion {
   included: boolean;
   /** Why the lesion is excluded (automatic), if so. */
   note?: string;
+  /** Dominant CT organ (> 50 % of the voxels), if organ labels are available. */
+  organ?: string;
+  /** Mainly in bone (skeleton labels). */
+  bone?: boolean;
 }
 
 export interface TumorSegmentation {
@@ -162,6 +166,8 @@ export function lesionStats(volume: Volume3D, labels: Int32Array, suvFactor: num
       maxIndex: a.maxIndex,
       included: prev.get(id)?.included ?? true,
       note: prev.get(id)?.note,
+      organ: prev.get(id)?.organ,
+      bone: prev.get(id)?.bone,
     });
   }
   return out;

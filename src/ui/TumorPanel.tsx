@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { formatValue } from "../components/format";
 import type { TumorBurden } from "../tumor/metrics";
+import { EXCLUSION_PRESETS } from "../tumor/organs";
 import type { Lesion, ThresholdMethod } from "../tumor/segment";
 import type { Option } from "./NormalizationPanel";
 
@@ -52,6 +53,16 @@ export interface TumorPanelProps {
   onClear: () => void;
   indication: TumorIndication;
   onIndicationChange: (i: TumorIndication) => void;
+  /** CT organ label datasets (e.g. from the organ segmentation). */
+  organOptions: Option[];
+  organId: string | null;
+  onOrganChange: (id: string | null) => void;
+  autoExclude: boolean;
+  onAutoExcludeChange: (v: boolean) => void;
+  canAutoLiver: boolean;
+  onAutoLiver: () => void;
+  /** Bone / soft-tissue split (PSMA). */
+  split: { bone: TumorBurden; soft: TumorBurden } | null;
 }
 
 const f = (v: number, d = 2) => (Number.isFinite(v) ? v.toLocaleString("de-DE", { minimumFractionDigits: d, maximumFractionDigits: d }) : "–");
@@ -144,11 +155,37 @@ export function TumorPanel(props: TumorPanelProps) {
                 ? `Leber-Referenz: SUV ${f(props.liver.mean)} ± ${f(props.liver.sd)} (${f(props.liver.ml, 1)} ml) → Schwelle SUV ${f(num(liverA) * props.liver.mean + num(liverB) * props.liver.sd)}`
                 : "Leber-Referenz fehlt: im Tab „Bearbeiten“ eine 3-cm-Kugel-VOI (Radius 15 mm) im rechten Leberlappen setzen und übernehmen."}
             </p>
-            <button className="secondary-btn" disabled={!props.voiAvailable} onClick={props.onLiverFromVoi}>
-              Aktuelle VOI als Leber-Referenz
-            </button>
+            <div className="button-row">
+              <button className="secondary-btn" disabled={!props.canAutoLiver} onClick={props.onAutoLiver} title="3-cm-Kugel im rechten Leberlappen aus der CT-Lebermaske">
+                Leber-VOI automatisch
+              </button>
+              <button className="secondary-btn" disabled={!props.voiAvailable} onClick={props.onLiverFromVoi}>
+                Aktuelle VOI übernehmen
+              </button>
+            </div>
           </>
         )}
+        <label className="field">
+          Organmasken (CT)
+          <select value={props.organId ?? ""} disabled={props.busy} onChange={(e) => props.onOrganChange(e.target.value || null)}>
+            <option value="">keine</option>
+            {props.organOptions.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {props.organId && (
+          <>
+            <label className="checkbox-field">
+              <input type="checkbox" checked={props.autoExclude} onChange={(e) => props.onAutoExcludeChange(e.target.checked)} />
+              Physiologische Anreicherung ausschließen: {EXCLUSION_PRESETS[indication].map((n) => n.replace(/_/g, " ")).join(", ")}
+            </label>
+            {indication === "psma" && <p className="tool-hint">Speichel- und Tränendrüsen sind im CT-Modell nicht enthalten – Kopf-Anreicherungen bitte per Klick ausschließen.</p>}
+          </>
+        )}
+        {props.organOptions.length === 0 && <p className="tool-hint">Ohne Organmasken: oben „Organe segmentieren“ (CT nötig) – dann werden Niere, Blase usw. automatisch ausgeschlossen.</p>}
         <label className="field">
           Mindestvolumen je Läsion (ml)
           <input value={minMl} onChange={(e) => setMinMl(e.target.value)} />
@@ -174,6 +211,18 @@ export function TumorPanel(props: TumorPanelProps) {
             <dd>{f(b.suvMax)}</dd>
             <dt>SUVmean</dt>
             <dd>{f(b.suvMean)}</dd>
+            {indication === "psma" && props.split && (
+              <>
+                <dt>davon Knochen</dt>
+                <dd>
+                  {props.split.bone.lesions} · {f(props.split.bone.tmtv, 1)} ml
+                </dd>
+                <dt>davon Weichteil</dt>
+                <dd>
+                  {props.split.soft.lesions} · {f(props.split.soft.tmtv, 1)} ml
+                </dd>
+              </>
+            )}
             {indication === "lymphoma" && (
               <>
                 <dt>Dmax</dt>
@@ -233,6 +282,7 @@ export function TumorPanel(props: TumorPanelProps) {
                   <th>SUVmax</th>
                   <th>SUVpeak</th>
                   <th>{tlgLabel}</th>
+                  {props.organId && <th>Ort</th>}
                 </tr>
               </thead>
               <tbody>
@@ -248,6 +298,7 @@ export function TumorPanel(props: TumorPanelProps) {
                       <td>{f(l.suvMax)}</td>
                       <td>{f(l.suvPeak)}</td>
                       <td>{f(l.tlg, 1)}</td>
+                      {props.organId && <td className="organ-cell">{l.bone ? "Knochen" : (l.organ ?? "")}</td>}
                     </tr>
                   ))}
               </tbody>
