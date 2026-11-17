@@ -1,7 +1,7 @@
 # Recon Studio
 
-Browserbasierte Werkbank für nuklearmedizinische Bilddaten: SPECT-Rohdaten rekonstruieren, PET-, SPECT- und
-CT- oder MRT-Volumen ansehen, analysieren, bearbeiten, coregistrieren, fusionieren und als DICOM oder NIfTI exportieren.
+Browserbasierte Werkbank für nuklearmedizinische Bilddaten: SPECT-Rohdaten rekonstruieren, PET-, SPECT-,
+CT- und MRT-Volumen ansehen, analysieren, bearbeiten, coregistrieren, fusionieren und als DICOM oder NIfTI exportieren.
 Alles läuft clientseitig im Browser (Web Worker), es gibt keinen Server – die Daten verlassen den Rechner nicht.
 
 ## Funktionen
