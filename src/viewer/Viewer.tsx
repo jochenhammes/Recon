@@ -23,6 +23,8 @@ export interface ViewerProps {
   layers: ViewerLayer[];
   /** Layer that window/level drags apply to. */
   activeLayerId: string;
+  /** Layer shown in the MIP view (default: the active layer). */
+  mipLayerId?: string;
   cursor: Vec3 | null;
   onCursorChange: (p: Vec3) => void;
   onWindowChange: (layerId: string, window: [number, number]) => void;
@@ -53,15 +55,16 @@ export function Viewer(props: ViewerProps) {
   });
   const [hover, setHover] = useState<Vec3 | null>(null);
   const active = layers.find((l) => l.id === activeLayerId) ?? layers[layers.length - 1];
+  const mipLayer = visible.find((l) => l.id === (props.mipLayerId ?? activeLayerId)) ?? visible[visible.length - 1];
 
-  function dragWindow(dx: number, dy: number) {
-    if (!active) return;
-    const [lo, hi] = active.display.window;
+  function dragWindow(dx: number, dy: number, target: ViewerLayer | undefined = active) {
+    if (!target) return;
+    const [lo, hi] = target.display.window;
     // ~200 px of drag spans the current window width, as before.
     const step = Math.max(hi - lo, 1e-6) / 200;
     const width = Math.max(hi - lo + dx * step, 1e-6);
     const level = (lo + hi) / 2 - dy * step;
-    props.onWindowChange(active.id, [level - width / 2, level + width / 2]);
+    props.onWindowChange(target.id, [level - width / 2, level + width / 2]);
   }
 
   function setTransform(kind: ViewKind, t: ViewTransform) {
@@ -77,10 +80,10 @@ export function Viewer(props: ViewerProps) {
     kind === "mip" ? (
       <MipView
         key="mip"
-        layer={visible.find((l) => l.id === activeLayerId) ?? visible[visible.length - 1]}
+        layer={mipLayer}
         transform={transforms.mip}
         onTransformChange={(t) => setTransform("mip", t)}
-        onWindowDrag={dragWindow}
+        onWindowDrag={(dx, dy) => dragWindow(dx, dy, mipLayer)}
         onDoubleClick={() => toggleMaximize("mip")}
       />
     ) : (

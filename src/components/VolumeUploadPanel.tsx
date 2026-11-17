@@ -3,9 +3,11 @@ import { type LoadedVolume, VolumeLoadError, loadVolumeFromFiles } from "../view
 
 export interface VolumeUploadPanelProps {
   onLoaded: (loaded: LoadedVolume, fileName: string) => void;
+  title?: string;
+  description?: string;
 }
 
-export function VolumeUploadPanel({ onLoaded }: VolumeUploadPanelProps) {
+export function VolumeUploadPanel({ onLoaded, title = "Volumen laden", description }: VolumeUploadPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -28,8 +30,8 @@ export function VolumeUploadPanel({ onLoaded }: VolumeUploadPanelProps) {
 
   return (
     <div className="upload-panel">
-      <h3>Volumen laden</h3>
-      <p>PET, SPECT oder CT als DICOM (Datei oder ganze Serie) bzw. NIfTI (.nii, .nii.gz).</p>
+      <h3>{title}</h3>
+      <p>{description ?? "PET, SPECT oder CT als DICOM (Datei oder ganze Serie) bzw. NIfTI (.nii, .nii.gz)."}</p>
       <div
         className="dropzone"
         onDragOver={(e) => e.preventDefault()}

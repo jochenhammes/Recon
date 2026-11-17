@@ -112,3 +112,18 @@ describe("loader geometry", () => {
     expect(volume.hasPatientGeometry).toBe(true);
   });
 });
+
+describe("rigid registration", () => {
+  it("maps the moved position of a voxel back to that voxel", async () => {
+    const { applyRigid, registeredWorldToVoxel, worldToVoxelTransform, applyWorldToVoxel } = await import("./geometry");
+    const params = { tx: 5, ty: -3, tz: 12, rx: 4, ry: -7, rz: 20 };
+    const center: Vec3 = [10, -20, 30];
+    const base = worldToVoxelTransform(oblique);
+    const reg = registeredWorldToVoxel(base, params, center);
+    const original = voxelToWorld(oblique, 3, 7, 2);
+    const moved = applyRigid(params, center, original);
+    close(applyWorldToVoxel(reg, moved), [3, 7, 2], 6);
+    // Identity parameters return the base transform unchanged.
+    expect(registeredWorldToVoxel(base, { tx: 0, ty: 0, tz: 0, rx: 0, ry: 0, rz: 0 }, center)).toBe(base);
+  });
+});

@@ -26,14 +26,24 @@ export interface LayerSettingsProps {
   presets: WindowPreset[];
   /** Show the opacity slider (layer drawn on top of another). */
   showOpacity?: boolean;
+  /** Show a visibility checkbox (only useful with more than one layer). */
+  showVisibility?: boolean;
   children?: React.ReactNode;
 }
 
 /** Window, color table, presets and (for overlays) opacity of one viewer layer. */
-export function LayerSettings({ title, display, onChange, scale, unitLabel, presets, showOpacity, children }: LayerSettingsProps) {
+export function LayerSettings({ title, display, onChange, scale, unitLabel, presets, showOpacity, showVisibility, children }: LayerSettingsProps) {
   return (
     <section className="card">
-      <h3>{title}</h3>
+      <div className="layer-head">
+        <h3>{title}</h3>
+        {showVisibility && (
+          <label className="checkbox-field">
+            <input type="checkbox" checked={display.visible} onChange={(e) => onChange({ ...display, visible: e.target.checked })} />
+            anzeigen
+          </label>
+        )}
+      </div>
       <label className="field">
         Farbtabelle
         <select value={display.lut} onChange={(e) => onChange({ ...display, lut: e.target.value as ColorLut })}>

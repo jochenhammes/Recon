@@ -1,15 +1,23 @@
+import { X } from "lucide-react";
 import type { LoadedDataset } from "../dataset/types";
 import { modalityLabel, seriesDescription } from "../dataset/describe";
 
 /** Compact description of a loaded dataset (source, matrix, voxel size, geometry). */
-export function DatasetInfo({ dataset, title }: { dataset: LoadedDataset; title: string }) {
+export function DatasetInfo({ dataset, title, onRemove }: { dataset: LoadedDataset; title: string; onRemove?: () => void }) {
   const v = dataset.current;
   const [sx, sy, sz] = v.geometry.spacing;
   const src = dataset.source;
   const files = src.kind === "dicom" ? `${src.files.length} ${src.files.length === 1 ? "Datei" : "Dateien"}` : src.kind === "nifti" ? "NIfTI" : "Rekonstruktion";
   return (
     <section className="card">
-      <h3>{title}</h3>
+      <div className="layer-head">
+        <h3>{title}</h3>
+        {onRemove && (
+          <button className="icon-btn small" title="Datensatz schließen" aria-label="Datensatz schließen" onClick={onRemove}>
+            <X size={14} />
+          </button>
+        )}
+      </div>
       <dl className="summary-list">
         <dt>Modalität</dt>
         <dd>
