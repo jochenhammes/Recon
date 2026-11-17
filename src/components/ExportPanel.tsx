@@ -10,7 +10,7 @@ import { type ExportedFile, buildEditedDicomFiles } from "../export/editedDicomE
 import { buildNiftiFile, buildNiftiFromOriginalHeader } from "../export/niftiWriter";
 import { buildTemplateSeries } from "../export/templateDicomWriter";
 import { buildZip } from "../export/zip";
-import { resampleToGrid } from "../fusion/resample";
+import { resampleInto } from "../resample/resample";
 
 export interface FusionExportSource {
   functional: LoadedDataset;
@@ -146,7 +146,8 @@ export function ExportPanel({ dataset, fusion }: ExportPanelProps) {
 
   function fusedVolume() {
     if (!fusion) throw new Error("Keine Fusion geladen.");
-    return resampleToGrid(fusion.functional.current, fusion.functionalW2v, fusion.anatomical.current);
+    const target = fusion.anatomical.current;
+    return target.withData(resampleInto(fusion.functional.current, fusion.functionalW2v, target, "linear"));
   }
 
   function exportFusionDicom() {

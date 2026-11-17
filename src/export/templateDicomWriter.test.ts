@@ -1,11 +1,9 @@
 import * as dicomParser from "dicom-parser";
 import { describe, expect, it } from "vitest";
-import { registeredWorldToVoxel, voxelToWorld, worldToVoxelTransform } from "../core/geometry";
+import { voxelToWorld } from "../core/geometry";
 import type { DicomSourceFile } from "../dataset/types";
 import { applyEdit } from "../edit/operations";
-import { resampleToGrid } from "../fusion/resample";
 import { asFile, buildPart10, s } from "../test/dicomFixtures";
-import { Volume3D } from "../viewer/volume";
 import { loadVolumeFromFiles } from "../viewer/volumeLoader";
 import { buildTemplateSeries } from "./templateDicomWriter";
 
@@ -86,23 +84,5 @@ describe("buildTemplateSeries", () => {
     const { volume, source } = await loadSeries();
     const { files } = buildTemplateSeries(volume, (source as { files: DicomSourceFile[] }).files[0], { frameOfReferenceUid: "9.8.7" });
     expect(dicomParser.parseDicom(files[0].bytes).string("x00200052")).toBe("9.8.7");
-  });
-});
-
-describe("resampleToGrid", () => {
-  it("resamples onto the target grid and honours the registration", () => {
-    // Source: 10 mm voxels with a hot voxel at world (20, 20, 20).
-    const src = new Float32Array(125);
-    src[(2 * 5 + 2) * 5 + 2] = 100;
-    const source = new Volume3D(src, 5, 5, 5, [10, 10, 10]);
-    const target = new Volume3D(new Float32Array(41 * 41 * 41), 41, 41, 41, [1, 1, 1]);
-    const out = resampleToGrid(source, worldToVoxelTransform(source.geometry), target);
-    expect(out.data[(20 * 41 + 20) * 41 + 20]).toBeCloseTo(100, 4);
-    expect(out.data[(20 * 41 + 20) * 41 + 25]).toBeCloseTo(50, 4); // halfway to the next 10-mm voxel
-
-    const moved = registeredWorldToVoxel(worldToVoxelTransform(source.geometry), { tx: 5, ty: 0, tz: 0, rx: 0, ry: 0, rz: 0 }, [20, 20, 20]);
-    const shifted = resampleToGrid(source, moved, target);
-    expect(shifted.data[(20 * 41 + 20) * 41 + 25]).toBeCloseTo(100, 4);
-    expect(shifted.geometry).toBe(target.geometry);
   });
 });
