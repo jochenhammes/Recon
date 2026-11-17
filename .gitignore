@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local diagnostics/validation against licensed data (not distributed)
+src/__gen/
