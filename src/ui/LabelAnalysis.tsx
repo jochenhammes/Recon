@@ -1,0 +1,264 @@
+import { useMemo, useRef, useState } from "react";
+import { type AtlasInfo, type RegionStat, labelStatsCsv, regionValues } from "../atlas/atlas";
+import { Histogram } from "../components/Histogram";
+import { formatValue } from "../components/format";
+import { lutTable } from "../viewer/volume";
+import type { Option } from "./NormalizationPanel";
+
+export interface LabelSetOption extends Option {
+  atlas: AtlasInfo;
+}
+
+export interface LabelAnalysisResult {
+  stats: RegionStat[];
+  /** Values (display units) and labels on the grid of the analysed dataset, for region histograms. */
+  values: Float32Array;
+  labels: Float32Array;
+  unit: string;
+  datasetLabel: string;
+  /** e.g. "Labels über die Registrierung auf das PET-Raster übertragen (nächster Nachbar)". */
+  note?: string;
+}
+
+export interface LabelAnalysisProps {
+  labelSets: LabelSetOption[];
+  targets: Option[];
+  defaultTargetId: string | null;
+  defaultLabelSetId: string | null;
+  compute: (labelSetId: string, targetId: string) => LabelAnalysisResult;
+  onLoadCerebra: () => void;
+  cerebraLoading: boolean;
+  /** Label image (NIfTI) with optional table, or a ZIP (e.g. AAL3 download). */
+  onLoadOwn: (files: File[]) => void;
+  loadError?: string | null;
+}
+
+type SortKey = "index" | "name" | "mean" | "volume";
+
+const AAL_URL = "https://www.gin.cnrs.fr/en/tools/aal/";
+
+/** Region-wise statistics and histograms of any dataset within the regions of a label image (atlas, segmentation). */
+export function LabelAnalysis(props: LabelAnalysisProps) {
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [setId, setSetId] = useState<string | null>(null);
+  const [targetId, setTargetId] = useState<string | null>(null);
+  const [result, setResult] = useState<(LabelAnalysisResult & { setId: string; targetId: string }) | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [sort, setSort] = useState<SortKey>("index");
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+
+  const labelSet = props.labelSets.find((s) => s.id === setId) ?? props.labelSets.find((s) => s.id === props.defaultLabelSetId) ?? props.labelSets[0] ?? null;
+  const target = props.targets.find((t) => t.id === targetId) ?? props.targets.find((t) => t.id === props.defaultTargetId) ?? props.targets[0] ?? null;
+  const current = result && labelSet && target && result.setId === labelSet.id && result.targetId === target.id ? result : null;
+  const colors = useMemo(() => lutTable("labels"), []);
+
+  const rows = useMemo(() => {
+    if (!current) return [];
+    const q = query.trim().toLowerCase();
+    const r = current.stats.filter((s) => !q || s.name.toLowerCase().includes(q) || String(s.index) === q);
+    if (sort === "name") r.sort((a, b) => a.name.localeCompare(b.name));
+    else if (sort === "mean") r.sort((a, b) => b.mean - a.mean);
+    else if (sort === "volume") r.sort((a, b) => b.volumeMl - a.volumeMl);
+    else r.sort((a, b) => a.index - b.index);
+    return r;
+  }, [current, sort, query]);
+
+  const histIndices = useMemo(() => (selected.size ? selected : new Set(current?.stats.map((s) => s.index) ?? [])), [selected, current]);
+  const histData = useMemo(() => (current ? regionValues(current.values, current.labels, histIndices) : null), [current, histIndices]);
+  const histStats = useMemo(() => {
+    if (!histData?.length) return null;
+    let s = 0, ss = 0;
+    for (const v of histData) s += v;
+    const mean = s / histData.length;
+    for (const v of histData) ss += (v - mean) ** 2;
+    const variance = histData.length > 1 ? ss / (histData.length - 1) : 0;
+    return { n: histData.length, mean, sd: Math.sqrt(variance), variance };
+  }, [histData]);
+
+  function run() {
+    if (!labelSet || !target) return;
+    setError(null);
+    setBusy(true);
+    // Let the button show the busy state before the (synchronous) computation.
+    setTimeout(() => {
+      try {
+        setResult({ ...props.compute(labelSet.id, target.id), setId: labelSet.id, targetId: target.id });
+        setSelected(new Set());
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setBusy(false);
+      }
+    }, 20);
+  }
+
+  function downloadCsv() {
+    if (!current || !labelSet) return;
+    const csv = labelStatsCsv(rows, { dataset: current.datasetLabel, atlas: labelSet.label, unit: current.unit, note: current.note });
+    const url = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Labelanalyse_${current.datasetLabel.replace(/[^A-Za-z0-9_.-]+/g, "_")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const toggle = (index: number) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  const u = current?.unit ? ` ${current.unit}` : "";
+  const fv = (v: number) => (Number.isFinite(v) ? formatValue(v) : "–");
+
+  return (
+    <section className="card">
+      <h3>Label-Analyse</h3>
+      <p className="hint">
+        Statistik und Histogramm eines Datensatzes je Region einer Segmentierung oder eines Atlas (z. B. CT-Organe auf dem PET, Hirnatlas auf einem PET im
+        Standardraum). Labels auf anderem Raster werden über die Registrierung übertragen (nächster Nachbar).
+      </p>
+      <div className="button-row">
+        <button className="secondary-btn" disabled={props.cerebraLoading} onClick={props.onLoadCerebra}>
+          {props.cerebraLoading ? "Wird geladen …" : "Hirnatlas CerebrA (MNI)"}
+        </button>
+        <button className="secondary-btn" onClick={() => fileInput.current?.click()}>
+          AAL3 / eigene Labels …
+        </button>
+        <input
+          ref={fileInput}
+          type="file"
+          multiple
+          hidden
+          accept=".zip,.nii,.gz,.txt,.csv,.tsv,.lut,.label,.xml"
+          onChange={(e) => {
+            const files = [...(e.target.files ?? [])];
+            if (files.length) props.onLoadOwn(files);
+            e.target.value = "";
+          }}
+        />
+      </div>
+      <p className="tool-hint">
+        AAL3 (Rolls et al. 2020, MNI):{" "}
+        <a href={AAL_URL} target="_blank" rel="noreferrer">
+          von der GIN-Seite herunterladen
+        </a>{" "}
+        und die ZIP-Datei hier direkt auswählen (wird wegen der Lizenzbedingungen nicht mitgeliefert). Eigene Labels: NIfTI-Labelbild und optional die
+        Tabelle (TXT/TSV/CSV/LUT) zusammen auswählen. Hirnatlanten gelten nur für Datensätze im MNI-Raum (Panel „Standardraum“).
+      </p>
+      {props.loadError && <div className="error-banner">{props.loadError}</div>}
+
+      {props.labelSets.length === 0 ? (
+        <p className="tool-hint">Noch keine Labels geladen – CT-Segmentierung (Tab „Tumorlast“), Atlas oder ein Labelbild laden.</p>
+      ) : (
+        <>
+          <label className="field">
+            Labels
+            <select value={labelSet?.id ?? ""} onChange={(e) => setSetId(e.target.value)}>
+              {props.labelSets.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label} ({s.atlas.labels.size} Regionen)
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            Datensatz
+            <select value={target?.id ?? ""} onChange={(e) => setTargetId(e.target.value)}>
+              {props.targets.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button className="primary-btn" disabled={!labelSet || !target || busy} onClick={run}>
+            {busy ? "Wird ausgewertet …" : "Regionen auswerten"}
+          </button>
+        </>
+      )}
+      {error && <div className="error-banner">{error}</div>}
+
+      {current && (
+        <>
+          {current.note && <p className="tool-hint">{current.note}</p>}
+          <div className="label-hist-head">
+            <strong>{selected.size === 0 ? "Histogramm: alle Regionen" : `Histogramm: ${selected.size === 1 ? current.stats.find((s) => selected.has(s.index))?.name : `${selected.size} Regionen`}`}</strong>
+            {selected.size > 0 && (
+              <button className="link-btn" onClick={() => setSelected(new Set())}>
+                Auswahl aufheben
+              </button>
+            )}
+          </div>
+          {histStats && (
+            <p className="tool-hint">
+              {histStats.n.toLocaleString("de-DE")} Voxel · Mittel {fv(histStats.mean)}
+              {u} · SD {fv(histStats.sd)}
+              {u} · Varianz {fv(histStats.variance)}
+              {u && `${u}²`}
+            </p>
+          )}
+          {histData && histData.length > 0 && <Histogram key={[...histIndices].join(",")} data={histData} />}
+
+          <div className="button-row">
+            <button className="secondary-btn" onClick={downloadCsv}>
+              Tabelle als CSV
+            </button>
+          </div>
+          <input className="label-search" type="search" placeholder="Region suchen …" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <div className="segmented-control" role="group" aria-label="Sortierung">
+            {(["index", "name", "mean", "volume"] as SortKey[]).map((k) => (
+              <button key={k} className={sort === k ? "active" : ""} onClick={() => setSort(k)}>
+                {k === "index" ? "Nr." : k === "name" ? "Name" : k === "mean" ? "Mittel ↓" : "Volumen ↓"}
+              </button>
+            ))}
+          </div>
+          <p className="tool-hint">Zeile anklicken = Region ins Histogramm (Mehrfachauswahl möglich).</p>
+          <div className="region-table-wrap">
+            <table className="region-table label-stats-table">
+              <thead>
+                <tr>
+                  <th>Region</th>
+                  <th>ml</th>
+                  <th>Mittel</th>
+                  <th>SD</th>
+                  <th>Varianz</th>
+                  <th>Median</th>
+                  <th>Min</th>
+                  <th>Max</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => {
+                  const c = Math.min(255, r.index) * 3;
+                  return (
+                    <tr key={r.index} className={selected.has(r.index) ? "reference-row clickable" : "clickable"} onClick={() => toggle(r.index)} title={`Label ${r.index}, ${r.voxels} Voxel`}>
+                      <td>
+                        <span className="label-swatch" style={{ background: `rgb(${colors[c]},${colors[c + 1]},${colors[c + 2]})` }} />
+                        {r.name}
+                      </td>
+                      <td>{formatValue(r.volumeMl)}</td>
+                      <td>{fv(r.mean)}</td>
+                      <td>{fv(r.sd)}</td>
+                      <td>{fv(r.variance)}</td>
+                      <td>{fv(r.median)}</td>
+                      <td>{fv(r.min)}</td>
+                      <td>{fv(r.max)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="tool-hint">
+            Werte in {current.unit || "Originaleinheiten"}; Varianz in {current.unit ? `${current.unit}²` : "Einheiten²"}, SD/Varianz als Stichprobenwerte (n − 1).
+          </p>
+        </>
+      )}
+    </section>
+  );
+}

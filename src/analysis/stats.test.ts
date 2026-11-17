@@ -60,3 +60,11 @@ describe("computeHistogram", () => {
     expect(h.outOfRange).toBe(3);
   });
 });
+
+describe("variance", () => {
+  it("computes sample variance and SD of finite values", () => {
+    const s = computeStats(Float32Array.from([2, 4, 4, 4, 5, 5, 7, 9, NaN]));
+    expect(s.variance).toBeCloseTo(32 / 7, 5);
+    expect(s.sd).toBeCloseTo(Math.sqrt(32 / 7), 5);
+  });
+});

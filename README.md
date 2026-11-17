@@ -73,9 +73,18 @@ Alles läuft clientseitig im Browser (Web Worker), es gibt keinen Server – die
   als CSV und **SUVR-Bild** (exportierbar wie jeder Datensatz); Atlas als farbiges Overlay (Farbtabelle „Atlas-Regionen“).
 
 ### Analyse
-- **Alle geladenen Datensätze** in einer Übersicht (Matrix, Voxelgröße, Min/Mittel/Median/Max in der jeweiligen
-  Einheit); Klick wählt den Datensatz für die Detailanalyse.
-- Anzahl Bildpunkte, Minimum, Mittelwert, Median, Maximum, Histogramm (Bins, log. Skala, ohne unterste Bin).
+- **Alle geladenen Datensätze** in einer Übersicht (Matrix, Voxelgröße, Min/Mittel/Median/Max, SD, Varianz in der
+  jeweiligen Einheit); Klick wählt den Datensatz für die Detailanalyse.
+- Anzahl Bildpunkte, Minimum, Mittelwert, Median, Maximum, Standardabweichung, Varianz (Stichprobe, n − 1),
+  Histogramm (Bins, log. Skala, ohne unterste Bin).
+- **Label-Analyse**: Statistik eines beliebigen Datensatzes je Region einer Segmentierung oder eines Atlas (Volumen,
+  Mittel, SD, Varianz, Median, Min, Max; z. B. CT-Organe auf dem PET in SUV), Histogramm einer oder mehrerer Regionen,
+  Tabelle als **CSV**. Labels auf anderem Raster werden über die Registrierung übertragen (nächster Nachbar).
+  Hirnatlanten für Daten im MNI-Raum: CerebrA (mitgeliefert) oder **AAL3** (ZIP von
+  [gin.cnrs.fr](https://www.gin.cnrs.fr/en/tools/aal/) direkt auswählen; wird nicht mitgeliefert).
+- **Labelbilder werden beim erneuten Laden als Atlas erkannt**: Export setzt NIfTI-Intent „Label“ und speichert die
+  Regionsnamen im Header; erkannt werden außerdem TotalSegmentator-Ausgaben (Labeltabelle im Header), eine mitgeladene
+  Tabelle mit gleichem Namen (z. B. `AAL3v1.nii` + `AAL3v1.nii.txt`) und Dateinamen wie `…_dseg`, `…_seg`, `aseg`.
 - Für PET (Einheit BQML) wahlweise in **SUV** (Körpergewicht; zerfallskorrigiert auf Serienstart bzw. Injektion).
 - **VOI auf allen Datensätzen**: die gezeichnete VOI wird über die Registrierung auf jeden Datensatz übertragen
   (Volumen, Mittel, Peak, Max).

@@ -57,6 +57,10 @@ export function AnalysisPanel({ volume, stats, marker, scale, unitLabel, unitMod
         <dd>{v(stats.median)}</dd>
         <dt>Maximum</dt>
         <dd>{v(stats.max)}</dd>
+        <dt>Standardabweichung</dt>
+        <dd>{v(stats.sd)}</dd>
+        <dt>Varianz</dt>
+        <dd>{formatValue(stats.variance * scale * scale) + (unitLabel ? ` ${unitLabel}²` : "")}</dd>
         {stats.nonFinite > 0 && (
           <>
             <dt>Ungültig (NaN/∞)</dt>

@@ -8,6 +8,9 @@ export interface VolumeStats {
   max: number;
   mean: number;
   median: number;
+  /** Sample variance (n − 1) and standard deviation of the finite values. */
+  variance: number;
+  sd: number;
 }
 
 export function computeStats(data: ArrayLike<number>): VolumeStats {
@@ -24,15 +27,21 @@ export function computeStats(data: ArrayLike<number>): VolumeStats {
     if (v < min) min = v;
     if (v > max) max = v;
   }
-  if (finite === 0) return { count: n, nonFinite: n, min: NaN, max: NaN, mean: NaN, median: NaN };
+  if (finite === 0) return { count: n, nonFinite: n, min: NaN, max: NaN, mean: NaN, median: NaN, variance: NaN, sd: NaN };
+  const mean = sum / finite;
 
   // Float32 copy: the data is float32 anyway, and this halves memory for large volumes.
   const values = new Float32Array(finite);
   let k = 0;
+  let ss = 0;
   for (let i = 0; i < n; i++) {
     const v = data[i];
-    if (Number.isFinite(v)) values[k++] = v;
+    if (Number.isFinite(v)) {
+      values[k++] = v;
+      ss += (v - mean) * (v - mean);
+    }
   }
+  const variance = finite > 1 ? ss / (finite - 1) : 0;
   const mid = finite >> 1;
   let median: number;
   if (finite % 2 === 1) {
@@ -45,7 +54,7 @@ export function computeStats(data: ArrayLike<number>): VolumeStats {
     median = (lower + upper) / 2;
   }
 
-  return { count: n, nonFinite: n - finite, min, max, mean: sum / finite, median };
+  return { count: n, nonFinite: n - finite, min, max, mean, median, variance, sd: Math.sqrt(variance) };
 }
 
 /** In-place Hoare-style selection: returns the k-th smallest value (0-based) in O(n) average. */

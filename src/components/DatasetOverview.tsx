@@ -55,6 +55,8 @@ export function DatasetOverview({ rows, selectedId, onSelect, voi }: DatasetOver
     return out;
   }, [rows, voi]);
   const f = (r: OverviewRow, x: number) => (Number.isFinite(x) ? formatValue(x * r.scale) : "–");
+  /** Variance scales with the square of the unit factor. */
+  const v2 = (r: OverviewRow, x: number) => (Number.isFinite(x) ? formatValue(x * r.scale * r.scale) : "–");
 
   return (
     <>
@@ -71,6 +73,8 @@ export function DatasetOverview({ rows, selectedId, onSelect, voi }: DatasetOver
                 <th>Mittel</th>
                 <th>Median</th>
                 <th>Max</th>
+                <th>SD</th>
+                <th>Varianz</th>
                 <th>Einheit</th>
               </tr>
             </thead>
@@ -88,6 +92,8 @@ export function DatasetOverview({ rows, selectedId, onSelect, voi }: DatasetOver
                     <td>{f(r, s.mean)}</td>
                     <td>{f(r, s.median)}</td>
                     <td>{f(r, s.max)}</td>
+                    <td>{f(r, s.sd)}</td>
+                    <td>{v2(r, s.variance)}</td>
                     <td>{r.unitLabel}</td>
                   </tr>
                 );
@@ -110,6 +116,8 @@ export function DatasetOverview({ rows, selectedId, onSelect, voi }: DatasetOver
                   <th>Mittel</th>
                   <th>Peak</th>
                   <th>Max</th>
+                  <th>SD</th>
+                  <th>Varianz</th>
                   <th>Einheit</th>
                 </tr>
               </thead>
@@ -125,9 +133,11 @@ export function DatasetOverview({ rows, selectedId, onSelect, voi }: DatasetOver
                           <td>{f(r, s.mean)}</td>
                           <td>{f(r, s.peak)}</td>
                           <td>{f(r, s.max)}</td>
+                          <td>{f(r, s.sd)}</td>
+                          <td>{v2(r, s.variance)}</td>
                         </>
                       ) : (
-                        <td colSpan={4}>außerhalb</td>
+                        <td colSpan={6}>außerhalb</td>
                       )}
                       <td>{r.unitLabel}</td>
                     </tr>

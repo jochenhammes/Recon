@@ -105,7 +105,7 @@ export function AtlasPanel(props: AtlasPanelProps) {
           type="file"
           multiple
           hidden
-          accept=".nii,.gz,.txt,.csv,.tsv,.lut,.label"
+          accept=".zip,.nii,.gz,.txt,.csv,.tsv,.lut,.label,.xml"
           onChange={(e) => {
             const files = [...(e.target.files ?? [])];
             if (files.length) props.onLoadOwn(files);
@@ -113,7 +113,7 @@ export function AtlasPanel(props: AtlasPanelProps) {
           }}
         />
       </div>
-      <p className="tool-hint">Eigener Atlas: Labelbild (NIfTI, im Standardraum) und optional die Labeltabelle (TXT/CSV/TSV, FSL-/FreeSurfer-LUT, ITK-SNAP) zusammen auswählen.</p>
+      <p className="tool-hint">Eigener Atlas: Labelbild (NIfTI, im Standardraum) und optional die Labeltabelle (TXT/CSV/TSV, FSL-/FreeSurfer-LUT, ITK-SNAP) zusammen auswählen – oder direkt die ZIP-Datei, z. B. AAL3 von der GIN-Seite (gin.cnrs.fr/en/tools/aal).</p>
       {(props.error || error) && <div className="error-banner">{props.error || error}</div>}
 
       {atlas && (

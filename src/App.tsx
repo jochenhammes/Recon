@@ -27,7 +27,9 @@ import { buildNiftiFile } from "./export/niftiWriter";
 import { type CentiloidCalibration, acquisitionWindow, centiloidFromMeans, guessTracer, windowWarning } from "./centiloid/centiloid";
 import { type CentiloidVois, VOI_LABELS, type VoiName, loadVois, voiMeans, voiVolumeMl } from "./centiloid/vois";
 import { AtlasPanel, type RegionResult } from "./ui/AtlasPanel";
-import { atlasFromLabels, loadBundledAtlas, parseLabelTable, regionStats } from "./atlas/atlas";
+import { atlasFromLabels, loadBundledAtlas, parseLabelTable, pickAtlasEntries, regionStats } from "./atlas/atlas";
+import { LabelAnalysis, type LabelAnalysisResult } from "./ui/LabelAnalysis";
+import { listZip } from "./core/unzip";
 import { runWarp } from "./normalization/warpRunner";
 import { runResample } from "./resample/runner";
 import { type Interpolation, resampleAtPoints } from "./resample/resample";
@@ -1284,8 +1286,22 @@ function App() {
     }
   }
 
-  async function addOwnAtlas(files: File[]) {
+  async function addOwnAtlas(input: File[]) {
     setAtlasError(null);
+    let files = input;
+    const zip = input.find((f) => /\.zip$/i.test(f.name));
+    if (zip) {
+      // e.g. the AAL3 download: label image + table inside the archive.
+      try {
+        const picked = pickAtlasEntries(listZip(await zip.arrayBuffer()));
+        if (!picked) throw new Error(`In „${zip.name}“ wurde kein NIfTI-Labelbild gefunden.`);
+        const toFile = async (e: { name: string; read: () => Promise<Uint8Array<ArrayBuffer>> }) => new File([await e.read()], e.name.split("/").pop()!);
+        files = [await toFile(picked.image), ...(picked.table ? [await toFile(picked.table)] : [])];
+      } catch (e) {
+        setAtlasError(e instanceof Error ? e.message : String(e));
+        return;
+      }
+    }
     const image = files.find((f) => /\.nii(\.gz)?$/i.test(f.name));
     const table = files.find((f) => f !== image);
     if (!image) {
@@ -1327,6 +1343,30 @@ function App() {
     const stats = regionStats(v.data, labels, A.dataset.atlas, (sx * sy * sz) / 1000);
     if (!stats.length) throw new Error("Keine Atlasregion überlappt mit dem Datensatz – liegt er im Standardraum des Atlas?");
     return { stats, unit: rawUnitLabel(unitSource(E.dataset)), datasetLabel: E.dataset.displayName };
+  }
+
+  /** Label-based analysis: statistics of a dataset per region of a label image (display units, e.g. SUV). */
+  function computeLabelAnalysis(atlasId: string, targetId: string): LabelAnalysisResult {
+    const A = byId(atlasId);
+    const E = byId(targetId);
+    if (!A?.dataset.atlas || !E) throw new Error("Labels oder Datensatz nicht gefunden.");
+    const v = E.dataset.current;
+    const labels = atlasLabelsFor(A, E);
+    const { scale, label } = unitFor(E);
+    const values = scale === 1 ? v.data : Float32Array.from(v.data, (x) => x * scale);
+    const [sx, sy, sz] = v.geometry.spacing;
+    const stats = regionStats(values, labels, A.dataset.atlas, (sx * sy * sz) / 1000);
+    if (!stats.length) throw new Error("Keine Region überlappt mit dem Datensatz – liegen Labels und Datensatz im selben Raum (Registrierung, Standardraum)?");
+    const a = A.dataset.current;
+    const resampled = labels !== a.data;
+    return {
+      stats,
+      values,
+      labels,
+      unit: label,
+      datasetLabel: entryLabel(E),
+      note: resampled ? `Labels „${entryLabel(A)}“ über die Registrierung auf das Raster von „${entryLabel(E)}“ übertragen (nächster Nachbar).` : undefined,
+    };
   }
 
   function createSuvrImage(targetId: string, refMean: number, refLabel: string) {
@@ -1954,6 +1994,17 @@ function App() {
             selectedId={active.id}
             onSelect={switchActive}
             voi={overviewVoi}
+          />
+          <LabelAnalysis
+            labelSets={entries.filter((e) => e.dataset.atlas).map((e) => ({ id: e.id, label: entryLabel(e), atlas: e.dataset.atlas! }))}
+            defaultLabelSetId={entries.findLast((e) => e.dataset.atlas)?.id ?? null}
+            targets={entries.filter((e) => !e.dataset.atlas).map((e) => ({ id: e.id, label: entryLabel(e) }))}
+            defaultTargetId={active.dataset.atlas ? null : active.id}
+            compute={computeLabelAnalysis}
+            onLoadCerebra={() => void addBundledAtlas()}
+            cerebraLoading={atlasBusy}
+            onLoadOwn={(f) => void addOwnAtlas(f)}
+            loadError={atlasError}
           />
           <section className="card">
             <h3>Detailanalyse: {entryLabel(active)}</h3>

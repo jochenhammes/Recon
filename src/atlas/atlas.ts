@@ -74,6 +74,8 @@ export interface RegionStat {
   mean: number;
   median: number;
   sd: number;
+  /** Sample variance (n − 1). */
+  variance: number;
   min: number;
   max: number;
 }
@@ -105,7 +107,8 @@ export function regionStats(values: Float32Array, labels: Float32Array, atlas: A
     const n = a.length;
     const mean = s / n;
     const median = n % 2 ? quickselect(a, (n - 1) / 2) : 0.5 * (quickselect(a, n / 2 - 1) + quickselect(a, n / 2));
-    out.push({ index, name, voxels: n, volumeMl: n * voxelMl, mean, median, sd: n > 1 ? Math.sqrt(Math.max(0, (ss - (s * s) / n) / (n - 1))) : 0, min, max });
+    const variance = n > 1 ? Math.max(0, (ss - (s * s) / n) / (n - 1)) : 0;
+    out.push({ index, name, voxels: n, volumeMl: n * voxelMl, mean, median, sd: Math.sqrt(variance), variance, min, max });
   }
   return out;
 }
@@ -148,8 +151,46 @@ export function regionCsv(stats: RegionStat[], refMean: number, meta: { dataset:
     `# Datensatz: ${meta.dataset}`,
     `# Atlas: ${meta.atlas}`,
     `# Referenzregion: ${meta.reference} (Mittelwert ${f(refMean)} ${meta.unit})`,
-    ["Index", "Region", "Voxel", "Volumen_ml", `Mittel_${meta.unit}`, "Median", "SD", "Min", "Max", "SUVR"].join(";"),
+    ["Index", "Region", "Voxel", "Volumen_ml", `Mittel_${meta.unit}`, "Median", "SD", "Varianz", "Min", "Max", "SUVR"].join(";"),
   ];
-  const rows = stats.map((r) => [r.index, `"${r.name.replace(/"/g, "'")}"`, r.voxels, f(r.volumeMl, 2), f(r.mean), f(r.median), f(r.sd), f(r.min), f(r.max), f(r.mean / refMean)].join(";"));
+  const rows = stats.map((r) => [r.index, `"${r.name.replace(/"/g, "'")}"`, r.voxels, f(r.volumeMl, 2), f(r.mean), f(r.median), f(r.sd), f(r.variance, 6), f(r.min), f(r.max), f(r.mean / refMean)].join(";"));
   return [...head, ...rows].join("\n") + "\n";
+}
+
+/** CSV of a label-based analysis (semicolon separated, decimal comma): one row per region. */
+export function labelStatsCsv(stats: RegionStat[], meta: { dataset: string; atlas: string; unit: string; note?: string }): string {
+  const f = (v: number, d = 4) => (Number.isFinite(v) ? v.toFixed(d).replace(".", ",") : "");
+  const u = meta.unit ? `_${meta.unit}` : "";
+  const head = [
+    `# Datensatz: ${meta.dataset}`,
+    `# Labels: ${meta.atlas}`,
+    ...(meta.note ? [`# ${meta.note}`] : []),
+    ["Index", "Region", "Voxel", "Volumen_ml", `Mittel${u}`, `SD${u}`, `Varianz${u}${u ? "²" : ""}`, `Median${u}`, `Min${u}`, `Max${u}`].join(";"),
+  ];
+  const rows = stats.map((r) => [r.index, `"${r.name.replace(/"/g, "'")}"`, r.voxels, f(r.volumeMl, 3), f(r.mean), f(r.sd), f(r.variance, 6), f(r.median), f(r.min), f(r.max)].join(";"));
+  return [...head, ...rows].join("\n") + "\n";
+}
+
+/** Values of `values` inside the given regions (labels on the same grid), e.g. for a histogram. */
+export function regionValues(values: Float32Array, labels: Float32Array, indices: Set<number>): Float32Array {
+  let n = 0;
+  for (let i = 0; i < labels.length; i++) if (indices.has(Math.round(labels[i])) && Number.isFinite(values[i])) n++;
+  const out = new Float32Array(n);
+  for (let i = 0, k = 0; i < labels.length; i++) if (indices.has(Math.round(labels[i])) && Number.isFinite(values[i])) out[k++] = values[i];
+  return out;
+}
+
+/**
+ * Picks the label image and its table from a ZIP archive (e.g. the AAL3 download: AAL3v1.nii.gz +
+ * AAL3v1.nii.txt, also 1-mm versions): prefers a NIfTI with a matching table, then the coarser (not "1mm") one.
+ */
+export function pickAtlasEntries<T extends { name: string }>(entries: T[]): { image: T; table?: T } | null {
+  const base = (n: string) => n.split("/").pop()!.replace(/\.nii(\.gz)?$/i, "").replace(/\.(nii\.)?(txt|tsv|csv|lut|label|xml)$/i, "").toLowerCase();
+  const visible = entries.filter((e) => !e.name.split("/").some((p) => p.startsWith(".") || p === "__MACOSX"));
+  const images = visible.filter((e) => /\.nii(\.gz)?$/i.test(e.name));
+  const tables = visible.filter((e) => /\.(txt|tsv|csv|lut|label)$/i.test(e.name) && !/readme|licen[cs]e/i.test(e.name));
+  if (!images.length) return null;
+  const score = (e: T) => (tables.some((t) => base(t.name) === base(e.name)) ? 4 : 0) + (/1mm/i.test(e.name) ? 0 : 2) + (/^aal/i.test(base(e.name)) ? 1 : 0);
+  const image = [...images].sort((a, b) => score(b) - score(a))[0];
+  return { image, table: tables.find((t) => base(t.name) === base(image.name)) ?? (tables.length === 1 ? tables[0] : undefined) };
 }

@@ -1379,3 +1379,30 @@ tr.excluded-row td {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+/* Label analysis (Analyse tab) */
+.label-hist-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 10px;
+  overflow-wrap: anywhere;
+}
+.label-search {
+  width: 100%;
+  margin: 6px 0;
+}
+.label-stats-table td:first-child {
+  min-width: 9em;
+  overflow-wrap: break-word;
+}
+.label-stats-table .label-swatch {
+  display: inline-block;
+  margin-right: 6px;
+  vertical-align: -1px;
+}
+.label-stats-table td:not(:first-child) {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}

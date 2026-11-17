@@ -58,3 +58,28 @@ describe("regional statistics and SUVR", () => {
     expect(presetIndices(info, REFERENCE_PRESETS[1]).size).toBe(10);
   });
 });
+
+describe("label-based analysis", () => {
+  it("regionStats reports sample variance and SD; CSV contains them", async () => {
+    const { regionStats, labelStatsCsv, regionValues } = await import("./atlas");
+    const values = Float32Array.from([1, 2, 3, 4, 10, 10, 0]);
+    const labels = Float32Array.from([1, 1, 1, 1, 2, 2, 0]);
+    const atlas = { name: "t", labels: new Map([[1, "A"], [2, "B"]]) };
+    const [a, b] = regionStats(values, labels, atlas, 0.5);
+    expect(a.variance).toBeCloseTo(5 / 3, 6);
+    expect(a.sd).toBeCloseTo(Math.sqrt(5 / 3), 6);
+    expect(b.variance).toBe(0);
+    const csv = labelStatsCsv([a, b], { dataset: "PET", atlas: "t", unit: "SUV" });
+    expect(csv).toContain("Varianz_SUV²");
+    expect(csv.split("\n")[3]).toBe('1;"A";4;2,000;2,5000;1,2910;1,666667;2,5000;1,0000;4,0000');
+    expect([...regionValues(values, labels, new Set([2]))]).toEqual([10, 10]);
+  });
+
+  it("picks the AAL3 image and table from the archive", async () => {
+    const { pickAtlasEntries } = await import("./atlas");
+    const e = (name: string) => ({ name });
+    const p = pickAtlasEntries([e("AAL3/README.txt"), e("AAL3/AAL3v1_1mm.nii.gz"), e("AAL3/AAL3v1_1mm.nii.txt"), e("AAL3/AAL3v1.nii.gz"), e("AAL3/AAL3v1.nii.txt"), e("__MACOSX/AAL3/._AAL3v1.nii.gz")])!;
+    expect(p.image.name).toBe("AAL3/AAL3v1.nii.gz");
+    expect(p.table?.name).toBe("AAL3/AAL3v1.nii.txt");
+  });
+});

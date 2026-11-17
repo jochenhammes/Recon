@@ -84,6 +84,9 @@ export interface VoiStats {
   min: number;
   max: number;
   mean: number;
+  /** Sample standard deviation and variance (n − 1). */
+  sd: number;
+  variance: number;
   /** Mean of the 1-ml sphere (r ≈ 6.2 mm) around the hottest voxels inside the VOI (raw units). */
   peak: number;
 }
@@ -97,6 +100,7 @@ export function voiStats(volume: Volume3D, mask: Uint8Array, bounds?: { min: Vec
   const b = bounds ?? { min: [0, 0, 0], max: [nx - 1, ny - 1, volume.nz - 1] };
   let n = 0;
   let sum = 0;
+  let sumSq = 0;
   let min = Infinity;
   let max = -Infinity;
   const candidates: { i: number; v: number }[] = [];
@@ -109,16 +113,18 @@ export function voiStats(volume: Volume3D, mask: Uint8Array, bounds?: { min: Vec
         if (!Number.isFinite(v)) continue;
         n++;
         sum += v;
+        sumSq += v * v;
         if (v < min) min = v;
         if (v > max) max = v;
         candidates.push({ i, v });
       }
-  if (n === 0) return { voxels: 0, volumeMl: 0, min: NaN, max: NaN, mean: NaN, peak: NaN };
+  if (n === 0) return { voxels: 0, volumeMl: 0, min: NaN, max: NaN, mean: NaN, sd: NaN, variance: NaN, peak: NaN };
+  const variance = n > 1 ? Math.max(0, (sumSq - (sum * sum) / n) / (n - 1)) : 0;
   // Peak: evaluate the 1-ml sphere mean around the hottest voxels (top 64).
   candidates.sort((a, b) => b.v - a.v);
   let peak = -Infinity;
   for (const c of candidates.slice(0, 64)) peak = Math.max(peak, sphereMean(volume, c.i, PEAK_RADIUS_MM));
-  return { voxels: n, volumeMl: (n * sx * sy * sz) / 1000, min, max, mean: sum / n, peak };
+  return { voxels: n, volumeMl: (n * sx * sy * sz) / 1000, min, max, mean: sum / n, sd: Math.sqrt(variance), variance, peak };
 }
 
 /** Mean inside a sphere (mm) around a voxel index. */
