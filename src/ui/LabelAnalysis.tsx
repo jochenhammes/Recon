@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
-import { type AtlasInfo, type RegionStat, labelStatsCsv, regionValues } from "../atlas/atlas";
+import { type AtlasInfo, type RegionStat, labelHistogramCsv, labelStatsCsv, regionValues } from "../atlas/atlas";
+import { buildZip } from "../export/zip";
 import { Histogram } from "../components/Histogram";
 import { formatValue } from "../components/format";
 import { lutTable } from "../viewer/volume";
@@ -48,6 +49,10 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
   const [sort, setSort] = useState<SortKey>("index");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [hBins, setHBins] = useState(64);
+  const [hRange, setHRange] = useState({ min: "", max: "" });
+  const [hRelative, setHRelative] = useState(false);
+  const [hInfo, setHInfo] = useState<string | null>(null);
 
   const labelSet = props.labelSets.find((s) => s.id === setId) ?? props.labelSets.find((s) => s.id === props.defaultLabelSetId) ?? props.labelSets[0] ?? null;
   const target = props.targets.find((t) => t.id === targetId) ?? props.targets.find((t) => t.id === props.defaultTargetId) ?? props.targets[0] ?? null;
@@ -103,6 +108,47 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
     a.download = `Labelanalyse_${current.datasetLabel.replace(/[^A-Za-z0-9_.-]+/g, "_")}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  const safe = (t: string) => t.replace(/[^A-Za-z0-9_.-]+/g, "_");
+  const download = (bytes: BlobPart, name: string, type: string) => {
+    const url = URL.createObjectURL(new Blob([bytes], { type }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  const num = (t: string) => (t.trim() === "" ? undefined : parseFloat(t.replace(",", ".")));
+  const histCsv = (r: LabelAnalysisResult) =>
+    "\ufeff" +
+    labelHistogramCsv(r.values, r.labels, [...r.stats].sort((a, b) => a.index - b.index), { bins: hBins, min: num(hRange.min), max: num(hRange.max), relative: hRelative }, {
+      dataset: r.datasetLabel,
+      atlas: labelSet?.label ?? "",
+      unit: r.unit,
+      note: r.note,
+    });
+
+  function exportHistograms(all: boolean) {
+    if (!labelSet) return;
+    setHInfo(null);
+    if (!all) {
+      if (current) download(histCsv(current), `Histogramme_${safe(current.datasetLabel)}.csv`, "text/csv;charset=utf-8");
+      return;
+    }
+    // One CSV per dataset (each with its own unit and, without a fixed range, its own bin range).
+    const files: { name: string; bytes: Uint8Array }[] = [];
+    const skipped: string[] = [];
+    for (const t of props.targets) {
+      try {
+        const r = t.id === current?.targetId ? current : props.compute(labelSet.id, t.id);
+        files.push({ name: `Histogramme_${safe(r.datasetLabel)}.csv`, bytes: new TextEncoder().encode(histCsv(r)) });
+      } catch {
+        skipped.push(t.label);
+      }
+    }
+    if (files.length) download(buildZip(files), `Histogramme_${safe(labelSet.label)}.zip`, "application/zip");
+    setHInfo(`${files.length} CSV-Datei(en) exportiert${skipped.length ? `; ohne Überlappung mit den Labels übersprungen: ${skipped.join(", ")}` : ""}.`);
   }
 
   const toggle = (index: number) =>
@@ -209,6 +255,49 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
               Tabelle als CSV
             </button>
           </div>
+          <h4 className="subheading">Histogramme je Label exportieren</h4>
+          <div className="inline-fields">
+            <label className="field">
+              Bins
+              <select value={hBins} onChange={(e) => setHBins(Number(e.target.value))}>
+                {[16, 32, 64, 100, 128, 256].map((b) => (
+                  <option key={b} value={b}>
+                    {b}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              von
+              <input placeholder="auto" value={hRange.min} onChange={(e) => setHRange({ ...hRange, min: e.target.value })} />
+            </label>
+            <label className="field">
+              bis
+              <input placeholder="auto" value={hRange.max} onChange={(e) => setHRange({ ...hRange, max: e.target.value })} />
+            </label>
+            <label className="field">
+              Werte
+              <select value={hRelative ? "rel" : "abs"} onChange={(e) => setHRelative(e.target.value === "rel")}>
+                <option value="abs">Anzahl Voxel</option>
+                <option value="rel">Anteil %</option>
+              </select>
+            </label>
+          </div>
+          <div className="button-row">
+            <button className="secondary-btn" onClick={() => exportHistograms(false)}>
+              Histogramme als CSV
+            </button>
+            {props.targets.length > 1 && (
+              <button className="secondary-btn" onClick={() => exportHistograms(true)}>
+                Alle Datensätze (ZIP, je eine CSV)
+              </button>
+            )}
+          </div>
+          <p className="tool-hint">
+            Zeilen = Labels, Spalten = Bins (gleiche Bins für alle Labels; Spaltenkopf = Bin-Untergrenze{current.unit ? ` in ${current.unit}` : ""}). Bereich
+            leer = Minimum bis Maximum des jeweiligen Datensatzes in den Labels; Werte außerhalb eines festen Bereichs zählen in die erste/letzte Bin.
+          </p>
+          {hInfo && <p className="tool-hint">{hInfo}</p>}
           <input className="label-search" type="search" placeholder="Region suchen …" value={query} onChange={(e) => setQuery(e.target.value)} />
           <div className="segmented-control" role="group" aria-label="Sortierung">
             {(["index", "name", "mean", "volume"] as SortKey[]).map((k) => (

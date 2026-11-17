@@ -194,3 +194,65 @@ export function pickAtlasEntries<T extends { name: string }>(entries: T[]): { im
   const image = [...images].sort((a, b) => score(b) - score(a))[0];
   return { image, table: tables.find((t) => base(t.name) === base(image.name)) ?? (tables.length === 1 ? tables[0] : undefined) };
 }
+
+export interface LabelHistogramOptions {
+  bins: number;
+  /** Value range of the bins; default: min–max over all labelled voxels of the dataset. */
+  min?: number;
+  max?: number;
+  /** Percent of the region's voxels instead of voxel counts. */
+  relative?: boolean;
+}
+
+/**
+ * Histogram per region as CSV: one row per label, one column per bin (same bins for all regions, so rows are
+ * comparable). Values outside the range are counted in the first/last bin (noted in the header).
+ */
+export function labelHistogramCsv(
+  values: Float32Array,
+  labels: Float32Array,
+  regions: { index: number; name: string }[],
+  opts: LabelHistogramOptions,
+  meta: { dataset: string; atlas: string; unit: string; note?: string },
+): string {
+  const bins = Math.max(1, Math.floor(opts.bins));
+  const row = new Map<number, number>();
+  regions.forEach((r, i) => row.set(r.index, i));
+  let lo = opts.min ?? Infinity, hi = opts.max ?? -Infinity;
+  if (opts.min === undefined || opts.max === undefined) {
+    let mn = Infinity, mx = -Infinity;
+    for (let i = 0; i < labels.length; i++) {
+      const v = values[i];
+      if (!Number.isFinite(v) || !row.has(Math.round(labels[i]))) continue;
+      if (v < mn) mn = v;
+      if (v > mx) mx = v;
+    }
+    if (opts.min === undefined) lo = Number.isFinite(mn) ? mn : 0;
+    if (opts.max === undefined) hi = Number.isFinite(mx) ? mx : 1;
+  }
+  if (!(hi > lo)) hi = lo + 1;
+  const width = (hi - lo) / bins;
+  const counts = regions.map(() => new Float64Array(bins));
+  const totals = new Float64Array(regions.length);
+  for (let i = 0; i < labels.length; i++) {
+    const r = row.get(Math.round(labels[i]));
+    const v = values[i];
+    if (r === undefined || !Number.isFinite(v)) continue;
+    const b = Math.min(bins - 1, Math.max(0, Math.floor((v - lo) / width)));
+    counts[r][b]++;
+    totals[r]++;
+  }
+  const f = (v: number, d = 4) => (Number.isFinite(v) ? Number(v.toPrecision(6)).toFixed(d).replace(".", ",") : "");
+  const u = meta.unit ? ` ${meta.unit}` : "";
+  const head = [
+    `# Datensatz: ${meta.dataset}`,
+    `# Labels: ${meta.atlas}`,
+    ...(meta.note ? [`# ${meta.note}`] : []),
+    `# ${bins} Bins von ${f(lo)} bis ${f(hi)}${u} (Breite ${f(width, 6)}); Spaltenkopf = Bin-Untergrenze; Werte außerhalb in der ersten/letzten Bin; ${opts.relative ? "Anteil der Voxel der Region in %" : "Anzahl Voxel"}`,
+    ["Index", "Region", "Voxel", ...Array.from({ length: bins }, (_, b) => f(lo + b * width))].join(";"),
+  ];
+  const rows = regions.map((r, i) =>
+    [r.index, `"${r.name.replace(/"/g, "'")}"`, totals[i], ...Array.from(counts[i], (c) => (opts.relative ? f(totals[i] ? (100 * c) / totals[i] : 0, 4) : String(c)))].join(";"),
+  );
+  return [...head, ...rows].join("\n") + "\n";
+}

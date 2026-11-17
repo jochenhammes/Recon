@@ -80,6 +80,8 @@ Alles läuft clientseitig im Browser (Web Worker), es gibt keinen Server – die
 - **Label-Analyse**: Statistik eines beliebigen Datensatzes je Region einer Segmentierung oder eines Atlas (Volumen,
   Mittel, SD, Varianz, Median, Min, Max; z. B. CT-Organe auf dem PET in SUV), Histogramm einer oder mehrerer Regionen,
   Tabelle als **CSV**. Labels auf anderem Raster werden über die Registrierung übertragen (nächster Nachbar).
+  **Histogramme je Label** als CSV (Zeilen = Labels, Spalten = Bins; Bins-Anzahl, Bereich auto/fest, Anzahl oder
+  Anteil %), für den gewählten oder für alle Datensätze (ZIP mit einer CSV je Datensatz).
   Hirnatlanten für Daten im MNI-Raum: CerebrA (mitgeliefert) oder **AAL3** (ZIP von
   [gin.cnrs.fr](https://www.gin.cnrs.fr/en/tools/aal/) direkt auswählen; wird nicht mitgeliefert).
 - **Labelbilder werden beim erneuten Laden als Atlas erkannt**: Export setzt NIfTI-Intent „Label“ und speichert die

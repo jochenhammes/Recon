@@ -83,3 +83,18 @@ describe("label-based analysis", () => {
     expect(p.table?.name).toBe("AAL3/AAL3v1.nii.txt");
   });
 });
+
+describe("label histogram CSV", () => {
+  it("one row per label, one column per bin, shared range", async () => {
+    const { labelHistogramCsv } = await import("./atlas");
+    const values = Float32Array.from([0, 1, 2, 3, 3, 9, 5]);
+    const labels = Float32Array.from([1, 1, 1, 2, 2, 2, 0]);
+    const regions = [{ index: 1, name: "A" }, { index: 2, name: "B" }];
+    const csv = labelHistogramCsv(values, labels, regions, { bins: 3 }, { dataset: "d", atlas: "a", unit: "SUV" }).trim().split("\n");
+    expect(csv[3]).toBe("Index;Region;Voxel;0,0000;3,0000;6,0000");
+    expect(csv[4]).toBe('1;"A";3;3;0;0');
+    expect(csv[5]).toBe('2;"B";3;0;2;1');
+    const rel = labelHistogramCsv(values, labels, regions, { bins: 3, min: 0, max: 6, relative: true }, { dataset: "d", atlas: "a", unit: "" }).trim().split("\n");
+    expect(rel[5]).toBe('2;"B";3;0,0000;66,6667;33,3333');
+  });
+});
