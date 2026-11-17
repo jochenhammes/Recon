@@ -88,7 +88,11 @@ function buildPart10(spec: FileSpec): Uint8Array<ArrayBuffer> {
     { tag: [0x0028, 0x0101], vr: "US", value: u16le(bits) },
     { tag: [0x0028, 0x0102], vr: "US", value: u16le(bits - 1) },
     { tag: [0x0028, 0x0103], vr: "US", value: u16le(spec.pixelRepresentation ?? 0) },
+    { tag: [0x0028, 0x0106], vr: "US", value: u16le(Math.min(...spec.pixels)) },
     { tag: [0x0028, 0x0107], vr: "US", value: u16le(Math.max(...spec.pixels)) },
+    { tag: [0x0028, 0x0109], vr: "US", value: u16le(Math.max(...spec.pixels)) },
+    { tag: [0x0028, 0x1050], vr: "DS", value: s("DS", "55") },
+    { tag: [0x0028, 0x1051], vr: "DS", value: s("DS", "110") },
     ...(spec.slope !== undefined
       ? [
           { tag: [0x0028, 0x1052], vr: "DS", value: s("DS", formatDS(spec.intercept ?? 0)) } as El,
@@ -122,12 +126,13 @@ function rawElement(bytes: Uint8Array, tag: string): Uint8Array {
   return bytes.slice(el.dataOffset - header, end);
 }
 
-async function exportRoundTrip(files: File[], threshold: number, value: number) {
+async function exportRoundTrip(files: File[], threshold: number, value: number, adjustWindow = true) {
   const loaded = await loadVolumeFromFiles(files);
   const edited = applyEdit(loaded.volume, { type: "thresholdReplace", threshold, value }).volume;
   const result = buildEditedDicomFiles(edited, loaded.source as DicomSource, {
     seriesDescriptionSuffix: " [bearbeitet]",
     derivationDescription: "test edit",
+    adjustWindow,
   });
   const reloaded = await loadVolumeFromFiles(result.files.map((f) => asFile(f.bytes, f.name)));
   return { loaded, edited, result, reloaded };
@@ -157,10 +162,31 @@ describe("buildEditedDicomFiles (header-preserving export)", () => {
     expect(ds.string("x00080008")).toBe("DERIVED\\PRIMARY\\RECON TOMO");
     expect(ds.string("x0008103e")).toBe("SPECT AC [bearbeitet]");
     expect(ds.string("x00082111")).toBe("test edit");
-    expect(ds.elements["x00280107"]).toBeUndefined(); // stale LargestImagePixelValue removed
+    expect(ds.uint16("x00280106")).toBe(0); // Smallest/Largest pixel values rewritten for the edited data
+    expect(ds.uint16("x00280107")).toBe(50);
+    expect(ds.uint16("x00280109")).toBe(50);
+    expect(ds.string("x00281050")).toBe("25"); // window re-derived from the new range 0..50
+    expect(ds.string("x00281051")).toBe("50");
     expect(ds.elements["x00281053"]).toBeUndefined(); // no rescale tags added
     expect(ds.uint32("x00020000")).toBe(ds.elements["x00020010"].dataOffset + ds.elements["x00020010"].length - 144);
     expect(ds.elements["x00540022"].items).toHaveLength(1);
+  });
+
+  it("keeps the original window when window adjustment is off", async () => {
+    const { result } = await exportRoundTrip([asFile(original, "a.dcm")], 60, 5, false);
+    const out = result.files[0].bytes;
+    expect(rawElement(out, "x00281050")).toEqual(rawElement(original, "x00281050"));
+    expect(rawElement(out, "x00281051")).toEqual(rawElement(original, "x00281051"));
+  });
+
+  it("writes pixel range tags in stored units and the window in real units after rescaling", async () => {
+    const { result } = await exportRoundTrip([asFile(original, "a.dcm")], 100, -5);
+    const ds = dicomParser.parseDicom(result.files[0].bytes);
+    // intercept -5, slope 1: real -5..90 → stored 0..95
+    expect(ds.uint16("x00280106")).toBe(0);
+    expect(ds.uint16("x00280107")).toBe(95);
+    expect(ds.string("x00281050")).toBe("42.5");
+    expect(ds.string("x00281051")).toBe("95");
   });
 
   it("leaves unchanged voxels bit-exact with a fractional rescale slope", async () => {

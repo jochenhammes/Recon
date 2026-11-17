@@ -9,6 +9,9 @@ export interface EncodedPixels {
   rescaled: boolean;
   /** Largest absolute difference between a real value and its encoded representation. */
   maxError: number;
+  /** Smallest/largest stored (pre-rescale) sample value actually written. */
+  storedMin: number;
+  storedMax: number;
 }
 
 /** Tolerance (in stored units) for accepting a value as exactly on the original quantization grid. */
@@ -36,7 +39,7 @@ export function encodePixels(values: Float32Array, original: DicomPixelEncoding)
   if (!Number.isFinite(min)) min = max = 0;
 
   if (fitsEncoding(values, original)) {
-    return { bytes: writeSamples(values, original), encoding: original, rescaled: false, maxError: maxEncodingError(values, original) };
+    return { bytes: writeSamples(values, original), encoding: original, rescaled: false, maxError: maxEncodingError(values, original), ...storedMinMax(values, original) };
   }
 
   const bitsAllocated = original.bitsAllocated === 8 ? 16 : original.bitsAllocated;
@@ -65,7 +68,7 @@ export function encodePixels(values: Float32Array, original: DicomPixelEncoding)
     intercept,
     hasRescaleTags: original.hasRescaleTags || slope !== 1 || intercept !== 0,
   };
-  return { bytes: writeSamples(values, encoding), encoding, rescaled: true, maxError: maxEncodingError(values, encoding) };
+  return { bytes: writeSamples(values, encoding), encoding, rescaled: true, maxError: maxEncodingError(values, encoding), ...storedMinMax(values, encoding) };
 }
 
 function allIntegers(values: Float32Array): boolean {
@@ -102,6 +105,19 @@ function maxEncodingError(values: Float32Array, enc: DicomPixelEncoding): number
     err = Math.max(err, Math.abs(back - values[i]));
   }
   return err;
+}
+
+function storedMinMax(values: Float32Array, enc: DicomPixelEncoding): { storedMin: number; storedMax: number } {
+  const [lo, hi] = storedRange(enc.bitsStored, enc.pixelRepresentation);
+  let storedMin = Infinity;
+  let storedMax = -Infinity;
+  for (let i = 0; i < values.length; i++) {
+    const s = toStored(values[i], enc, lo, hi);
+    if (s < storedMin) storedMin = s;
+    if (s > storedMax) storedMax = s;
+  }
+  if (!Number.isFinite(storedMin)) storedMin = storedMax = 0;
+  return { storedMin, storedMax };
 }
 
 function writeSamples(values: Float32Array, enc: DicomPixelEncoding): Uint8Array<ArrayBuffer> {

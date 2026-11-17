@@ -43,6 +43,7 @@ function downloadBytes(bytes: Uint8Array<ArrayBuffer>, fileName: string, mimeTyp
 export function ExportPanel({ dataset }: ExportPanelProps) {
   const { source, current: volume, edits } = dataset;
   const [markSeries, setMarkSeries] = useState(true);
+  const [adjustWindow, setAdjustWindow] = useState(true);
   const [messages, setMessages] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,6 +69,7 @@ export function ExportPanel({ dataset }: ExportPanelProps) {
         const { files, warnings } = buildEditedDicomFiles(volume, source, {
           seriesDescriptionSuffix: markSeries && edited ? " [bearbeitet]" : undefined,
           derivationDescription: edited ? editDescription : undefined,
+          adjustWindow: edited && adjustWindow,
         });
         if (files.length === 1) downloadBytes(files[0].bytes, `${baseName}${suffix}.dcm`, "application/dicom");
         else downloadBytes(buildZip(files), `${baseName}${suffix}.zip`, "application/zip");
@@ -113,15 +115,22 @@ export function ExportPanel({ dataset }: ExportPanelProps) {
         {source.kind === "nifti" ? "Als NIfTI speichern (Original-Header)" : "Als NIfTI speichern"}
       </button>
       {source.kind === "dicom" && edited && (
-        <label className="checkbox-field">
-          <input type="checkbox" checked={markSeries} onChange={(e) => setMarkSeries(e.target.checked)} />
-          SeriesDescription um „[bearbeitet]“ ergänzen
-        </label>
+        <>
+          <label className="checkbox-field">
+            <input type="checkbox" checked={markSeries} onChange={(e) => setMarkSeries(e.target.checked)} />
+            SeriesDescription um „[bearbeitet]“ ergänzen
+          </label>
+          <label className="checkbox-field">
+            <input type="checkbox" checked={adjustWindow} onChange={(e) => setAdjustWindow(e.target.checked)} />
+            Fensterwerte (Window Center/Width) an neuen Wertebereich anpassen
+          </label>
+        </>
       )}
       <p className="export-note">
         {source.kind === "dicom"
           ? "DICOM-Export übernimmt alle Header-Daten des Originals unverändert – inklusive Patientendaten. " +
-            "Neu vergeben werden nur SOP- und Series-Instance-UID; ImageType wird auf DERIVED gesetzt."
+            "Neu vergeben werden SOP- und Series-Instance-UID; ImageType wird auf DERIVED gesetzt, " +
+            "kleinster/größter Pixelwert werden aktualisiert."
           : "Die exportierten DICOM-Dateien enthalten keine Patientendaten – Name und ID sind anonymisiert. " +
             "Gespeichert werden nur die Bilddaten und die Voxelgeometrie."}
       </p>

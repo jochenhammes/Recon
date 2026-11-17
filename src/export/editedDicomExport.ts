@@ -1,6 +1,6 @@
 import type { DicomSourceFile, VolumeSource } from "../dataset/types";
 import type { Volume3D } from "../viewer/volume";
-import { encodePixels } from "./pixelEncode";
+import { type EncodedPixels, encodePixels } from "./pixelEncode";
 import { EXPLICIT_VR_LE, type TagOverrides, formatDS, rewriteDicom, stringValue, tagKey, usValue } from "./dicomRewriter";
 import { generateUid } from "./uid";
 
@@ -11,6 +11,11 @@ export interface EditedDicomOptions {
   seriesDescriptionSuffix?: string;
   /** Written to DerivationDescription (0008,2111) if given. */
   derivationDescription?: string;
+  /**
+   * Re-derive Window Center/Width (0028,1050/1051) from the exported value range instead of keeping
+   * the original window, which no longer fits after an edit. Only applied where the original has a window.
+   */
+  adjustWindow?: boolean;
 }
 
 export interface ExportedFile {
@@ -34,18 +39,25 @@ const T = {
   BitsAllocated: tagKey(0x0028, 0x0100),
   BitsStored: tagKey(0x0028, 0x0101),
   HighBit: tagKey(0x0028, 0x0102),
+  SmallestImagePixelValue: tagKey(0x0028, 0x0106),
+  LargestImagePixelValue: tagKey(0x0028, 0x0107),
+  SmallestPixelValueInSeries: tagKey(0x0028, 0x0108),
+  LargestPixelValueInSeries: tagKey(0x0028, 0x0109),
+  WindowCenter: tagKey(0x0028, 0x1050),
+  WindowWidth: tagKey(0x0028, 0x1051),
+  WindowExplanation: tagKey(0x0028, 0x1055),
+  VoiLutSequence: tagKey(0x0028, 0x3010),
   RescaleIntercept: tagKey(0x0028, 0x1052),
   RescaleSlope: tagKey(0x0028, 0x1053),
   PixelData: tagKey(0x7fe0, 0x0010),
 } as const;
 
-/** Value-range tags that become stale when pixel values change; they are Type 3 and simply removed. */
-const STALE_RANGE_TAGS = [tagKey(0x0028, 0x0106), tagKey(0x0028, 0x0107), tagKey(0x0028, 0x0108), tagKey(0x0028, 0x0109)];
 
 /**
  * Writes the (edited) volume back into the original DICOM file(s). All header elements are copied
  * unchanged except: PixelData, SOP Instance UID (new), Series Instance UID (new, shared by all files),
- * ImageType value 1 → DERIVED, optional SeriesDescription suffix / DerivationDescription, and — only
+ * ImageType value 1 → DERIVED, optional SeriesDescription suffix / DerivationDescription, Smallest/
+ * Largest Pixel Value tags (rewritten with the new values), optionally Window Center/Width, and — only
  * if the new values cannot be stored with the original encoding — bit depth and rescale tags.
  * Compressed (JPEG Lossless) originals are written uncompressed (Explicit VR Little Endian).
  */
@@ -54,21 +66,68 @@ export function buildEditedDicomFiles(volume: Volume3D, source: DicomSource, opt
   const totalFrames = source.files.reduce((s, f) => s + f.nFrames, 0);
   if (totalFrames !== volume.nz) throw new Error("Volumengröße passt nicht mehr zu den Original-DICOM-Dateien.");
 
+  const encodedFiles = source.files.map((file) =>
+    encodePixels(volume.data.subarray(file.zStart * sliceSize, (file.zStart + file.nFrames) * sliceSize), file.encoding),
+  );
+
+  // Series-wide stored range (only meaningful if all files share one encoding) and real-value range.
+  const sameEncoding = encodedFiles.every((e) => sameStoredEncoding(e, encodedFiles[0]));
+  const series = {
+    storedMin: Math.min(...encodedFiles.map((e) => e.storedMin)),
+    storedMax: Math.max(...encodedFiles.map((e) => e.storedMax)),
+    sameEncoding,
+    window: realWindow(volume.data),
+  };
+
   const seriesUid = generateUid();
   const warnings: string[] = [];
   const usedNames = new Set<string>();
-  const files = source.files.map((file) => {
-    const values = volume.data.subarray(file.zStart * sliceSize, (file.zStart + file.nFrames) * sliceSize);
-    const { overrides, warning } = buildFileOverrides(file, values, seriesUid, opts);
+  const files = source.files.map((file, i) => {
+    const { overrides, warning } = buildFileOverrides(file, encodedFiles[i], seriesUid, series, opts);
     if (warning) warnings.push(warning);
     return { name: uniqueName(file.fileName, usedNames), bytes: rewriteDicom(file, overrides) };
   });
   return { files, warnings };
 }
 
-function buildFileOverrides(file: DicomSourceFile, values: Float32Array, seriesUid: string, opts: EditedDicomOptions) {
+interface SeriesInfo {
+  storedMin: number;
+  storedMax: number;
+  sameEncoding: boolean;
+  window: { center: number; width: number };
+}
+
+function sameStoredEncoding(a: EncodedPixels, b: EncodedPixels): boolean {
+  const x = a.encoding;
+  const y = b.encoding;
+  return x.bitsAllocated === y.bitsAllocated && x.pixelRepresentation === y.pixelRepresentation && x.slope === y.slope && x.intercept === y.intercept;
+}
+
+/** Linear window covering the full range of (finite) real values. */
+function realWindow(data: Float32Array): { center: number; width: number } {
+  let min = Infinity;
+  let max = -Infinity;
+  for (let i = 0; i < data.length; i++) {
+    const v = data[i];
+    if (!Number.isFinite(v)) continue;
+    if (v < min) min = v;
+    if (v > max) max = v;
+  }
+  if (!Number.isFinite(min)) return { center: 0, width: 1 };
+  return { center: (min + max) / 2, width: Math.max(max - min, 1) };
+}
+
+/** US/SS value for the pixel-value range tags, whose VR follows PixelRepresentation. */
+function pixelValue(v: number, pixelRepresentation: number): { vr: string; value: Uint8Array } {
+  const value = new Uint8Array(2);
+  const dv = new DataView(value.buffer);
+  if (pixelRepresentation === 1) dv.setInt16(0, v, true);
+  else dv.setUint16(0, v, true);
+  return { vr: pixelRepresentation === 1 ? "SS" : "US", value };
+}
+
+function buildFileOverrides(file: DicomSourceFile, encoded: EncodedPixels, seriesUid: string, series: SeriesInfo, opts: EditedDicomOptions) {
   const { dataSet } = file;
-  const encoded = encodePixels(values, file.encoding);
   const enc = encoded.encoding;
   const overrides: TagOverrides = new Map();
   const notes: string[] = [];
@@ -94,7 +153,29 @@ function buildFileOverrides(file: DicomSourceFile, values: Float32Array, seriesU
         `${enc.bitsStored} bit, max. Rundungsabweichung ${formatDS(encoded.maxError)})`,
     );
   }
-  for (const tag of STALE_RANGE_TAGS) if (dataSet.elements[tag]) overrides.set(tag, null);
+
+  // Smallest/Largest (Image|Series) Pixel Value: rewrite with the new stored values where present.
+  // They are US/SS, so they cannot describe 32-bit samples; drop them in that case.
+  const fits16 = enc.bitsAllocated <= 16;
+  const rangeTags: [string, number, boolean][] = [
+    [T.SmallestImagePixelValue, encoded.storedMin, fits16],
+    [T.LargestImagePixelValue, encoded.storedMax, fits16],
+    [T.SmallestPixelValueInSeries, series.storedMin, fits16 && series.sameEncoding],
+    [T.LargestPixelValueInSeries, series.storedMax, fits16 && series.sameEncoding],
+  ];
+  for (const [tag, value, writable] of rangeTags) {
+    if (!dataSet.elements[tag]) continue;
+    overrides.set(tag, writable ? pixelValue(value, enc.pixelRepresentation) : null);
+  }
+
+  // Window: the original window refers to the original value range; re-derive it from the export.
+  if (opts.adjustWindow && dataSet.elements[T.WindowCenter] && dataSet.elements[T.WindowWidth]) {
+    overrides.set(T.WindowCenter, stringValue("DS", formatDS(series.window.center)));
+    overrides.set(T.WindowWidth, stringValue("DS", formatDS(series.window.width)));
+    // Keep VM consistent with the single window written above; a VOI LUT would take precedence.
+    if (dataSet.elements[T.WindowExplanation]) overrides.set(T.WindowExplanation, stringValue("LO", "EDITED"));
+    if (dataSet.elements[T.VoiLutSequence]) overrides.set(T.VoiLutSequence, null);
+  }
 
   const sopUid = generateUid();
   overrides.set(T.SopInstanceUid, stringValue("UI", sopUid));
