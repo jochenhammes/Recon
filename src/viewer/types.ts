@@ -1,4 +1,4 @@
-import type { WorldToVoxel } from "../core/geometry";
+import type { VolumeGeometry, WorldToVoxel } from "../core/geometry";
 import type { PlaneKind } from "./planes";
 import type { ColorLut, Volume3D } from "./volume";
 
@@ -14,11 +14,22 @@ export interface LayerDisplay {
   visible: boolean;
 }
 
+/** Minimal voxel grid the viewer can sample (a Volume3D, or e.g. a VOI mask). */
+export interface VoxelGrid {
+  nx: number;
+  ny: number;
+  nz: number;
+  data: ArrayLike<number>;
+  geometry: VolumeGeometry;
+}
+
 /** A volume shown in the viewer, bottom layer first. */
 export interface ViewerLayer {
   id: string;
   label: string;
-  volume: Volume3D;
+  volume: Volume3D | VoxelGrid;
+  /** Not listed in the status bar (e.g. VOI overlay). */
+  hideInStatus?: boolean;
   /** World → voxel index transform (geometry plus any registration). */
   w2v: WorldToVoxel;
   display: LayerDisplay;

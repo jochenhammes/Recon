@@ -1,0 +1,449 @@
+import { useMemo, useState } from "react";
+import type { VolumeStats } from "../analysis/stats";
+import type { Vec3 } from "../core/geometry";
+import { type EditOp, type ValueRule, type VoiAction, changesGrid, countAffected, describeEdit } from "../edit/operations";
+import type { VoiStats } from "../edit/voi";
+import type { Volume3D } from "../viewer/volume";
+import { formatCount, formatValue, parseInput } from "./format";
+
+/** Above this fraction of affected voxels the user must confirm the edit. */
+const LARGE_EDIT_FRACTION = 0.01;
+
+interface Units {
+  /** display = raw × scale */
+  scale: number;
+  unitLabel: string;
+}
+
+function confirmLarge(affected: number, total: number): boolean {
+  const fraction = affected / Math.max(total, 1);
+  if (fraction <= LARGE_EDIT_FRACTION) return true;
+  const percent = (fraction * 100).toLocaleString("de-DE", { maximumFractionDigits: 2 });
+  return window.confirm(
+    `Achtung: ${formatCount(affected)} Voxel (${percent} % des Datensatzes) wären betroffen.\n\n` +
+      "Stimmen Grenzwerte, Bereich und Einheit?\n\nTrotzdem anwenden?",
+  );
+}
+
+function AffectedHint({ affected, total }: { affected: number | null; total: number }) {
+  if (affected === null) return <p className="tool-hint">Bitte gültige Zahlen eingeben.</p>;
+  const fraction = affected / Math.max(total, 1);
+  const large = fraction > LARGE_EDIT_FRACTION;
+  return (
+    <p className={large ? "tool-hint tool-warning" : "tool-hint"}>
+      Betroffen: {formatCount(affected)} Voxel ({(fraction * 100).toLocaleString("de-DE", { maximumFractionDigits: 2 })} %)
+      {large ? " – ungewöhnlich viel, bitte Grenzwerte und Einheit prüfen." : ""}
+    </p>
+  );
+}
+
+function TextInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <label className="field">
+      {label}
+      <input type="text" inputMode="decimal" value={value} onChange={(e) => onChange(e.target.value)} />
+    </label>
+  );
+}
+
+// ─── Values ──────────────────────────────────────────────────────────────────
+
+type ValueMode = ValueRule["kind"];
+
+const VALUE_MODES: { value: ValueMode; label: string }[] = [
+  { value: "ge", label: "Werte ≥ Grenzwert ersetzen" },
+  { value: "le", label: "Werte ≤ Grenzwert ersetzen" },
+  { value: "range", label: "Werte in Bereich [a, b] ersetzen" },
+  { value: "clip", label: "Auf Bereich [min, max] begrenzen" },
+  { value: "linear", label: "Linear umrechnen: a · x + b" },
+];
+
+export interface ValueSectionProps extends Units {
+  volume: Volume3D;
+  stats: VolumeStats;
+  /** Threshold text (display units), shared with the histogram marker. */
+  threshold: string;
+  onThresholdChange: (v: string) => void;
+  value: string;
+  onValueChange: (v: string) => void;
+  busy: boolean;
+  onApply: (op: EditOp) => void;
+}
+
+export function ValueSection(props: ValueSectionProps) {
+  const { volume, stats, scale, unitLabel, threshold, value, busy } = props;
+  const [mode, setMode] = useState<ValueMode>("ge");
+  const [a, setA] = useState("0");
+  const [b, setB] = useState("1");
+  const unit = unitLabel ? ` (${unitLabel})` : "";
+
+  const op = useMemo<EditOp | null>(() => {
+    const t = parseInput(threshold) / scale;
+    const v = parseInput(value) / scale;
+    const na = parseInput(a);
+    const nb = parseInput(b);
+    let rule: ValueRule;
+    switch (mode) {
+      case "ge":
+      case "le":
+        rule = { kind: mode, threshold: t, value: v };
+        break;
+      case "range":
+        rule = { kind: "range", min: Math.min(na, nb) / scale, max: Math.max(na, nb) / scale, value: v };
+        break;
+      case "clip":
+        rule = { kind: "clip", min: Math.min(na, nb) / scale, max: Math.max(na, nb) / scale };
+        break;
+      case "linear":
+        rule = { kind: "linear", a: na, b: nb / scale };
+        break;
+    }
+    return Object.values(rule).every((x) => typeof x === "string" || Number.isFinite(x)) ? { type: "value", rule } : null;
+  }, [mode, threshold, value, a, b, scale]);
+
+  const affected = useMemo(() => (op ? countAffected(volume, op) : null), [volume, op]);
+  const sliderMin = Number.isFinite(stats.min) ? stats.min * scale : 0;
+  const sliderMax = Number.isFinite(stats.max) ? stats.max * scale : 1;
+  const displayThreshold = parseInput(threshold);
+
+  function changeMode(m: ValueMode) {
+    setMode(m);
+    if (m === "range" || m === "clip") {
+      setA(String(Number((stats.min * scale).toPrecision(6))));
+      setB(String(Number((stats.max * scale).toPrecision(6))));
+    } else if (m === "linear") {
+      setA("1");
+      setB("0");
+    }
+  }
+
+  return (
+    <section className="card">
+      <h3>Werte</h3>
+      <label className="field">
+        Operation
+        <select value={mode} onChange={(e) => changeMode(e.target.value as ValueMode)}>
+          {VALUE_MODES.map((m) => (
+            <option key={m.value} value={m.value}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {(mode === "ge" || mode === "le") && (
+        <label className="field">
+          Grenzwert ({mode === "ge" ? "≥" : "≤"}){unit}
+          <input type="text" inputMode="decimal" value={threshold} onChange={(e) => props.onThresholdChange(e.target.value)} />
+          <input
+            type="range"
+            min={sliderMin}
+            max={sliderMax}
+            step={(sliderMax - sliderMin) / 1000 || 1}
+            value={Number.isFinite(displayThreshold) ? Math.min(Math.max(displayThreshold, sliderMin), sliderMax) : sliderMax}
+            onChange={(e) => props.onThresholdChange(e.target.value)}
+            aria-label="Grenzwert"
+          />
+        </label>
+      )}
+      {(mode === "range" || mode === "clip") && (
+        <div className="field-row">
+          <TextInput label={`${mode === "range" ? "a" : "Min"}${unit}`} value={a} onChange={setA} />
+          <TextInput label={`${mode === "range" ? "b" : "Max"}${unit}`} value={b} onChange={setB} />
+        </div>
+      )}
+      {mode === "linear" && (
+        <div className="field-row">
+          <TextInput label="Faktor a" value={a} onChange={setA} />
+          <TextInput label={`Summand b${unit}`} value={b} onChange={setB} />
+        </div>
+      )}
+      {(mode === "ge" || mode === "le" || mode === "range") && <TextInput label={`Neuer Wert${unit}`} value={value} onChange={props.onValueChange} />}
+      <AffectedHint affected={affected} total={stats.count} />
+      <button
+        className="primary-btn"
+        disabled={!op || !affected || busy}
+        onClick={() => op && affected !== null && confirmLarge(affected, stats.count) && props.onApply(op)}
+      >
+        Anwenden
+      </button>
+    </section>
+  );
+}
+
+// ─── VOI ─────────────────────────────────────────────────────────────────────
+
+export type VoiTool = "sphere" | "box" | "brush";
+
+export interface BrushState {
+  active: boolean;
+  radius: number;
+  erase: boolean;
+}
+
+export interface VoiSectionProps extends Units {
+  tool: VoiTool;
+  onToolChange: (t: VoiTool) => void;
+  sphereRadius: number;
+  onSphereRadiusChange: (r: number) => void;
+  boxSize: Vec3;
+  onBoxSizeChange: (s: Vec3) => void;
+  brush: BrushState;
+  onBrushChange: (b: BrushState) => void;
+  /** Places a sphere/box VOI at the crosshair. */
+  onPlace: () => void;
+  onClear: () => void;
+  hasVoi: boolean;
+  stats: VoiStats | null;
+  totalVoxels: number;
+  countFor: (region: "inside" | "outside", action: VoiAction) => number | null;
+  busy: boolean;
+  onApply: (region: "inside" | "outside", action: VoiAction) => void;
+  onCrop: () => void;
+}
+
+export function VoiSection(props: VoiSectionProps) {
+  const { tool, scale, unitLabel, stats, busy } = props;
+  const [region, setRegion] = useState<"inside" | "outside">("inside");
+  const [actionKind, setActionKind] = useState<"set" | "scale">("set");
+  const [amount, setAmount] = useState("0");
+  const unit = unitLabel ? ` ${unitLabel}` : "";
+  const parsed = parseInput(amount);
+  const action = useMemo<VoiAction | null>(
+    () => (Number.isFinite(parsed) ? (actionKind === "set" ? { kind: "set", value: parsed / scale } : { kind: "scale", factor: parsed }) : null),
+    [parsed, actionKind, scale],
+  );
+  const { countFor, hasVoi } = props;
+  const affected = useMemo(() => (hasVoi && action ? countFor(region, action) : null), [hasVoi, region, action, countFor]);
+
+  return (
+    <section className="card">
+      <h3>VOI (Volume of Interest)</h3>
+      <div className="segmented-control" role="group" aria-label="VOI-Werkzeug">
+        {(
+          [
+            ["sphere", "Kugel"],
+            ["box", "Quader"],
+            ["brush", "Pinsel"],
+          ] as [VoiTool, string][]
+        ).map(([t, label]) => (
+          <button key={t} className={tool === t ? "active" : ""} onClick={() => props.onToolChange(t)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {tool === "sphere" && (
+        <>
+          <label className="field">
+            Radius (mm)
+            <input type="number" min={1} step={1} value={props.sphereRadius} onChange={(e) => props.onSphereRadiusChange(Number(e.target.value))} />
+          </label>
+          <button className="secondary-btn" onClick={props.onPlace}>
+            Kugel am Fadenkreuz setzen
+          </button>
+        </>
+      )}
+      {tool === "box" && (
+        <>
+          <div className="field-row three">
+            {(["R–L", "A–P", "F–H"] as const).map((label, a) => (
+              <label key={label} className="field">
+                {label} (mm)
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={props.boxSize[a]}
+                  onChange={(e) => {
+                    const s = [...props.boxSize] as Vec3;
+                    s[a] = Number(e.target.value);
+                    props.onBoxSizeChange(s);
+                  }}
+                />
+              </label>
+            ))}
+          </div>
+          <button className="secondary-btn" onClick={props.onPlace}>
+            Quader am Fadenkreuz setzen
+          </button>
+        </>
+      )}
+      {tool === "brush" && (
+        <>
+          <label className="field">
+            Pinselradius (mm)
+            <input type="number" min={1} step={1} value={props.brush.radius} onChange={(e) => props.onBrushChange({ ...props.brush, radius: Number(e.target.value) })} />
+          </label>
+          <div className="button-row">
+            <button className={props.brush.active && !props.brush.erase ? "secondary-btn toggled" : "secondary-btn"} onClick={() => props.onBrushChange({ ...props.brush, active: !(props.brush.active && !props.brush.erase), erase: false })}>
+              Malen
+            </button>
+            <button className={props.brush.active && props.brush.erase ? "secondary-btn toggled" : "secondary-btn"} onClick={() => props.onBrushChange({ ...props.brush, active: !(props.brush.active && props.brush.erase), erase: true })}>
+              Radieren
+            </button>
+          </div>
+          <p className="tool-hint">{props.brush.active ? "Im Bild mit gedrückter linker Maustaste malen (schichtweise). Werkzeug erneut anklicken zum Beenden." : "Malen aktivieren, dann im Bild zeichnen."}</p>
+        </>
+      )}
+      {props.hasVoi && stats && (
+        <>
+          <dl className="summary-list voi-stats">
+            <dt>Volumen</dt>
+            <dd>
+              {formatValue(stats.volumeMl)} ml ({formatCount(stats.voxels)} Voxel)
+            </dd>
+            <dt>Mittelwert</dt>
+            <dd>{formatValue(stats.mean * scale) + unit}</dd>
+            <dt>Maximum</dt>
+            <dd>{formatValue(stats.max * scale) + unit}</dd>
+            <dt>Minimum</dt>
+            <dd>{formatValue(stats.min * scale) + unit}</dd>
+            <dt>Peak (1 ml)</dt>
+            <dd>{formatValue(stats.peak * scale) + unit}</dd>
+          </dl>
+          <div className="field-row">
+            <label className="field">
+              Bereich
+              <select value={region} onChange={(e) => setRegion(e.target.value as "inside" | "outside")}>
+                <option value="inside">innen</option>
+                <option value="outside">außen</option>
+              </select>
+            </label>
+            <label className="field">
+              Aktion
+              <select
+                value={actionKind}
+                onChange={(e) => {
+                  const k = e.target.value as "set" | "scale";
+                  setActionKind(k);
+                  setAmount(k === "set" ? "0" : "1");
+                }}
+              >
+                <option value="set">Wert setzen</option>
+                <option value="scale">skalieren</option>
+              </select>
+            </label>
+          </div>
+          <TextInput label={actionKind === "set" ? `Wert${unit ? ` (${unitLabel})` : ""}` : "Faktor"} value={amount} onChange={setAmount} />
+          <AffectedHint affected={affected} total={props.totalVoxels} />
+          <button
+            className="primary-btn"
+            disabled={!action || !affected || busy}
+            onClick={() => action && affected !== null && confirmLarge(affected, props.totalVoxels) && props.onApply(region, action)}
+          >
+            Auf VOI anwenden
+          </button>
+          <div className="button-row">
+            <button className="secondary-btn" disabled={busy} onClick={props.onCrop}>
+              Auf VOI zuschneiden
+            </button>
+            <button className="secondary-btn" onClick={props.onClear}>
+              VOI löschen
+            </button>
+          </div>
+        </>
+      )}
+      {props.hasVoi && !stats && <p className="tool-hint">VOI ist leer.</p>}
+    </section>
+  );
+}
+
+// ─── Filter & geometry ───────────────────────────────────────────────────────
+
+export function FilterSection({ busy, onApply }: { busy: boolean; onApply: (op: EditOp) => void }) {
+  const [fwhm, setFwhm] = useState("6");
+  const v = parseInput(fwhm);
+  return (
+    <section className="card">
+      <h3>Filter</h3>
+      <TextInput label="Gauß-Glättung, FWHM (mm)" value={fwhm} onChange={setFwhm} />
+      <button className="primary-btn" disabled={!(v > 0) || busy} onClick={() => onApply({ type: "gaussian", fwhmMm: v })}>
+        Glätten
+      </button>
+    </section>
+  );
+}
+
+export function GeometrySection({ volume, busy, onApply }: { volume: Volume3D; busy: boolean; onApply: (op: EditOp) => void }) {
+  const [spacing, setSpacing] = useState(() => volume.geometry.spacing.map((s) => String(Number(s.toPrecision(4)))));
+  const parsed = spacing.map(parseInput) as Vec3;
+  const valid = parsed.every((s) => s > 0);
+  const unchanged = parsed.every((s, a) => Math.abs(s - volume.geometry.spacing[a]) < 1e-3);
+  const dims = valid ? [volume.nx, volume.ny, volume.nz].map((n, a) => Math.max(1, Math.round((n * volume.geometry.spacing[a]) / parsed[a]))) : null;
+  return (
+    <section className="card">
+      <h3>Geometrie</h3>
+      <p className="tool-hint">Spiegeln und Drehen verändern die Bildlage im Patientenkoordinatensystem.</p>
+      <div className="chip-row">
+        <button className="chip-btn" disabled={busy} onClick={() => onApply({ type: "flip", axis: 0 })}>
+          Spiegeln R↔L
+        </button>
+        <button className="chip-btn" disabled={busy} onClick={() => onApply({ type: "flip", axis: 1 })}>
+          Spiegeln A↔P
+        </button>
+        <button className="chip-btn" disabled={busy} onClick={() => onApply({ type: "flip", axis: 2 })}>
+          Spiegeln H↔F
+        </button>
+      </div>
+      <div className="chip-row">
+        <button className="chip-btn" disabled={busy} onClick={() => onApply({ type: "rotate90", turns: 1 })}>
+          ↻ 90°
+        </button>
+        <button className="chip-btn" disabled={busy} onClick={() => onApply({ type: "rotate90", turns: 3 })}>
+          ↺ 90°
+        </button>
+        <button className="chip-btn" disabled={busy} onClick={() => onApply({ type: "rotate90", turns: 2 })}>
+          180°
+        </button>
+      </div>
+      <div className="field-row three">
+        {(["x", "y", "z"] as const).map((axis, a) => (
+          <TextInput
+            key={axis}
+            label={`Voxel ${axis} (mm)`}
+            value={spacing[a]}
+            onChange={(v) => setSpacing((s) => s.map((old, i) => (i === a ? v : old)))}
+          />
+        ))}
+      </div>
+      {dims && (
+        <p className="tool-hint">
+          Neue Matrix: {dims.join(" × ")} (bisher {volume.nx} × {volume.ny} × {volume.nz})
+        </p>
+      )}
+      <button className="primary-btn" disabled={!valid || unchanged || busy} onClick={() => onApply({ type: "resample", spacing: parsed })}>
+        Resampling
+      </button>
+    </section>
+  );
+}
+
+// ─── History ─────────────────────────────────────────────────────────────────
+
+export function HistorySection(props: Units & { edits: EditOp[]; busy: boolean; onUndo: () => void; onReset: () => void }) {
+  const { edits, busy } = props;
+  const gridChanged = edits.some(changesGrid);
+  return (
+    <section className="card">
+      <h3>Verlauf</h3>
+      {busy && <p className="tool-hint">Berechnung läuft …</p>}
+      {edits.length === 0 ? (
+        <p className="tool-hint">Noch keine Bearbeitung.</p>
+      ) : (
+        <ol className="edit-history">
+          {edits.map((e, i) => (
+            <li key={i}>{describeEdit(e, { scale: props.scale, label: props.unitLabel })}</li>
+          ))}
+        </ol>
+      )}
+      {gridChanged && <p className="tool-hint">Das Voxelraster wurde verändert – der DICOM-Export erzeugt eine neue Serie.</p>}
+      <div className="button-row">
+        <button className="secondary-btn" disabled={edits.length === 0 || busy} onClick={props.onUndo}>
+          Rückgängig
+        </button>
+        <button className="secondary-btn" disabled={edits.length === 0 || busy} onClick={props.onReset}>
+          Original
+        </button>
+      </div>
+    </section>
+  );
+}

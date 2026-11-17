@@ -152,7 +152,7 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
 }
 
-export type ColorLut = "gray" | "inverted" | "rainbow" | "kidney";
+export type ColorLut = "gray" | "inverted" | "rainbow" | "kidney" | "voi";
 
 function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
   const c = v * s;
@@ -205,6 +205,7 @@ const RAINBOW_LUT = buildRainbowLut();
 const KIDNEY_LUT = buildKidneyLut();
 const GRAY_LUT = Uint8Array.from({ length: 256 * 3 }, (_, i) => Math.floor(i / 3));
 const INVERTED_LUT = Uint8Array.from({ length: 256 * 3 }, (_, i) => 255 - Math.floor(i / 3));
+const VOI_LUT = Uint8Array.from({ length: 256 * 3 }, (_, i) => [40, 230, 140][i % 3]);
 
 /** 256-entry RGB table (r, g, b interleaved) for a color LUT. */
 export function lutTable(lut: ColorLut): Uint8Array {
@@ -215,6 +216,8 @@ export function lutTable(lut: ColorLut): Uint8Array {
       return KIDNEY_LUT;
     case "inverted":
       return INVERTED_LUT;
+    case "voi":
+      return VOI_LUT;
     default:
       return GRAY_LUT;
   }

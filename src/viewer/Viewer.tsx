@@ -4,6 +4,7 @@ import { formatValue } from "../components/format";
 import { compositeLayers } from "./composite";
 import { ImageCanvas } from "./ImageCanvas";
 import { orientedMip } from "./mip";
+import { Volume3D } from "./volume";
 import {
   type DisplayGrid,
   type PlaneKind,
@@ -31,6 +32,9 @@ export interface ViewerProps {
   layout: LayoutKind;
   focusView: ViewKind;
   onLayoutChange: (layout: LayoutKind, focusView: ViewKind) => void;
+  /** When set, left-dragging in a plane paints (calls onPaint) instead of moving the cursor. */
+  paintMode?: boolean;
+  onPaint?: (world: Vec3, normalAxis: 0 | 1 | 2) => void;
   /** Extra controls for the viewer toolbar. */
   toolbar?: ReactNode;
   /** Optional per-view overlay (e.g. VOI outlines), drawn in plane pixel coordinates. */
@@ -96,6 +100,7 @@ export function Viewer(props: ViewerProps) {
         transform={transforms[kind]}
         onTransformChange={(t) => setTransform(kind, t)}
         onCursorChange={props.onCursorChange}
+        onPaint={props.paintMode ? props.onPaint : undefined}
         onWindowDrag={dragWindow}
         onHover={setHover}
         onDoubleClick={() => toggleMaximize(kind)}
@@ -153,7 +158,7 @@ export function Viewer(props: ViewerProps) {
         <span>
           {hover ? "Maus" : "Cursor"}: {statusPoint.map((v) => v.toFixed(1)).join(" / ")} mm (LPS)
         </span>
-        {layers.map((l) => {
+        {layers.filter((l) => !l.hideInStatus).map((l) => {
           const raw = valueAt(l.volume, l.w2v, statusPoint);
           const unit = l.unit;
           return (
@@ -180,6 +185,7 @@ interface PlaneViewProps {
   transform: ViewTransform;
   onTransformChange: (t: ViewTransform) => void;
   onCursorChange: (p: Vec3) => void;
+  onPaint?: (world: Vec3, normalAxis: 0 | 1 | 2) => void;
   onWindowDrag: (dx: number, dy: number) => void;
   onHover: (p: Vec3 | null) => void;
   onDoubleClick: () => void;
@@ -257,7 +263,8 @@ function PlaneView(props: PlaneViewProps) {
       onPoint={(u, v) => {
         const w = planeToWorld(basis, u, v);
         w[axis] = planeCoord;
-        props.onCursorChange(w);
+        if (props.onPaint) props.onPaint(w, axis);
+        else props.onCursorChange(w);
       }}
       onHover={(u, v) => {
         const w = planeToWorld(basis, u, v);
@@ -306,7 +313,7 @@ function MipView({ layer, transform, onTransformChange, onWindowDrag, onDoubleCl
   const deg = Math.round(azimuth / 3) * 3;
   const volume = layer?.volume;
   const display = layer?.display;
-  const mip = useMemo(() => (volume ? orientedMip(volume, deg) : null), [volume, deg]);
+  const mip = useMemo(() => (volume instanceof Volume3D ? orientedMip(volume, deg) : null), [volume, deg]);
   const image = useMemo(() => {
     if (!mip || !display) return { rgba: new Uint8ClampedArray(4), width: 1, height: 1 };
     const rgba = compositeLayers([{ values: mip.data, window: display.window, lut: display.lut, opacity: 1 }], mip.width * mip.height);

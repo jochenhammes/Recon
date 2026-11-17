@@ -6,11 +6,13 @@ import { LayerSettings, type WindowPreset } from "./ui/ViewSettingsPanel";
 import { RegistrationPanel } from "./ui/RegistrationPanel";
 import { CT_PRESETS, defaultDisplay, isAnatomical, modalityLabel, rawUnitLabel, suvForSource } from "./dataset/describe";
 import { AnalysisPanel } from "./components/AnalysisPanel";
-import { EditPanel } from "./components/EditPanel";
+import { type BrushState, FilterSection, GeometrySection, HistorySection, ValueSection, VoiSection, type VoiTool } from "./components/EditTools";
+import { runEdits } from "./edit/runner";
+import { type VoiShape, maskBounds, paintDisc, voiMask, voiStats } from "./edit/voi";
 import { computeStats } from "./analysis/stats";
 import { type UnitMode, formatInput, parseInput } from "./components/format";
 import { type LoadedDataset, createDataset } from "./dataset/types";
-import { type EditOp, applyEdit } from "./edit/operations";
+import { type EditOp, type VoiAction, changesGrid, countAffected } from "./edit/operations";
 import type { LoadedVolume } from "./viewer/volumeLoader";
 import { UploadPanel } from "./components/UploadPanel";
 import { VolumeUploadPanel } from "./components/VolumeUploadPanel";
@@ -26,6 +28,9 @@ import {
   IDENTITY_RIGID,
   type RigidParams,
   type Vec3,
+  type WorldToVoxel,
+  applyWorldToVoxel,
+  voxelToWorld,
   registeredWorldToVoxel,
   volumeCenter,
   worldToVoxelTransform,
@@ -40,6 +45,17 @@ interface Slot {
   dataset: LoadedDataset;
   display: LayerDisplay;
 }
+
+/** Current (not yet applied) VOI on the dataset of `role`; `version` changes on every modification. */
+interface VoiState {
+  role: Role;
+  shape: VoiShape;
+  version: number;
+  /** Index-space bounding box of the painted voxels (mask VOIs). */
+  bounds?: { min: Vec3; max: Vec3 } | null;
+}
+
+const VOI_DISPLAY: LayerDisplay = { window: [0.5, 1], lut: "voi", opacity: 0.4, visible: true };
 
 const ROLE_LABEL: Record<Role, string> = { functional: "PET/SPECT", anatomical: "CT" };
 
@@ -59,6 +75,12 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editBusy, setEditBusy] = useState(false);
+  const [voi, setVoi] = useState<VoiState | null>(null);
+  const [voiTool, setVoiTool] = useState<VoiTool>("sphere");
+  const [sphereRadius, setSphereRadius] = useState(15);
+  const [boxSize, setBoxSize] = useState<Vec3>([40, 40, 40]);
+  const [brush, setBrush] = useState<BrushState>({ active: false, radius: 8, erase: false });
   const abortRef = useRef<AbortController | null>(null);
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     try {
@@ -115,14 +137,42 @@ function App() {
   const functionalLabel = modalityLabel(functionalSource);
   const anatomicalLabel = modalityLabel(anatomical?.dataset.source);
 
+  const roleW2v = (r: Role): WorldToVoxel | null => (r === "functional" ? functionalW2v : anatomicalW2v);
+  const activeW2v = roleW2v(role);
+
+  // ── VOI: mask on the active dataset's grid, shown as a green overlay. ──
+  const voiValid = voi && voi.role === role && volume;
+  const voiMaskData = useMemo(() => (voiValid ? voiMask(volume!, voi!.shape) : null), [voiValid, volume, voi]);
+  const voiBounds = useMemo(
+    () => (voiMaskData && volume ? (voi?.shape.kind === "mask" ? (voi.bounds ?? null) : maskBounds(voiMaskData, volume.nx, volume.ny)) : null),
+    [voiMaskData, volume, voi], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const voiStatistics = useMemo(
+    () => (voiMaskData && volume && voiBounds ? voiStats(volume, voiMaskData, voiBounds) : null),
+    [voiMaskData, volume, voiBounds],
+  );
+  const voiLayer = useMemo<ViewerLayer | null>(() => {
+    if (!voiMaskData || !volume || !activeW2v || !voi) return null;
+    return {
+      id: "voi",
+      label: "VOI",
+      volume: { nx: volume.nx, ny: volume.ny, nz: volume.nz, data: voiMaskData, geometry: volume.geometry },
+      w2v: activeW2v,
+      display: VOI_DISPLAY,
+      hideInStatus: true,
+    };
+    // `voi.version` changes when the mask array is painted in place.
+  }, [voiMaskData, volume, activeW2v, voi]);
+
   const layers = useMemo<ViewerLayer[]>(() => {
     const out: ViewerLayer[] = [];
     if (anatomicalVolume && anatomicalW2v && anatomicalDisplay)
       out.push({ id: "anatomical", label: anatomicalLabel, volume: anatomicalVolume, w2v: anatomicalW2v, display: anatomicalDisplay, unit: anatomicalUnit });
     if (functionalVolume && functionalW2v && functionalDisplay)
       out.push({ id: "functional", label: functionalLabel, volume: functionalVolume, w2v: functionalW2v, display: functionalDisplay, unit: functionalUnit });
+    if (voiLayer) out.push(voiLayer);
     return out;
-  }, [anatomicalVolume, anatomicalW2v, anatomicalDisplay, anatomicalLabel, anatomicalUnit, functionalVolume, functionalW2v, functionalDisplay, functionalLabel, functionalUnit]);
+  }, [anatomicalVolume, anatomicalW2v, anatomicalDisplay, anatomicalLabel, anatomicalUnit, functionalVolume, functionalW2v, functionalDisplay, functionalLabel, functionalUnit, voiLayer]);
 
   function setDisplay(r: Role, display: LayerDisplay) {
     setSlots((prev) => (prev[r] ? { ...prev, [r]: { ...prev[r]!, display } } : prev));
@@ -148,6 +198,7 @@ function App() {
       return updated;
     });
     setCursor(null);
+    setVoi((v) => (v && v.role === r ? null : v));
     // A CT added for fusion does not take over analysis/editing from an existing PET/SPECT.
     const becomesActive = r === "functional" || !slots.functional;
     if (becomesActive) setActiveRole(r);
@@ -179,6 +230,8 @@ function App() {
     const slot = slots[r];
     if (!slot || r === role) return;
     setActiveRole(r);
+    setVoi(null);
+    setBrush((b) => ({ ...b, active: false }));
     resetEditInputs(slot.dataset, r === "functional" ? functionalScale : 1);
   }
 
@@ -194,26 +247,82 @@ function App() {
     setError(null);
   }
 
+  /** Runs edits in the worker and stores the result for the active dataset. */
+  async function commit(base: LoadedDataset, from: "current" | "original", ops: EditOp[], edits: EditOp[]) {
+    setEditBusy(true);
+    setError(null);
+    try {
+      const { volume: next } = await runEdits(from === "current" ? base.current : base.original, ops);
+      setDataset(role, { ...base, current: next, edits });
+      if (ops.some(changesGrid) || (from === "original" && base.edits.some(changesGrid))) setVoi(null);
+    } catch (e) {
+      setError(`Bearbeitung fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
   function handleApplyEdit(op: EditOp) {
-    if (!dataset) return;
-    const { volume: next } = applyEdit(dataset.current, op);
-    setDataset(role, { ...dataset, current: next, history: [...dataset.history, dataset.current], edits: [...dataset.edits, op] });
+    if (!dataset || editBusy) return;
+    void commit(dataset, "current", [op], [...dataset.edits, op]);
   }
 
   function handleUndo() {
-    if (!dataset || dataset.history.length === 0) return;
-    setDataset(role, {
-      ...dataset,
-      current: dataset.history[dataset.history.length - 1],
-      history: dataset.history.slice(0, -1),
-      edits: dataset.edits.slice(0, -1),
-    });
+    if (!dataset || dataset.edits.length === 0 || editBusy) return;
+    const edits = dataset.edits.slice(0, -1);
+    void commit(dataset, "original", edits, edits);
   }
 
   function handleReset() {
     if (!dataset) return;
-    setDataset(role, { ...dataset, current: dataset.original, history: [], edits: [] });
+    if (dataset.edits.some(changesGrid)) setVoi(null);
+    setDataset(role, { ...dataset, current: dataset.original, edits: [] });
   }
+
+  /** Converts a displayed world point to the active dataset's own world coordinates (undoing registration). */
+  function toNative(p: Vec3): Vec3 | null {
+    if (!volume || !activeW2v) return null;
+    const [i, j, k] = applyWorldToVoxel(activeW2v, p);
+    return voxelToWorld(volume.geometry, i, j, k);
+  }
+
+  function placeVoi() {
+    if (!volume) return;
+    const center = toNative(cursor ?? voxelToWorld(volume.geometry, (volume.nx - 1) / 2, (volume.ny - 1) / 2, (volume.nz - 1) / 2));
+    if (!center) return;
+    const shape: VoiShape = voiTool === "box" ? { kind: "box", center, size: boxSize } : { kind: "sphere", center, radius: sphereRadius };
+    setBrush((b) => ({ ...b, active: false }));
+    setVoi((v) => ({ role, shape, version: (v?.version ?? 0) + 1 }));
+  }
+
+  function paint(world: Vec3, normalAxis: 0 | 1 | 2) {
+    if (!volume) return;
+    const center = toNative(world);
+    if (!center) return;
+    const reuse = voi && voi.role === role && voi.shape.kind === "mask" ? voi : null;
+    const mask = reuse ? (reuse.shape as { mask: Uint8Array }).mask : new Uint8Array(volume.data.length);
+    const box = paintDisc(volume, mask, center, brush.radius, normalAxis, brush.erase ? 0 : 1);
+    const prev = reuse?.bounds;
+    const bounds = prev
+      ? { min: prev.min.map((v, a) => Math.min(v, box.min[a])) as Vec3, max: prev.max.map((v, a) => Math.max(v, box.max[a])) as Vec3 }
+      : brush.erase
+        ? null
+        : box;
+    setVoi({ role, shape: { kind: "mask", mask, dims: [volume.nx, volume.ny, volume.nz] }, version: (voi?.version ?? 0) + 1, bounds });
+  }
+
+  /** The VOI for an edit: analytic shapes as such, painted masks as an immutable copy. */
+  function voiForEdit(): VoiShape | null {
+    if (!voi || !volume) return null;
+    return voi.shape.kind === "mask" ? { ...voi.shape, mask: Uint8Array.from(voi.shape.mask) } : voi.shape;
+  }
+
+  const countVoi = useMemo(
+    () => (region: "inside" | "outside", action: VoiAction) =>
+      voiMaskData && volume ? countAffected(volume, { type: "voi", voi: { kind: "mask", mask: voiMaskData, dims: [volume.nx, volume.ny, volume.nz] }, region, action }) : null,
+    // `voi` changes on every brush stroke even though the mask array is modified in place.
+    [voiMaskData, volume, voi], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   async function handleStart(params: ReconParams) {
     if (!sino || !projectionSet) return;
@@ -362,20 +471,51 @@ function App() {
       disabled: !stats,
       badge: dataset?.edits.length,
       content: dataset && volume && stats && (
-        <EditPanel
-          volume={volume}
-          stats={stats}
-          edits={dataset.edits}
-          scale={scale}
-          unitLabel={unitLabel}
-          threshold={threshold}
-          onThresholdChange={setThreshold}
-          value={newValue}
-          onValueChange={setNewValue}
-          onApply={handleApplyEdit}
-          onUndo={handleUndo}
-          onReset={handleReset}
-        />
+        <>
+          <ValueSection
+            volume={volume}
+            stats={stats}
+            scale={scale}
+            unitLabel={unitLabel}
+            threshold={threshold}
+            onThresholdChange={setThreshold}
+            value={newValue}
+            onValueChange={setNewValue}
+            busy={editBusy}
+            onApply={handleApplyEdit}
+          />
+          <VoiSection
+            scale={scale}
+            unitLabel={unitLabel}
+            tool={voiTool}
+            onToolChange={(t) => {
+              setVoiTool(t);
+              if (t !== "brush") setBrush((b) => ({ ...b, active: false }));
+            }}
+            sphereRadius={sphereRadius}
+            onSphereRadiusChange={setSphereRadius}
+            boxSize={boxSize}
+            onBoxSizeChange={setBoxSize}
+            brush={brush}
+            onBrushChange={setBrush}
+            onPlace={placeVoi}
+            onClear={() => setVoi(null)}
+            hasVoi={!!voiMaskData}
+            stats={voiStatistics && voiStatistics.voxels > 0 ? voiStatistics : null}
+            totalVoxels={stats.count}
+            countFor={countVoi}
+            busy={editBusy}
+            onApply={(region, action) => {
+              const shape = voiForEdit();
+              if (shape) handleApplyEdit({ type: "voi", voi: shape, region, action });
+            }}
+            onCrop={() => voiBounds && handleApplyEdit({ type: "crop", min: voiBounds.min, max: voiBounds.max })}
+          />
+          <FilterSection busy={editBusy} onApply={handleApplyEdit} />
+          <GeometrySection key={`${volume.nx}x${volume.ny}x${volume.nz}`} volume={volume} busy={editBusy} onApply={handleApplyEdit} />
+          <HistorySection scale={scale} unitLabel={unitLabel} edits={dataset.edits} busy={editBusy} onUndo={handleUndo} onReset={handleReset} />
+          {error && <div className="error-banner">{error}</div>}
+        </>
       ),
     },
     { id: "export", label: "Export", icon: Download, disabled: !dataset, content: dataset && <ExportPanel dataset={dataset} /> },
@@ -413,6 +553,8 @@ function App() {
           layers={layers}
           activeLayerId={role}
           mipLayerId={functional ? "functional" : "anatomical"}
+          paintMode={brush.active && voiTool === "brush" && activeTab === "edit" && panelOpen}
+          onPaint={paint}
           cursor={cursor}
           onCursorChange={setCursor}
           onWindowChange={(id, window) => {

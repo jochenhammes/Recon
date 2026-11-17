@@ -819,3 +819,48 @@
 .toolbar-note strong {
   color: #e4d9ff;
 }
+
+.segmented-control {
+  display: flex;
+  margin-bottom: 10px;
+}
+
+.segmented-control button {
+  flex: 1;
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-h);
+  cursor: pointer;
+  margin-left: -1px;
+}
+
+.segmented-control button:first-child {
+  border-radius: 6px 0 0 6px;
+  margin-left: 0;
+}
+
+.segmented-control button:last-child {
+  border-radius: 0 6px 6px 0;
+}
+
+.segmented-control button.active,
+.secondary-btn.toggled {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+  color: var(--accent-strong);
+}
+
+.field-row.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.field input[type="number"] {
+  width: 100%;
+}
+
+.voi-stats {
+  margin-top: 12px;
+}

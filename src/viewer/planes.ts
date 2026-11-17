@@ -1,5 +1,5 @@
 import { type Vec3, type WorldToVoxel, applyWorldToVoxel, voxelToWorld, worldToVoxelTransform } from "../core/geometry";
-import type { Volume3D } from "./volume";
+import type { VoxelGrid } from "./types";
 
 /** Orthogonal display planes in patient (LPS) space. */
 export type PlaneKind = "axial" | "coronal" | "sagittal";
@@ -28,7 +28,7 @@ export interface PlaneBasis {
 const MAX_DISPLAY_PIXELS = 1024;
 
 /** World bounding box (voxel corners) of a volume. */
-export function volumeBounds(volume: Volume3D): { min: Vec3; max: Vec3 } {
+export function volumeBounds(volume: VoxelGrid): { min: Vec3; max: Vec3 } {
   const min: Vec3 = [Infinity, Infinity, Infinity];
   const max: Vec3 = [-Infinity, -Infinity, -Infinity];
   for (const i of [-0.5, volume.nx - 0.5])
@@ -44,7 +44,7 @@ export function volumeBounds(volume: Volume3D): { min: Vec3; max: Vec3 } {
 }
 
 /** Display grid covering all volumes, with the finest voxel size (limited to ~1024 px per side). */
-export function computeDisplayGrid(volumes: Volume3D[]): DisplayGrid {
+export function computeDisplayGrid(volumes: VoxelGrid[]): DisplayGrid {
   const min: Vec3 = [Infinity, Infinity, Infinity];
   const max: Vec3 = [-Infinity, -Infinity, -Infinity];
   let finest = Infinity;
@@ -113,7 +113,7 @@ export function orientationLabels(kind: PlaneKind): [string, string, string, str
  * Samples a volume on a plane with trilinear interpolation. Points outside the volume become NaN
  * (rendered transparent). `w2v` maps world to continuous voxel index (may include registration).
  */
-export function samplePlane(volume: Volume3D, w2v: WorldToVoxel, b: PlaneBasis, out?: Float32Array): Float32Array {
+export function samplePlane(volume: VoxelGrid, w2v: WorldToVoxel, b: PlaneBasis, out?: Float32Array): Float32Array {
   const { width, height } = b;
   const res = out && out.length === width * height ? out : new Float32Array(width * height);
   const { nx, ny, nz, data } = volume;
@@ -168,7 +168,7 @@ export function samplePlane(volume: Volume3D, w2v: WorldToVoxel, b: PlaneBasis, 
 }
 
 /** Nearest-voxel value at a world point, or NaN outside the volume. */
-export function valueAt(volume: Volume3D, w2v: WorldToVoxel, p: Vec3): number {
+export function valueAt(volume: VoxelGrid, w2v: WorldToVoxel, p: Vec3): number {
   const [x, y, z] = applyWorldToVoxel(w2v, p).map(Math.round);
   if (x < 0 || y < 0 || z < 0 || x >= volume.nx || y >= volume.ny || z >= volume.nz) return NaN;
   return volume.data[(z * volume.ny + y) * volume.nx + x];

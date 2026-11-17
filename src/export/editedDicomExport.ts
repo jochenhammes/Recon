@@ -67,7 +67,9 @@ const T = {
 export function buildEditedDicomFiles(volume: Volume3D, source: DicomSource, opts: EditedDicomOptions = {}): EditedDicomResult {
   const sliceSize = volume.nx * volume.ny;
   const totalFrames = source.files.reduce((s, f) => s + f.nFrames, 0);
-  if (totalFrames !== volume.nz) throw new Error("Volumengröße passt nicht mehr zu den Original-DICOM-Dateien.");
+  const first = source.files[0].dataSet;
+  if (totalFrames !== volume.nz || first.uint16("x00280010") !== volume.ny || first.uint16("x00280011") !== volume.nx)
+    throw new Error("Das Voxelraster wurde verändert (Crop/Drehen/Resampling) und passt nicht mehr zu den Original-DICOM-Dateien.");
 
   const encodedFiles = source.files.map((file) =>
     encodePixels(volume.data.subarray(file.zStart * sliceSize, (file.zStart + file.nFrames) * sliceSize), file.encoding),

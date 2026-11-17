@@ -48,13 +48,12 @@ export interface LoadedDataset {
   original: Volume3D;
   /** Current, possibly edited, volume; shown in the viewer and exported. */
   current: Volume3D;
-  /** Stack of volumes before each edit, for undo (same length as `edits`). */
-  history: Volume3D[];
+  /** Applied edits in order; `current` = original with all edits replayed (undo = replay one less). */
   edits: EditOp[];
   source: VolumeSource;
   displayName: string;
 }
 
 export function createDataset(volume: Volume3D, source: VolumeSource, displayName: string): LoadedDataset {
-  return { original: volume, current: volume, history: [], edits: [], source, displayName };
+  return { original: volume, current: volume, edits: [], source, displayName };
 }
