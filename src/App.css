@@ -1281,3 +1281,12 @@ tr.excluded-row td {
   gap: 6px;
   margin: 6px 0;
 }
+
+.chip-tag {
+  font-weight: 600;
+  color: var(--accent-strong);
+  white-space: nowrap;
+}
+.tag-field input {
+  font-size: 12px;
+}

@@ -6,6 +6,7 @@ import { DEFAULT_WARP } from "./normalization/warp";
 import { buildDeformationField, fieldCoverage, parseDeformationField } from "./normalization/yfield";
 import { DeformationFieldCard } from "./ui/DeformationFieldCard";
 import { CentiloidPanel, type CentiloidOutcome } from "./ui/CentiloidPanel";
+import { TagInput } from "./ui/TagInput";
 import { TumorPanel, type TumorIndication, type TumorMode } from "./ui/TumorPanel";
 import { CtSegCard } from "./ui/CtSegCard";
 import { type CtSegRun, runCtSegmentation } from "./segmentation/ctSegment";
@@ -88,6 +89,14 @@ interface Entry {
   dataset: LoadedDataset;
   display: LayerDisplay;
   matrix: Mat4;
+  /** User tag (e.g. "Baseline") shown wherever the dataset is named. */
+  tag?: string;
+}
+
+/** Name of a dataset in lists and selections: tag (if any), modality, file/series name. */
+function entryLabel(e: Entry): string {
+  const base = `${datasetModality(e.dataset)} · ${e.dataset.displayName}`;
+  return e.tag ? `${e.tag} – ${base}` : base;
 }
 
 /** Current (not yet applied) VOI on dataset `entryId`; `version` changes on every modification. */
@@ -1473,12 +1482,14 @@ function App() {
           highlighted={e.id === active?.id && entries.length > 1}
           title={
             <>
+              {e.tag ? `${e.tag} · ` : ""}
               {datasetModality(e.dataset)}
               {roleBadges(e)}
             </>
           }
           onRemove={() => removeEntry(e.id)}
         >
+          <TagInput value={e.tag ?? ""} onChange={(t) => updateEntry(e.id, { tag: t || undefined })} />
           {entries.length > 1 && (
             <div className="chip-row">
               <button className="chip-btn" disabled={e.id === reference?.id} onClick={() => makeReference(e.id)}>
@@ -1557,7 +1568,6 @@ function App() {
     </>
   );
 
-  const entryLabel = (e: Entry) => `${datasetModality(e.dataset)} · ${e.dataset.displayName}`;
   const layerSettings = (e: Entry, isOverlay: boolean, index = 0) => {
     const u = unitFor(e);
     return (
@@ -1572,6 +1582,7 @@ function App() {
         showOpacity={isOverlay}
         showVisibility={overlays.length > 0}
       >
+        <TagInput value={e.tag ?? ""} onChange={(t) => updateEntry(e.id, { tag: t || undefined })} />
         {isOverlay && (
           <div className="chip-row">
             <button className="chip-btn" disabled={index === 0} title="eine Ebene nach oben" onClick={() => moveOverlay(e.id, 1)}>
@@ -1638,7 +1649,7 @@ function App() {
 
   const spaces = entries.flatMap((e) => {
     const w2v = w2vById.get(e.id);
-    return w2v ? [{ id: e.id, label: `${datasetModality(e.dataset)} · ${e.dataset.displayName}`, dataset: e.dataset, matrix: e.matrix, w2v }] : [];
+    return w2v ? [{ id: e.id, label: entryLabel(e), dataset: e.dataset, matrix: e.matrix, w2v }] : [];
   });
 
   const isIdentity = (m: Mat4) => m.every((v, i) => Math.abs(v - IDENTITY_MAT4[i]) < 1e-9);
@@ -1733,7 +1744,7 @@ function App() {
       ]}
       onLoadBundled={(id) => void (id === "mni" ? addBundledTemplate() : addBundledPetTemplate(id as (typeof BUNDLED_PET_TEMPLATES)[number]["id"]))}
       bundledLoading={templateBusy}
-      subjects={subjectCandidates.map((e) => ({ id: e.id, label: `${datasetModality(e.dataset)} · ${e.dataset.displayName}` }))}
+      subjects={subjectCandidates.map((e) => ({ id: e.id, label: entryLabel(e) }))}
       subjectId={normSubject?.id ?? null}
       onSubjectChange={(id) => {
         setNormSubjectId(id);
@@ -1755,7 +1766,7 @@ function App() {
       onStart={startNormalization}
       onCancel={() => normRun.current?.cancel()}
       normalization={normFor}
-      transferCandidates={subjectCandidates.map((e) => ({ id: e.id, label: `${datasetModality(e.dataset)} · ${e.dataset.displayName}` }))}
+      transferCandidates={subjectCandidates.map((e) => ({ id: e.id, label: entryLabel(e) }))}
       onTransfer={(ids, method) => normFor && void transferToStandardSpace(normFor, ids, method)}
       transferStatus={transferStatus}
       transferBusy={transferBusy}
@@ -1779,14 +1790,14 @@ function App() {
         }
         onLoadVois={(f) => void loadCentiloidVois(f)}
         onShowVois={showCentiloidVois}
-        pets={subjectCandidates.filter((e) => !isAnatomical(unitSource(e.dataset))).map((e) => ({ id: e.id, label: `${datasetModality(e.dataset)} · ${e.dataset.displayName}` }))}
+        pets={subjectCandidates.filter((e) => !isAnatomical(unitSource(e.dataset))).map((e) => ({ id: e.id, label: entryLabel(e) }))}
         defaultPetId={subjectCandidates.find((e) => datasetModality(e.dataset) === "PT")?.id ?? null}
-        t1s={subjectCandidates.map((e) => ({ id: e.id, label: `${datasetModality(e.dataset)} · ${e.dataset.displayName}` }))}
+        t1s={subjectCandidates.map((e) => ({ id: e.id, label: entryLabel(e) }))}
         defaultT1Id={subjectCandidates.find((e) => datasetModality(e.dataset) === "MR")?.id ?? null}
         petTemplateLabel={templateEntries.find((e) => e.dataset.template?.kind === "PET")?.dataset.template?.name ?? null}
         standardTargets={entries
           .filter((e) => e.dataset.derivedFrom && !e.dataset.derivedFrom.label && !isAnatomical(unitSource(e.dataset)))
-          .map((e) => ({ id: e.id, label: `${datasetModality(e.dataset)} · ${e.dataset.displayName}` }))}
+          .map((e) => ({ id: e.id, label: entryLabel(e) }))}
         defaultStandardId={entries.findLast((e) => e.dataset.derivedFrom && !e.dataset.derivedFrom.label && !isAnatomical(unitSource(e.dataset)))?.id ?? null}
         running={centiloidRunning}
         status={centiloidStatus ? `${centiloidStatus}${normProgress && centiloidRunning ? ` (${normProgress.stage} · ${normProgress.detail})` : ""}` : null}
@@ -1800,11 +1811,11 @@ function App() {
         error={centiloidError}
       />
       <AtlasPanel
-        atlases={entries.filter((e) => e.dataset.atlas).map((e) => ({ id: e.id, label: e.dataset.atlas!.name, atlas: e.dataset.atlas! }))}
+        atlases={entries.filter((e) => e.dataset.atlas).map((e) => ({ id: e.id, label: e.tag ? `${e.tag} – ${e.dataset.atlas!.name}` : e.dataset.atlas!.name, atlas: e.dataset.atlas! }))}
         onLoadBundled={() => void addBundledAtlas()}
         bundledLoading={atlasBusy}
         onLoadOwn={(f) => void addOwnAtlas(f)}
-        targets={entries.filter((e) => !e.dataset.template && !e.dataset.atlas).map((e) => ({ id: e.id, label: `${datasetModality(e.dataset)} · ${e.dataset.displayName}` }))}
+        targets={entries.filter((e) => !e.dataset.template && !e.dataset.atlas).map((e) => ({ id: e.id, label: entryLabel(e) }))}
         defaultTargetId={entries.findLast((e) => e.dataset.derivedFrom && !e.dataset.derivedFrom.label && !isAnatomical(unitSource(e.dataset)))?.id ?? null}
         compute={computeRegions}
         onCreateSuvrImage={createSuvrImage}
@@ -1863,7 +1874,7 @@ function App() {
           onClear={() => setTumor(null)}
           indication={tumorIndication}
           onIndicationChange={setTumorIndication}
-          organOptions={organEntries.map((e) => ({ id: e.id, label: e.dataset.displayName }))}
+          organOptions={organEntries.map((e) => ({ id: e.id, label: entryLabel(e) }))}
           organId={organEntry?.id ?? null}
           onOrganChange={(id) => setTumorOrganId(id)}
           autoExclude={tumorAutoExclude}
@@ -1998,6 +2009,7 @@ function App() {
           onClick={() => switchActive(e.id)}
         >
           <span className="badge">{datasetModality(e.dataset)}</span>
+          {e.tag && <span className="chip-tag">{e.tag}</span>}
           <span className="chip-name">{e.dataset.displayName}</span>
           {e.id === reference?.id && entries.length > 1 && <span className="chip-edited chip-ref">Ref</span>}
           {e.dataset.edits.length > 0 && <span className="chip-edited">bearbeitet</span>}
