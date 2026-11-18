@@ -6,7 +6,9 @@ Alles läuft im Browser; es gibt keinen Server, **die Daten verlassen den Rechne
 
 ![Recon Studio: PET/CT mit CT-Organsegmentierung und Label-Analyse](docs/images/uebersicht.jpg)
 
-**Bedienung Schritt für Schritt: [MANUAL.md](MANUAL.md)**
+**▶ App starten: [jochenhammes.github.io/Recon](https://jochenhammes.github.io/Recon/)** – läuft direkt im Browser, keine Installation.
+
+**📖 Handbuch: [MANUAL.md](MANUAL.md)** – Bedienung aller Funktionen Schritt für Schritt mit Screenshots.
 
 > Forschungswerkzeug – nicht für die Diagnostik zugelassen.
 
@@ -30,7 +32,8 @@ Alles läuft im Browser; es gibt keinen Server, **die Daten verlassen den Rechne
 
 ## Schnellstart
 
-Die App läuft unter GitHub Pages (Push auf `main` veröffentlicht sie) oder lokal:
+Die App läuft unter [GitHub Pages](https://jochenhammes.github.io/Recon/) (ein Push auf `main` veröffentlicht sie)
+oder lokal:
 
 ```bash
 npm install
