@@ -212,7 +212,10 @@ Arbeitsgruppe ([ghaefner/kinetic-modeling](https://github.com/ghaefner/kinetic-m
   dem Header;
 - oder ein 4D-NIfTI, am besten zusammen mit der BIDS-Datei `*.json` (`FrameTimesStart`, `FrameDuration`).
 
-Der Datensatz zeigt das zeitgewichtete Mittelbild; die Karte nennt die Zahl der Frames.
+Der Datensatz zeigt das zeitgewichtete Mittelbild; die Karte nennt die Zahl der Frames. Im Bereich **Ansicht** hat die
+Ebenenkarte eines dynamischen Datensatzes den Regler **Zeit**:
+- durch die Frames schieben, mit *◀ Frame* / *Frame ▶* einzeln weiterschalten, *▶ Abspielen* oder zurück zum *Mittelbild*;
+- *Fenster je Frame automatisch anpassen* (Standard), weil frühe Frames viel heller sind als späte.
 
 ![Bewegungskorrektur](docs/images/60-kinetik-bewegung.jpg)
 

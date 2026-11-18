@@ -1456,3 +1456,23 @@ tr.excluded-row td {
   font-size: 12px;
   margin: 6px 0;
 }
+
+/* Frame slider (dynamic datasets) */
+.frame-slider {
+  margin: 8px 0;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.frame-slider-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  margin-bottom: 4px;
+  overflow-wrap: anywhere;
+}
+.frame-slider input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}

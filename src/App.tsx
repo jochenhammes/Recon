@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Activity, BarChart3, Brain, Crosshair, Download, Eye, FileCode2, FolderOpen, Target, Wand2 } from "lucide-react";
 import { KineticsPanel, type KineticsApi } from "./kinetics/KineticsPanel";
+import { FrameSlider } from "./ui/FrameSlider";
 import { runKineticsJob } from "./kinetics/runner";
 import type { FrameMotion } from "./kinetics/motion";
 import { meanOfFrames } from "./viewer/volumeLoader";
@@ -104,6 +105,32 @@ interface Entry {
   tag?: string;
   /** Label images: labels shown in the viewer (undefined = all). */
   labelFilter?: number[];
+  /** Dynamic datasets: frame shown in the viewer (undefined = time-weighted mean). */
+  frame?: number;
+  /** Dynamic datasets: window follows each frame. */
+  frameAutoWindow?: boolean;
+}
+
+/** Volume of one frame of a dynamic dataset (cached per frame array, so the GPU upload happens once). */
+const frameVolumes = new WeakMap<Float32Array, Volume3D>();
+function frameVolume(e: Entry): Volume3D {
+  const dyn = e.dataset.dynamic;
+  const f = e.frame;
+  if (!dyn || f === undefined || !dyn.frames[f]) return e.dataset.current;
+  const data = dyn.frames[f];
+  let v = frameVolumes.get(data);
+  if (!v || v.nx !== e.dataset.current.nx) frameVolumes.set(data, (v = e.dataset.current.withData(data)));
+  return v;
+}
+
+/** 0 … 99.5th percentile of a frame (sampled), for the per-frame window. */
+function frameWindow(data: Float32Array): [number, number] {
+  const step = Math.max(1, Math.floor(data.length / 200000));
+  const s: number[] = [];
+  for (let i = 0; i < data.length; i += step) if (data[i] > 0) s.push(data[i]);
+  if (!s.length) return [0, 1];
+  s.sort((a, b) => a - b);
+  return [0, s[Math.floor(0.995 * (s.length - 1))] || 1];
 }
 
 /** Name of a dataset in lists and selections: tag (if any), modality, file/series name. */
@@ -309,7 +336,7 @@ function App() {
     const add = (e: Entry | undefined, display?: LayerDisplay) => {
       const w2v = e && w2vById.get(e.id);
       if (!e || !w2v) return;
-      const volume = e.dataset.atlas && e.labelFilter ? filteredLabels(e.dataset.current, e.labelFilter) : e.dataset.current;
+      const volume = e.dataset.atlas && e.labelFilter ? filteredLabels(e.dataset.current, e.labelFilter) : frameVolume(e);
       out.push({ id: e.id, label: datasetModality(e.dataset), volume, w2v, display: display ?? e.display, unit: layerUnits.get(e.id) });
     };
     add(reference, reference ? { ...reference.display, opacity: 1 } : undefined);
@@ -1807,6 +1834,20 @@ function App() {
         showVisibility={overlays.length > 0}
       >
         <TagInput value={e.tag ?? ""} onChange={(t) => updateEntry(e.id, { tag: t || undefined })} />
+        {e.dataset.dynamic && (
+          <FrameSlider
+            dynamic={e.dataset.dynamic}
+            frame={e.frame}
+            autoWindow={e.frameAutoWindow ?? true}
+            onAutoWindowChange={(on) => updateEntry(e.id, { frameAutoWindow: on })}
+            onFrameChange={(f) => {
+              const dyn = e.dataset.dynamic!;
+              const auto = e.frameAutoWindow ?? true;
+              const win = auto ? frameWindow(f === undefined ? e.dataset.current.data : dyn.frames[f]) : undefined;
+              setEntries((prev) => prev.map((x) => (x.id === e.id ? { ...x, frame: f, display: win ? { ...x.display, window: win } : x.display } : x)));
+            }}
+          />
+        )}
         {e.dataset.atlas && labelList(e)}
         {isOverlay && (
           <div className="chip-row">
