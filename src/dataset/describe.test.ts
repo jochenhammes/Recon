@@ -1,0 +1,49 @@
+import { describe, expect, it } from "vitest";
+import { Volume3D } from "../viewer/volume";
+import { guessNiftiModality, middleEllipsis, modalityLabel, shortName } from "./describe";
+
+const vol = (fill: (i: number) => number) => new Volume3D(Float32Array.from({ length: 1000 }, (_, i) => fill(i)), 10, 10, 10, [2, 2, 2]);
+const positive = vol((i) => (i % 7) * 3);
+
+describe("NIfTI modality guess", () => {
+  it("uses a BIDS sidecar first", () => {
+    expect(guessNiftiModality("x.nii", positive, { sidecar: '{"Modality":"PT"}' })).toBe("PT");
+    expect(guessNiftiModality("x.nii", positive, { sidecar: '{"TracerName":"FDG"}' })).toBe("PT");
+    expect(guessNiftiModality("x.nii", positive, { sidecar: '{"MagneticFieldStrength":3}' })).toBe("MR");
+  });
+
+  it("recognizes common file names", () => {
+    expect(guessNiftiModality("sub-01_ses-1_pet.nii.gz", positive)).toBe("PT");
+    expect(guessNiftiModality("sub-01_T1w.nii.gz", positive)).toBe("MR");
+    expect(guessNiftiModality("patient_ct.nii", positive)).toBe("CT");
+    expect(guessNiftiModality("datscan_spect.nii", positive)).toBe("NM");
+    // No false hits inside words.
+    expect(guessNiftiModality("subject_inspect.nii", positive)).toBeUndefined();
+  });
+
+  it("falls back to dynamics and the value range", () => {
+    expect(guessNiftiModality("scan.nii", positive, { dynamic: true })).toBe("PT");
+    expect(guessNiftiModality("scan.nii", vol((i) => (i < 300 ? -1000 : i < 900 ? 40 : 1200)))).toBe("CT");
+    expect(guessNiftiModality("scan.nii", positive)).toBeUndefined();
+  });
+
+  it("user choice overrides the guess", () => {
+    const nifti = { headerBytes: new Uint8Array(), littleEndian: true, datatype: 16, sclSlope: 1, sclInter: 0 };
+    expect(modalityLabel({ kind: "nifti", fileName: "a.nii", nifti })).toBe("NIfTI");
+    expect(modalityLabel({ kind: "nifti", fileName: "a.nii", nifti, modalityGuess: "PT" })).toBe("PT");
+    expect(modalityLabel({ kind: "nifti", fileName: "a.nii", nifti, modalityGuess: "PT", modality: "NM" })).toBe("NM");
+  });
+});
+
+describe("display names", () => {
+  it("strips folders and extensions and shortens in the middle", () => {
+    expect(shortName("data/sub-01_pet.nii.gz")).toBe("sub-01_pet");
+    expect(shortName("IM0001.dcm")).toBe("IM0001");
+    expect(shortName("Serie (12 Dateien)")).toBe("Serie (12 Dateien)");
+    const m = middleEllipsis("kinetik_test_rezeptor_srtm_long", 20);
+    expect(m.length).toBe(20);
+    expect(m).toContain("…");
+    expect(m.startsWith("kinetik")).toBe(true);
+    expect(m.endsWith("long")).toBe(true);
+  });
+});

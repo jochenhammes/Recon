@@ -35,6 +35,10 @@ export interface ViewerLayer {
   /** World → voxel index transform (geometry plus any registration). */
   w2v: WorldToVoxel;
   display: LayerDisplay;
+  /** Full name (tooltip in the status bar). */
+  title?: string;
+  /** Label images: region names shown in the status bar instead of the label number. */
+  labelNames?: Map<number, string>;
   /** How to show values in the status bar (e.g. SUV = raw × scale). */
   unit?: { scale: number; label: string };
 }

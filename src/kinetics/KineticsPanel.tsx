@@ -4,6 +4,7 @@ import { formatValue } from "../components/format";
 import { csvText, csvWithInfo } from "../core/csv";
 import type { LoadedDataset } from "../dataset/types";
 import type { Option } from "../ui/NormalizationPanel";
+import { CardTitle } from "../ui/Info";
 import { Chart, type ChartSeries } from "./Chart";
 import type { FrameMotion } from "./motion";
 import { type PatlakFit, patlakFit, patlakSetup } from "./patlak";
@@ -262,15 +263,18 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
   return (
     <>
       <section className="card">
-        <h3>1 · Dynamische Serie</h3>
-        <p className="hint">
-          Kinetische Modellierung mit Referenzregion (ohne Blutentnahme): Patlak für irreversibel bindende Tracer (z. B. FDOPA, FDG) und SRTM für
-          reversibel bindende Tracer (Rezeptorliganden, Amyloid). Nach dem MATLAB-Paket der Arbeitsgruppe (github.com/ghaefner/kinetic-modeling).
-        </p>
+        <CardTitle
+          info={
+            <>
+              Kinetische Modellierung mit Referenzregion (ohne Blutentnahme): Patlak für irreversibel bindende Tracer (z. B. FDOPA, FDG) und SRTM für
+              reversibel bindende Tracer (Rezeptorliganden, Amyloid). Nach dem MATLAB-Paket der Arbeitsgruppe (github.com/ghaefner/kinetic-modeling).
+            </>
+          }
+        >
+          1 · Dynamische Serie
+        </CardTitle>
         {api.dynamics.length === 0 ? (
-          <p className="tool-hint">
-            Keine dynamischen Daten geladen. Im Bereich „Daten“ eine dynamische DICOM-Serie oder ein 4D-NIfTI (mit BIDS-JSON für die Frame-Zeiten) laden.
-          </p>
+          <p className="tool-hint">Keine dynamischen Daten – im Bereich „Daten“ eine dynamische DICOM-Serie oder ein 4D-NIfTI (+ BIDS-JSON) laden.</p>
         ) : (
           <>
             <label className="field">
@@ -335,8 +339,9 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
       {dyn && info && !dyn.inMni && (
         <>
           <section className="card">
-            <h3>2 · Bewegungskorrektur</h3>
-            <p className="hint">Frames ab der Startzeit werden rigide auf ihr gemeinsames Mittelbild registriert; frühere Frames übernehmen die Lage des ersten registrierten Frames.</p>
+            <CardTitle info="Frames ab der Startzeit werden rigide auf die gewählte Referenz registriert; frühere Frames (wenig Signal) übernehmen die Lage des ersten registrierten Frames.">
+              2 · Bewegungskorrektur
+            </CardTitle>
             <label className="field">
               Registrieren ab (s nach Start)
               <input value={fromSec} disabled={!!busy} onChange={(e) => setFromSec(e.target.value)} />
@@ -363,8 +368,19 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
             )}
           </section>
           <section className="card">
-            <h3>3 · In den MNI-Raum</h3>
-            <p className="hint">Mittelbild → T1 rigide und T1 → MNI affin (wie bei Centiloid) oder ohne MRT affin auf die SPM-PET-Vorlage; danach werden alle Frames übertragen.</p>
+            <CardTitle
+              info={
+                <>
+                  <p>Summenbild → T1 rigide und T1 → MNI affin (wie bei Centiloid), oder ohne MRT affin auf die SPM-PET-Vorlage; danach werden alle Frames übertragen.</p>
+                  <p>
+                    Das Summenbild des Zeitfensters wird registriert; die Transformation gilt für alle Frames. Frühe Frames (z. B. 0–10 min) zeigen meist die
+                    Perfusion und passen gut zur SPM-PET-Vorlage, späte Frames die Tracerbindung.
+                  </p>
+                </>
+              }
+            >
+              3 · In den MNI-Raum
+            </CardTitle>
             <div className="inline-fields hist-export-fields">
               <label className="field">
                 Registrierungsbild: Summe von (min)
@@ -375,11 +391,7 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
                 <input value={regTo} placeholder={fmt((info.start.at(-1)! + info.duration.at(-1)!) / 60, 0)} disabled={!!busy} onChange={(e) => setRegTo(e.target.value)} />
               </label>
             </div>
-            <p className="tool-hint">
-              Dieses Summenbild wird auf das T1 bzw. die Vorlage registriert; die Transformation gilt dann für alle Frames. Frühe Frames (z. B. 0–10 min)
-              zeigen meist die Perfusion und passen gut zur SPM-PET-Vorlage, späte Frames die Tracerbindung.
-            </p>
-            {!t1Id && <p className="tool-hint">Ohne MRT ist die Normalisierung deutlich ungenauer (im Phantom Putamen-BP_ND 1,3 statt 1,8) – wenn möglich ein T1 laden und wählen.</p>}
+            {!t1Id && <p className="tool-hint">Ohne MRT deutlich ungenauer (Phantom: Putamen-BP_ND 1,3 statt 1,8) – wenn möglich ein T1 wählen.</p>}
             <label className="field">
               T1-MRT
               <select value={t1Id} disabled={!!busy} onChange={(e) => setT1Id(e.target.value)}>

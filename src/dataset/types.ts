@@ -42,7 +42,15 @@ export interface NiftiSourceInfo {
 
 export type VolumeSource =
   | { kind: "reconstruction"; reconParams?: ReconParams }
-  | { kind: "nifti"; fileName: string; nifti: NiftiSourceInfo }
+  | {
+      kind: "nifti";
+      fileName: string;
+      nifti: NiftiSourceInfo;
+      /** Modality guessed on loading (DICOM codes: PT, NM, CT, MR); NIfTI has no modality field. */
+      modalityGuess?: string;
+      /** Modality chosen by the user; overrides the guess. */
+      modality?: string;
+    }
   | { kind: "dicom"; layout: "multiframe" | "series"; files: DicomSourceFile[] };
 
 /** Frames of a dynamic (4D) acquisition; the dataset's volume is their time-weighted mean. */

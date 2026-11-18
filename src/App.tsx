@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Activity, BarChart3, Brain, Crosshair, Download, Eye, FileCode2, FolderOpen, Target, Wand2 } from "lucide-react";
 import { KineticsPanel, type KineticsApi } from "./kinetics/KineticsPanel";
+import { LayerToggle } from "./ui/LayerToggle";
 import { FrameSlider } from "./ui/FrameSlider";
 import { runKineticsJob } from "./kinetics/runner";
 import type { FrameMotion } from "./kinetics/motion";
@@ -50,7 +51,7 @@ import { DatasetInfo } from "./ui/DatasetInfo";
 import { LayerSettings, type WindowPreset } from "./ui/ViewSettingsPanel";
 import { type RegRow, type RegStatusKind, RegistrationSetup } from "./ui/RegistrationSetup";
 import { RegistrationPanel } from "./ui/RegistrationPanel";
-import { CT_PRESETS, datasetModality, defaultDisplay, isAnatomical, modalityLabel, rawUnitLabel, suvForSource, unitSource } from "./dataset/describe";
+import { CT_PRESETS, datasetModality, defaultDisplay, isAnatomical, middleEllipsis, modalityLabel, rawUnitLabel, shortName, suvForSource, unitSource } from "./dataset/describe";
 import { BUNDLED_MNI, BUNDLED_PET_TEMPLATES, SPM_TEMPLATE_ATTRIBUTION, SPM_TEMPLATE_LICENSE, loadBundledMni, loadBundledPetTemplate, loadPetTemplate } from "./normalization/templates";
 import { AnalysisPanel } from "./components/AnalysisPanel";
 import { type BrushState, FilterSection, GeometrySection, HistorySection, ValueSection, VoiSection, type VoiTool } from "./components/EditTools";
@@ -135,8 +136,13 @@ function frameWindow(data: Float32Array): [number, number] {
 
 /** Name of a dataset in lists and selections: tag (if any), modality, file/series name. */
 function entryLabel(e: Entry): string {
-  const base = `${datasetModality(e.dataset)} · ${e.dataset.displayName}`;
+  const base = `${datasetModality(e.dataset)} · ${shortName(e.dataset.displayName)}`;
   return e.tag ? `${e.tag} – ${base}` : base;
+}
+
+/** Short name for the status bar and the layer overlay: modality and tag, else modality and shortened file name. */
+function entryShort(e: Entry, max = 22): string {
+  return `${datasetModality(e.dataset)} · ${e.tag || middleEllipsis(shortName(e.dataset.displayName), max)}`;
 }
 
 /** Current (not yet applied) VOI on dataset `entryId`; `version` changes on every modification. */
@@ -337,7 +343,7 @@ function App() {
       const w2v = e && w2vById.get(e.id);
       if (!e || !w2v) return;
       const volume = e.dataset.atlas && e.labelFilter ? filteredLabels(e.dataset.current, e.labelFilter) : frameVolume(e);
-      out.push({ id: e.id, label: datasetModality(e.dataset), volume, w2v, display: display ?? e.display, unit: layerUnits.get(e.id) });
+      out.push({ id: e.id, label: entryShort(e), title: entryLabel(e), labelNames: e.dataset.atlas?.labels, volume, w2v, display: display ?? e.display, unit: layerUnits.get(e.id) });
     };
     add(reference, reference ? { ...reference.display, opacity: 1 } : undefined);
     for (const o of overlays) add(o);
@@ -1699,6 +1705,17 @@ function App() {
       frameNote = "Unterschiedliche Frame-of-Reference-UIDs: Die Datensätze stammen evtl. aus verschiedenen Untersuchungen – Grobsuche empfohlen.";
   }
 
+  /** NIfTI: user-chosen modality; switching to/from CT also switches between CT and automatic window. */
+  function setNiftiModality(id: string, modality: string | undefined) {
+    const e = byId(id);
+    if (!e || e.dataset.source.kind !== "nifti") return;
+    const dataset: LoadedDataset = { ...e.dataset, source: { ...e.dataset.source, modality } };
+    const wasCt = modalityLabel(e.dataset.source) === "CT";
+    const isCt = modalityLabel(dataset.source) === "CT";
+    const display = wasCt === isCt ? e.display : { ...e.display, window: defaultDisplay(dataset.current, dataset.source).window };
+    updateEntry(id, { dataset, display });
+  }
+
   const roleBadges = (e: Entry) => (
     <span className="role-badges">
       {e.id === reference?.id && <span className="role-badge reference">Referenz</span>}
@@ -1712,7 +1729,7 @@ function App() {
       <VolumeUploadPanel
         title={entries.length ? "Weiteren Datensatz laden" : "Volumen laden"}
         onLoaded={handleVolumeLoaded}
-        description="PET, SPECT, CT oder MRT als DICOM (Datei oder ganze Serie) bzw. NIfTI. Beliebig viele Datensätze; CT/MRT wird als Anzeige-Basis vorgeschlagen."
+        description="PET, SPECT, CT oder MRT als DICOM (Datei oder Serie) bzw. NIfTI – beliebig viele."
       />
       {entries.map((e) => (
         <DatasetInfo
@@ -1727,6 +1744,7 @@ function App() {
             </>
           }
           onRemove={() => removeEntry(e.id)}
+          onModalityChange={(m) => setNiftiModality(e.id, m)}
         >
           <TagInput value={e.tag ?? ""} onChange={(t) => updateEntry(e.id, { tag: t || undefined })} />
           {entries.length > 1 && (
@@ -1909,7 +1927,7 @@ function App() {
       )}
       {reference && (
         <FusionExportCard
-          layerLabels={visibleStack.map((e) => datasetModality(e.dataset))}
+          layerLabels={visibleStack.map((e) => entryShort(e))}
           baseLabel={`${reference.dataset.current.nx} × ${reference.dataset.current.ny} × ${reference.dataset.current.nz}`}
           canDicomMeta={reference.dataset.source.kind === "dicom"}
           busy={fusionBusy}
@@ -2131,7 +2149,7 @@ function App() {
         {organEntry?.dataset.atlas && (
           <section className="card">
             <h3>Regionen · {entryLabel(organEntry)}</h3>
-            <p className="tool-hint">Klick auf eine Region setzt das Fadenkreuz hinein; Häkchen blenden Regionen im Bild ein oder aus.</p>
+            <p className="tool-hint">Klick: Fadenkreuz in die Region · Häkchen: ein-/ausblenden.</p>
             {labelList(organEntry)}
           </section>
         )}
@@ -2309,7 +2327,7 @@ function App() {
         >
           <span className="badge">{datasetModality(e.dataset)}</span>
           {e.tag && <span className="chip-tag">{e.tag}</span>}
-          <span className="chip-name">{e.dataset.displayName}</span>
+          <span className="chip-name">{middleEllipsis(shortName(e.dataset.displayName), 24)}</span>
           {e.id === reference?.id && entries.length > 1 && <span className="chip-edited chip-ref">Ref</span>}
           {e.dataset.edits.length > 0 && <span className="chip-edited">bearbeitet</span>}
         </button>
@@ -2337,11 +2355,35 @@ function App() {
             setLayout(l);
             setFocusView(f);
           }}
+          layerPanel={
+            entries.length > 1 && (
+              <LayerToggle
+                rows={[
+                  ...[...overlays].reverse().map((e) => ({ id: e.id, label: entryShort(e), title: entryLabel(e), lut: e.display.lut, visible: e.display.visible, opacity: e.display.opacity, role: "overlay" as const })),
+                  ...(reference ? [{ id: reference.id, label: entryShort(reference), title: entryLabel(reference), lut: reference.display.lut, visible: reference.display.visible, role: "base" as const, locked: overlays.length === 0 }] : []),
+                  ...entries
+                    .filter((e) => e.id !== reference?.id && !overlays.some((o) => o.id === e.id))
+                    .map((e) => ({ id: e.id, label: entryShort(e), title: `${entryLabel(e)} – anklicken zum Einblenden`, lut: e.display.lut, visible: false, role: "hidden" as const })),
+                ]}
+                onVisibleChange={(id, visible) => {
+                  const e = byId(id);
+                  if (!e) return;
+                  if (id !== reference?.id && !overlays.some((o) => o.id === id)) {
+                    if (visible) makeOverlay(id);
+                  } else updateEntry(id, { display: { ...e.display, visible } });
+                }}
+                onOpacityChange={(id, opacity) => {
+                  const e = byId(id);
+                  if (e) updateEntry(id, { display: { ...e.display, opacity } });
+                }}
+              />
+            )
+          }
           toolbar={
             entries.length > 1 &&
             active && (
               <span className="toolbar-note">
-                Aktiv: <strong>{datasetModality(active.dataset)}</strong>
+                Aktiv: <strong title={entryLabel(active)}>{entryShort(active, 26)}</strong>
               </span>
             )
           }

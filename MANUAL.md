@@ -29,11 +29,18 @@ Beispieldaten (keine Patientendaten).
 - **Linke Leiste**: die Arbeitsbereiche *Daten, Ansicht, Registrierung, MNI (Standardraum), Tumor, Analyse,
   Bearbeiten, Header, Export*. Ein Klick auf den aktiven Bereich klappt das Seitenpanel ein und aus (ebenso das
   Symbol unten links).
+- **Seitenpanel**: Die Breite lässt sich am rechten Rand mit der Maus ziehen (Doppelklick = Standardbreite; mit
+  Tastaturfokus ←/→). Die Breite bleibt im Browser gespeichert – praktisch für breite Ergebnistabellen.
+  Längere Erläuterungen (Methodik, Literatur, Formate) stecken hinter dem **ⓘ** neben der Kartenüberschrift.
 - **Kopfzeile**: ein Chip je geladenem Datensatz (Modalität, Schlagwort, Dateiname; *Ref* = Referenz/Basis).
   Ein Klick auf einen Chip macht den Datensatz **aktiv** – darauf beziehen sich Analyse, Bearbeiten, Header und Export.
   Rechts oben: helles/dunkles Design.
 - **Viewer** (rechts): Layout 2×2, 1+3 oder Einzelbild, *Zoom zurücksetzen*, *Screenshot* (PNG).
-  Statuszeile unten: Position in mm (Patientenkoordinaten LPS) und Werte aller Ebenen unter dem Fadenkreuz.
+  Rechts in der Viewer-Leiste: **Ebenen** (siehe [Abschnitt 4](#4-ansicht-ebenen-und-fusion)) und **?** (Maus- und
+  Tastenbedienung).
+  Statuszeile unten: Position in mm (Patientenkoordinaten LPS) und die Werte aller sichtbaren Ebenen unter dem
+  Fadenkreuz – je Ebene mit Farbbalken ihrer Farbtabelle, Modalität und Schlagwort bzw. Dateiname; bei Labelbildern
+  der Name der Region.
 
 | Maus | Wirkung |
 |---|---|
@@ -60,6 +67,10 @@ Alles wird lokal im Browser berechnet; Daten werden nirgendwohin hochgeladen.
    - NIfTI: `.nii` oder `.nii.gz`.
    - Mehrere Serien in einem Upload werden **getrennt** geladen; nicht lesbare Dateien werden übersprungen und gemeldet.
 3. Jeder Datensatz erscheint als Karte (Modalität, Matrix, Voxelgröße, Patientenkoordinaten).
+   - **Modalität bei NIfTI**: NIfTI-Dateien enthalten keine Modalität. Recon Studio erkennt sie aus einer
+     BIDS-JSON-Datei, dem Dateinamen (`_pet`, `_T1w`, `ct`, `spect` …), dynamischen Daten (→ PET) oder dem
+     Wertebereich (Luft und Knochen → CT). Die Auswahl *Modalität* in der Karte korrigiert eine falsche Erkennung;
+     davon hängen u. a. Anzeige-Basis, CT-Fensterpresets und die Vorauswahl in Registrierung, Centiloid und Tumorlast ab.
    - **Schlagwort** eintragen (z. B. *Baseline*, *Follow-up*, *CT nativ*) – es erscheint überall in Auswahllisten und
      in der Kopfzeile.
    - *Als Referenz*: Datensatz definiert den Anzeigeraum (Basis). CT/MRT wird automatisch Basis.
@@ -109,6 +120,13 @@ Bereich **Ansicht** – eine Karte je angezeigter Ebene (oben = oberste Ebene):
    DICOM Secondary Capture (ZIP) oder NIfTI RGB, im Raster der Basis oder axial.
 
 Label-Ebenen werden ohne Interpolation (nächster Nachbar) dargestellt.
+
+**Ebenen-Schnellwahl im Viewer:** Der Knopf **Ebenen** oben rechts im Viewer blendet eine kleine Liste über den
+Schnittbildern ein – in jedem Bereich, z. B. während Kinetik, Tumorlast oder Analyse. Häkchen = Ebene sichtbar,
+Regler = Deckkraft. Datensätze unter *nicht eingeblendet* werden per Häkchen als Overlay hinzugefügt. Der Knopf
+schaltet die Liste wieder aus; der Zustand bleibt gespeichert.
+
+![Ebenen-Schnellwahl im Viewer](docs/images/11b-ebenen-overlay.jpg)
 
 ---
 

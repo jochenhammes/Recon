@@ -1,7 +1,7 @@
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import type { LoadedDataset } from "../dataset/types";
-import { modalityLabel, seriesDescription } from "../dataset/describe";
+import { NIFTI_MODALITIES, modalityLabel, seriesDescription, shortName } from "../dataset/describe";
 
 /** Compact description of a loaded dataset (source, matrix, voxel size, geometry). */
 export interface DatasetInfoProps {
@@ -11,9 +11,11 @@ export interface DatasetInfoProps {
   /** Extra controls below the summary (e.g. role buttons). */
   children?: ReactNode;
   highlighted?: boolean;
+  /** NIfTI: the user picks the modality (undefined = keep the automatic guess). */
+  onModalityChange?: (modality: string | undefined) => void;
 }
 
-export function DatasetInfo({ dataset, title, onRemove, children, highlighted }: DatasetInfoProps) {
+export function DatasetInfo({ dataset, title, onRemove, children, highlighted, onModalityChange }: DatasetInfoProps) {
   const v = dataset.current;
   const [sx, sy, sz] = v.geometry.spacing;
   const src = dataset.source;
@@ -31,10 +33,26 @@ export function DatasetInfo({ dataset, title, onRemove, children, highlighted }:
       <dl className="summary-list">
         <dt>Modalität</dt>
         <dd>
-          <span className="badge">{modalityLabel(src)}</span>
+          {src.kind === "nifti" && onModalityChange && !dataset.atlas && !dataset.template ? (
+            <select
+              className="inline-select"
+              value={src.modality ?? ""}
+              title="NIfTI-Dateien enthalten keine Modalität – automatisch erkannt (Dateiname, BIDS-JSON, Wertebereich) oder hier wählen."
+              onChange={(e) => onModalityChange(e.target.value || undefined)}
+            >
+              <option value="">automatisch ({NIFTI_MODALITIES.find((m) => m.code === (src.modalityGuess ?? "NIfTI"))?.label ?? src.modalityGuess})</option>
+              {NIFTI_MODALITIES.map((m) => (
+                <option key={m.code} value={m.code}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="badge">{modalityLabel(src)}</span>
+          )}
         </dd>
         <dt>Quelle</dt>
-        <dd title={dataset.displayName}>{dataset.displayName}</dd>
+        <dd title={dataset.displayName}>{shortName(dataset.displayName)}</dd>
         {seriesDescription(src) && (
           <>
             <dt>Serie</dt>

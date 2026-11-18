@@ -192,3 +192,11 @@ export function lutTable(lut: ColorLut): Uint8Array {
       return GRAY_LUT;
   }
 }
+
+/** CSS linear-gradient of a color LUT (legend swatches); labels show a few distinct colors. */
+export function lutGradient(lut: ColorLut): string {
+  const t = lutTable(lut);
+  const idx = lut === "labels" ? [1, 2, 3, 4, 5] : [0, 64, 128, 192, 255];
+  const stops = idx.map((i, k) => `rgb(${t[i * 3]}, ${t[i * 3 + 1]}, ${t[i * 3 + 2]}) ${(k / (idx.length - 1)) * 100}%`);
+  return `linear-gradient(90deg, ${stops.join(", ")})`;
+}

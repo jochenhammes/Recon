@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { CardTitle } from "./Info";
 import { type AtlasInfo, REFERENCE_PRESETS, type RegionStat, pooledMean, presetIndices, regionCsv } from "../atlas/atlas";
 import type { Option } from "./NormalizationPanel";
 
@@ -89,10 +90,19 @@ export function AtlasPanel(props: AtlasPanelProps) {
 
   return (
     <section className="card">
-      <h3>Atlas &amp; SUVR</h3>
-      <p className="hint">
-        Regionale Mittelwerte eines Datensatzes im Standardraum (z. B. des übertragenen PET) und SUVR = Regionsmittel / Mittel der Referenzregion.
-      </p>
+      <CardTitle
+        info={
+          <>
+            <p>Regionale Mittelwerte eines Datensatzes im Standardraum (z. B. des übertragenen PET) und SUVR = Regionsmittel / Mittel der Referenzregion.</p>
+            <p>
+              Eigener Atlas: Labelbild (NIfTI, im Standardraum) und optional die Labeltabelle (TXT/CSV/TSV, FSL-/FreeSurfer-LUT, ITK-SNAP) zusammen
+              auswählen – oder direkt die ZIP-Datei, z. B. AAL3 von der GIN-Seite (gin.cnrs.fr/en/tools/aal).
+            </p>
+          </>
+        }
+      >
+        Atlas &amp; SUVR
+      </CardTitle>
       <div className="button-row">
         <button className="secondary-btn" disabled={props.bundledLoading} onClick={props.onLoadBundled}>
           {props.bundledLoading ? "Wird geladen …" : "CerebrA-Atlas laden"}
@@ -113,7 +123,6 @@ export function AtlasPanel(props: AtlasPanelProps) {
           }}
         />
       </div>
-      <p className="tool-hint">Eigener Atlas: Labelbild (NIfTI, im Standardraum) und optional die Labeltabelle (TXT/CSV/TSV, FSL-/FreeSurfer-LUT, ITK-SNAP) zusammen auswählen – oder direkt die ZIP-Datei, z. B. AAL3 von der GIN-Seite (gin.cnrs.fr/en/tools/aal).</p>
       {(props.error || error) && <div className="error-banner">{props.error || error}</div>}
 
       {atlas && (

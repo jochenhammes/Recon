@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { CardTitle } from "./Info";
 import { tileTimeLimitSec } from "../segmentation/ctSegment";
 import { type SegmentProgress, inferenceEstimate } from "../segmentation/infer";
 import type { CtSegBackend } from "../workers/ctseg.worker";
@@ -59,11 +60,24 @@ export function CtSegCard(props: CtSegCardProps) {
   const autoText = props.webgpu ? (firefox ? "Automatisch (Firefox: CPU)" : "Automatisch (WebGPU)") : "Automatisch (CPU)";
   return (
     <section className="card">
-      <h3>CT-Organsegmentierung</h3>
-      <p className="hint">
-        117 Strukturen (Organe, Knochen, Gefäße, Muskeln) mit TotalSegmentator „total“ (3 mm) direkt im Browser – die Daten verlassen den Rechner nicht.
-        Das Modell (66 MB) wird beim ersten Mal geladen und im Browser gespeichert. Ergebnis: Label-Datensatz (Atlas) zum CT.
-      </p>
+      <CardTitle
+        info={
+          <>
+            <p>
+              117 Strukturen (Organe, Knochen, Gefäße, Muskeln) mit TotalSegmentator „total“ (3 mm) direkt im Browser – die Daten verlassen den Rechner
+              nicht. Das Modell (66 MB) wird beim ersten Mal geladen und im Browser gespeichert. Ergebnis: Label-Datensatz (Atlas) zum CT.
+            </p>
+            <p>WebGPU ist meist deutlich schneller. Hängt WebGPU oder meldet einen Fehler, wird automatisch auf der CPU weitergerechnet.</p>
+            <p>
+              Modell: TotalSegmentator (Wasserthal et al., Radiology: AI 2023), Apache-2.0; nnU-Net (Isensee et al. 2021). Nicht für diagnostische
+              Zwecke zertifiziert.
+            </p>
+          </>
+        }
+      >
+        CT-Organsegmentierung
+      </CardTitle>
+      <p className="tool-hint">117 Strukturen per TotalSegmentator, lokal im Browser.</p>
       {props.cts.length === 0 ? (
         <p className="tool-hint">Kein CT geladen.</p>
       ) : (
@@ -89,8 +103,7 @@ export function CtSegCard(props: CtSegCardProps) {
             </select>
           </label>
           <p className="tool-hint">
-            WebGPU ist meist deutlich schneller. Hängt WebGPU oder meldet einen Fehler, wird automatisch auf der CPU weitergerechnet.
-            {firefox && " In Firefox ist WebGPU mit dem Modell noch unzuverlässig – „Automatisch“ nutzt daher die CPU."}
+            {firefox ? "In Firefox ist WebGPU mit dem Modell noch unzuverlässig – „Automatisch“ nutzt daher die CPU." : "Bei WebGPU-Fehlern wird automatisch auf der CPU weitergerechnet."}
           </p>
           {!props.webgpu && (
             <p className="warning-banner">Kein WebGPU verfügbar: Die Berechnung läuft auf der CPU und kann für ein Ganzkörper-CT sehr lange dauern (Chrome/Edge mit aktueller Grafikkarte empfohlen).</p>
@@ -130,9 +143,6 @@ export function CtSegCard(props: CtSegCardProps) {
       )}
       {props.status && <p className="tool-hint">{props.status}</p>}
       {props.error && <div className="error-banner">{props.error}</div>}
-      <p className="tool-hint">
-        Modell: TotalSegmentator (Wasserthal et al., Radiology: AI 2023), Apache-2.0; nnU-Net (Isensee et al. 2021). Nicht für diagnostische Zwecke zertifiziert.
-      </p>
     </section>
   );
 }

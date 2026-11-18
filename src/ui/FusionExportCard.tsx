@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { CardTitle } from "./Info";
 
 export type FusionGridMode = "base" | "axial";
 export type FusionFormat = "dicom" | "nifti";
@@ -20,11 +21,8 @@ export function FusionExportCard(props: FusionExportCardProps) {
   const [anonymize, setAnonymize] = useState(true);
   return (
     <section className="card">
-      <h3>Fusion exportieren</h3>
-      <p className="hint">
-        Die sichtbaren Ebenen werden mit ihren aktuellen Fenstern, Farbtabellen und Deckkräften zu einem RGB-Datensatz verrechnet (unten → oben):{" "}
-        {props.layerLabels.join(" → ") || "–"}.
-      </p>
+      <CardTitle info="Die sichtbaren Ebenen werden mit ihren aktuellen Fenstern, Farbtabellen und Deckkräften zu einem RGB-Datensatz verrechnet.">Fusion exportieren</CardTitle>
+      <p className="tool-hint">Ebenen (unten → oben): {props.layerLabels.join(" → ") || "–"}</p>
       <label className="field">
         Raster
         <select value={grid} onChange={(e) => setGrid(e.target.value as FusionGridMode)}>

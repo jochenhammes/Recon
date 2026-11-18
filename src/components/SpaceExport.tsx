@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { InfoText } from "../ui/Info";
 import type { Vec3, WorldToVoxel } from "../core/geometry";
 import { type Mat4, worldToVoxelThrough } from "../core/transform";
 import { datasetModality } from "../dataset/describe";
@@ -240,10 +241,7 @@ export function SpaceExport({ spaces, activeId, anonymize }: SpaceExportProps) {
         </button>
       </div>
       {!dicomPossible && format === "dicom" && <p className="tool-hint">Nicht-DICOM-Quellen werden als NIfTI exportiert.</p>}
-      <p className="export-note">
-        Bearbeitungen und Registrierung werden berücksichtigt. DICOM: Header des jeweiligen Quelldatensatzes als Vorlage, Geometrie und Frame of
-        Reference des Zielraums.
-      </p>
+      <InfoText details="DICOM: Header des jeweiligen Quelldatensatzes als Vorlage, Geometrie und Frame of Reference des Zielraums.">Bearbeitungen und Registrierung werden berücksichtigt.</InfoText>
       <button className="primary-btn" disabled={working || !grid || selected.length === 0} onClick={() => void run()}>
         {working ? "Export läuft …" : "Exportieren"}
       </button>

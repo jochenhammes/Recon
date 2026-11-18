@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { CardTitle, InfoText } from "./Info";
 import { CALIBRATIONS, type CentiloidCalibration, type CentiloidResult } from "../centiloid/centiloid";
 import { VOI_LABELS, VOI_NAMES, type VoiName } from "../centiloid/vois";
 import type { Option } from "./NormalizationPanel";
@@ -66,11 +67,9 @@ export function CentiloidPanel(props: CentiloidPanelProps) {
 
   return (
     <section className="card">
-      <h3>Centiloid</h3>
-      <p className="hint">
-        Amyloid-Last auf der Centiloid-Skala (0 = junge Gesunde, 100 = typische Alzheimer-Demenz): SUVR der Standard-Kortex-VOI zur Referenzregion im
-        MNI-Raum, umgerechnet mit der Kalibrierung des Tracers.
-      </p>
+      <CardTitle info="Amyloid-Last auf der Centiloid-Skala (0 = junge Gesunde, 100 = typische Alzheimer-Demenz): SUVR der Standard-Kortex-VOI zur Referenzregion im MNI-Raum, umgerechnet mit der Kalibrierung des Tracers.">
+        Centiloid
+      </CardTitle>
 
       <input
         ref={fileInput}
@@ -94,22 +93,27 @@ export function CentiloidPanel(props: CentiloidPanelProps) {
           </button>
         )}
       </div>
-      <p className="tool-hint">
-        {props.voisLoaded ?? (
-          <>
-            Standard-VOIs von GAAIN:{" "}
-            <a href="https://www.gaaindata.org/data/centiloid/Centiloid_Std_VOI.zip" target="_blank" rel="noreferrer" download>
-              Centiloid_Std_VOI.zip herunterladen
-            </a>{" "}
-            (
-            <a href="https://www.gaain.org/centiloid-project" target="_blank" rel="noreferrer">
-              Centiloid Project
-            </a>
-            ), dann die ZIP-Datei hier direkt auswählen. Die VOIs werden nicht mitgeliefert (GAAIN-Nutzungsbedingungen: persönliche,
-            nicht-kommerzielle Nutzung).
-          </>
-        )}
-      </p>
+      {props.voisLoaded ? (
+        <p className="tool-hint">{props.voisLoaded}</p>
+      ) : (
+        <InfoText
+          details={
+            <>
+              Die VOIs werden nicht mitgeliefert (GAAIN-Nutzungsbedingungen: persönliche, nicht-kommerzielle Nutzung) – siehe{" "}
+              <a href="https://www.gaain.org/centiloid-project" target="_blank" rel="noreferrer">
+                Centiloid Project
+              </a>
+              . Die heruntergeladene ZIP-Datei direkt hier auswählen.
+            </>
+          }
+        >
+          VOIs:{" "}
+          <a href="https://www.gaaindata.org/data/centiloid/Centiloid_Std_VOI.zip" target="_blank" rel="noreferrer" download>
+            Centiloid_Std_VOI.zip
+          </a>{" "}
+          herunterladen und hier auswählen.
+        </InfoText>
+      )}
 
       <label className="field">
         Kalibrierung

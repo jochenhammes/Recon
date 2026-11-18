@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import { Moon, PanelLeftClose, PanelLeftOpen, Sun } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 export interface ShellTab {
   id: string;
@@ -32,6 +32,8 @@ export interface AppShellProps {
 export function AppShell(props: AppShellProps) {
   const { tabs, activeTab, onTabChange, panelOpen, onPanelOpenChange, theme } = props;
   const current = tabs.find((t) => t.id === activeTab) ?? tabs[0];
+  const [panelWidth, setPanelWidth] = usePanelWidth();
+  const width = current.wide ? Math.max(panelWidth, WIDE_WIDTH) : panelWidth;
 
   return (
     <div className="shell">
@@ -87,11 +89,12 @@ export function AppShell(props: AppShellProps) {
           </button>
         </nav>
         {panelOpen && (
-          <aside className={current.wide ? "side-panel wide" : "side-panel"} aria-label={current.label}>
+          <aside className="side-panel" style={{ width }} aria-label={current.label}>
             <div className="side-panel-head">
               <h2>{current.label}</h2>
             </div>
             <div className="side-panel-body">{current.content}</div>
+            <ResizeHandle width={width} onChange={setPanelWidth} />
           </aside>
         )}
         <main className="workspace">{props.children}</main>
@@ -107,5 +110,78 @@ function BrandMark() {
       <circle cx="16" cy="16" r="8" fill="none" stroke="var(--accent)" strokeWidth="2.5" opacity="0.75" />
       <circle cx="16" cy="16" r="3.5" fill="var(--accent-strong)" />
     </svg>
+  );
+}
+
+const DEFAULT_WIDTH = 340;
+const WIDE_WIDTH = 480;
+const MIN_WIDTH = 280;
+const WIDTH_KEY = "recon-studio-panel-width";
+const maxWidth = () => Math.max(MIN_WIDTH, Math.round(window.innerWidth * 0.6));
+const clampWidth = (w: number) => Math.round(Math.min(maxWidth(), Math.max(MIN_WIDTH, w)));
+
+/** Side panel width, remembered per browser. */
+function usePanelWidth(): [number, (w: number) => void] {
+  const [width, setWidth] = useState(() => {
+    try {
+      const v = Number(localStorage.getItem(WIDTH_KEY));
+      return v ? clampWidth(v) : DEFAULT_WIDTH;
+    } catch {
+      return DEFAULT_WIDTH;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(WIDTH_KEY, String(width));
+    } catch {
+      /* storage unavailable */
+    }
+  }, [width]);
+  useEffect(() => {
+    const onResize = () => setWidth((w) => clampWidth(w));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return [width, (w) => setWidth(clampWidth(w))];
+}
+
+/** Drag handle on the right edge of the side panel (double click: default width, arrow keys: ±20 px). */
+function ResizeHandle({ width, onChange }: { width: number; onChange: (w: number) => void }) {
+  const drag = useRef<{ x: number; w: number } | null>(null);
+  return (
+    <div
+      className="panel-resize"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Panelbreite"
+      aria-valuenow={width}
+      aria-valuemin={MIN_WIDTH}
+      tabIndex={0}
+      title="Ziehen: Panelbreite ändern · Doppelklick: Standardbreite"
+      onPointerDown={(e) => {
+        e.preventDefault();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        drag.current = { x: e.clientX, w: width };
+        document.body.classList.add("resizing-panel");
+      }}
+      onPointerMove={(e) => {
+        if (drag.current) onChange(drag.current.w + e.clientX - drag.current.x);
+      }}
+      onPointerUp={() => {
+        drag.current = null;
+        document.body.classList.remove("resizing-panel");
+      }}
+      onPointerCancel={() => {
+        drag.current = null;
+        document.body.classList.remove("resizing-panel");
+      }}
+      onDoubleClick={() => onChange(DEFAULT_WIDTH)}
+      onKeyDown={(e) => {
+        if (e.key === "ArrowLeft") onChange(width - 20);
+        else if (e.key === "ArrowRight") onChange(width + 20);
+        else return;
+        e.preventDefault();
+      }}
+    />
   );
 }

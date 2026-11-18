@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { CardTitle } from "../ui/Info";
 import type { VolumeStats } from "../analysis/stats";
 import type { Vec3 } from "../core/geometry";
 import { type EditOp, type ValueRule, type VoiAction, changesGrid, countAffected, describeEdit } from "../edit/operations";
@@ -371,8 +372,7 @@ export function GeometrySection({ volume, busy, onApply }: { volume: Volume3D; b
   const dims = valid ? [volume.nx, volume.ny, volume.nz].map((n, a) => Math.max(1, Math.round((n * volume.geometry.spacing[a]) / parsed[a]))) : null;
   return (
     <section className="card">
-      <h3>Geometrie</h3>
-      <p className="tool-hint">Spiegeln und Drehen verändern die Bildlage im Patientenkoordinatensystem.</p>
+      <CardTitle info="Spiegeln und Drehen verändern die Bildlage im Patientenkoordinatensystem.">Geometrie</CardTitle>
       <div className="chip-row">
         <button className="chip-btn" disabled={busy} onClick={() => onApply({ type: "flip", axis: 0 })}>
           Spiegeln R↔L

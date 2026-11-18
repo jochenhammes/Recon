@@ -2,6 +2,7 @@ import * as dicomParser from "dicom-parser";
 import { Volume3D } from "./volume";
 import type { DicomPixelEncoding, DicomSourceFile, DynamicInfo, NiftiSourceInfo, VolumeSource } from "../dataset/types";
 import { parseDicomDateTime } from "../analysis/suv";
+import { guessNiftiModality } from "../dataset/describe";
 import { PixelDecodeError, decodePixelFrames, describeParseError } from "../dicom/pixelDecode";
 import {
   type Vec3,
@@ -181,9 +182,12 @@ async function loadNiftiFile(file: File, table?: Map<number, string>, sidecarJso
   if (dynamic) {
     // The dataset shows the time-weighted mean; the frames are kept for kinetic modelling.
     const mean = volume.withData(meanOfFrames(dynamic.frames, dynamic.duration));
-    return { volume: mean, source: { kind: "nifti", fileName: file.name, nifti }, dynamic };
+    const modalityGuess = guessNiftiModality(file.name, mean, { dynamic: true, sidecar: sidecarJson });
+    return { volume: mean, source: { kind: "nifti", fileName: file.name, nifti, modalityGuess }, dynamic };
   }
-  return { volume, source: { kind: "nifti", fileName: file.name, nifti }, atlas: detectAtlas(volume, nifti, file.name, table) };
+  const atlas = detectAtlas(volume, nifti, file.name, table);
+  const modalityGuess = atlas ? undefined : guessNiftiModality(file.name, volume, { sidecar: sidecarJson });
+  return { volume, source: { kind: "nifti", fileName: file.name, nifti, modalityGuess }, atlas };
 }
 
 /** All frames of a 4D NIfTI (dim[4] > 1) with timing from a BIDS sidecar or pixdim[4]; null for 3D files. */

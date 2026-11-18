@@ -1,4 +1,5 @@
 import type { CostName } from "../registration/cost";
+import { CardTitle } from "./Info";
 
 export type RegStatusKind = "scanner" | "registered" | "manual" | "pending" | "running" | "queued";
 
@@ -53,9 +54,11 @@ export function RegistrationSetup(props: RegistrationSetupProps) {
   return (
     <>
       <section className="card">
-        <h3>1 · Zielraum (Basis)</h3>
+        <CardTitle info="Der Basis-Datensatz definiert den Raum – alle anderen werden darauf ausgerichtet und darin angezeigt. Export „im Raum eines anderen Datensatzes“ und Fusionen nutzen dieses Raster.">
+          1 · Zielraum (Basis)
+        </CardTitle>
         <label className="field">
-          Dieser Datensatz definiert den Raum – alle anderen werden darauf ausgerichtet und darin angezeigt
+          Basis-Datensatz
           <select value={props.referenceId} disabled={props.running} onChange={(e) => props.onReferenceChange(e.target.value)}>
             {props.datasets.map((d) => (
               <option key={d.id} value={d.id}>
@@ -64,7 +67,7 @@ export function RegistrationSetup(props: RegistrationSetupProps) {
             ))}
           </select>
         </label>
-        {base && <p className="tool-hint">{base.info}. Export „im Raum eines anderen Datensatzes“ und Fusionen nutzen dieses Raster.</p>}
+        {base && <p className="tool-hint">{base.info}</p>}
       </section>
 
       <section className="card">

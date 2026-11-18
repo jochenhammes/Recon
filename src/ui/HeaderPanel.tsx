@@ -1,4 +1,5 @@
 import { ChevronDown, ChevronRight, Pencil, Trash2, Undo2 } from "lucide-react";
+import { InfoText } from "./Info";
 import { useMemo, useState } from "react";
 import type { LoadedDataset } from "../dataset/types";
 import { IMPLICIT_VR_LE } from "../export/dicomRewriter";
@@ -74,10 +75,7 @@ export function HeaderPanel({ dataset, onEditsChange }: HeaderPanelProps) {
           Suche (Tag, Name oder Wert)
           <input type="text" value={query} placeholder="z. B. 0010,0010 oder Patient" onChange={(e) => setQuery(e.target.value)} />
         </label>
-        <p className="tool-hint">
-          Änderungen werden beim DICOM-Export angewendet. Gesperrt sind Tags, die der Export selbst setzt (Pixeldaten, Geometrie,
-          Instanz-UIDs, Meta-Header).
-        </p>
+        <InfoText details="Gesperrt sind Tags, die der Export selbst setzt (Pixeldaten, Geometrie, Instanz-UIDs, Meta-Header).">Änderungen wirken beim DICOM-Export.</InfoText>
       </section>
 
       <div className="tag-table" role="table" aria-label="DICOM-Header">

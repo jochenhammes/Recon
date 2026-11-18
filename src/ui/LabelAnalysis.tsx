@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { CardTitle, InfoText } from "./Info";
 import { type AtlasInfo, type RegionStat, labelHistogramCsv, labelStatsCsv, regionValues } from "../atlas/atlas";
 import { buildZip } from "../export/zip";
 import { Histogram } from "../components/Histogram";
@@ -169,11 +170,21 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
 
   return (
     <section className="card">
-      <h3>Label-Analyse</h3>
-      <p className="hint">
-        Statistik und Histogramm eines Datensatzes je Region einer Segmentierung oder eines Atlas (z. B. CT-Organe auf dem PET, Hirnatlas auf einem PET im
-        Standardraum). Labels auf anderem Raster werden über die Registrierung übertragen (nächster Nachbar).
-      </p>
+      <CardTitle
+        info={
+          <>
+            <p>
+              Statistik und Histogramm eines Datensatzes je Region einer Segmentierung oder eines Atlas (z. B. CT-Organe auf dem PET, Hirnatlas auf einem
+              PET im Standardraum). Labels auf anderem Raster werden über die Registrierung übertragen (nächster Nachbar).
+            </p>
+            <p>
+              Werte in den Einheiten des Datensatzes; Varianz in Einheit², SD und Varianz als Stichprobenwerte (n − 1).
+            </p>
+          </>
+        }
+      >
+        Label-Analyse
+      </CardTitle>
       <div className="button-row">
         <button className="secondary-btn" disabled={props.cerebraLoading} onClick={props.onLoadCerebra}>
           {props.cerebraLoading ? "Wird geladen …" : "Hirnatlas CerebrA (MNI)"}
@@ -194,14 +205,21 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
           }}
         />
       </div>
-      <p className="tool-hint">
-        AAL3 (Rolls et al. 2020, MNI):{" "}
+      <InfoText
+        details={
+          <>
+            AAL3 (Rolls et al. 2020) wird wegen der Lizenzbedingungen nicht mitgeliefert: die ZIP-Datei herunterladen und hier direkt auswählen. Eigene
+            Labels: NIfTI-Labelbild und optional die Tabelle (TXT/TSV/CSV/LUT) zusammen auswählen. Hirnatlanten gelten nur für Datensätze im MNI-Raum
+            (Panel „Standardraum“).
+          </>
+        }
+      >
+        AAL3:{" "}
         <a href={AAL_URL} target="_blank" rel="noreferrer">
-          von der GIN-Seite herunterladen
+          herunterladen
         </a>{" "}
-        und die ZIP-Datei hier direkt auswählen (wird wegen der Lizenzbedingungen nicht mitgeliefert). Eigene Labels: NIfTI-Labelbild und optional die
-        Tabelle (TXT/TSV/CSV/LUT) zusammen auswählen. Hirnatlanten gelten nur für Datensätze im MNI-Raum (Panel „Standardraum“).
-      </p>
+        und die ZIP hier auswählen.
+      </InfoText>
       {props.loadError && <div className="error-banner">{props.loadError}</div>}
 
       {props.labelSets.length === 0 ? (
@@ -325,10 +343,16 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
               </button>
             )}
           </div>
-          <p className="tool-hint">
-            Zeilen = Labels, Spalten = Bins (gleiche Bins für alle Labels; Spaltenkopf = Bin-Untergrenze{current.unit ? ` in ${current.unit}` : ""}). Bereich
-            leer = Minimum bis Maximum des jeweiligen Datensatzes in den Labels; Werte außerhalb eines festen Bereichs zählen in die erste/letzte Bin.
-          </p>
+          <InfoText
+            details={
+              <>
+                Zeilen = Labels, Spalten = Bins (gleiche Bins für alle Labels; Spaltenkopf = Bin-Untergrenze{current.unit ? ` in ${current.unit}` : ""}). Bereich
+                leer = Minimum bis Maximum des jeweiligen Datensatzes in den Labels; Werte außerhalb eines festen Bereichs zählen in die erste/letzte Bin.
+              </>
+            }
+          >
+            Eine Zeile je Label, eine Spalte je Bin.
+          </InfoText>
           {hInfo && <p className="tool-hint">{hInfo}</p>}
           <input className="label-search" type="search" placeholder="Region suchen …" value={query} onChange={(e) => setQuery(e.target.value)} />
           <div className="segmented-control" role="group" aria-label="Sortierung">
@@ -375,9 +399,7 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
               </tbody>
             </table>
           </div>
-          <p className="tool-hint">
-            Werte in {current.unit || "Originaleinheiten"}; Varianz in {current.unit ? `${current.unit}²` : "Einheiten²"}, SD/Varianz als Stichprobenwerte (n − 1).
-          </p>
+          <p className="tool-hint">Werte in {current.unit || "Originaleinheiten"}.</p>
         </>
       )}
     </section>

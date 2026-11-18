@@ -1,3 +1,4 @@
+import { Layers } from "lucide-react";
 import { useShallowStable } from "./useShallowStable";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { Vec3 } from "../core/geometry";
@@ -6,7 +7,7 @@ import { compositeLayers } from "./composite";
 import { type GpuDraw, ImageCanvas } from "./ImageCanvas";
 import { GlRenderer } from "./gl/renderer";
 import { mipSource, orientedMip } from "./mip";
-import { Volume3D } from "./volume";
+import { Volume3D, lutGradient } from "./volume";
 import {
   type DisplayGrid,
   type PlaneKind,
@@ -39,11 +40,14 @@ export interface ViewerProps {
   onPaint?: (world: Vec3, normalAxis: 0 | 1 | 2) => void;
   /** Extra controls for the viewer toolbar. */
   toolbar?: ReactNode;
+  /** Layer list shown as a floating panel (top right) when the "Ebenen" button is on. */
+  layerPanel?: ReactNode;
   /** Optional per-view overlay (e.g. VOI outlines), drawn in plane pixel coordinates. */
   planeOverlay?: (kind: PlaneKind, ctx: CanvasRenderingContext2D, toScreen: (u: number, v: number) => [number, number], basis: ReturnType<typeof planeBasis>, scale: number) => void;
 }
 
 const EMPTY_RGBA = new Uint8ClampedArray(0);
+const LAYERS_KEY = "recon-studio-layer-panel";
 
 const VIEW_TITLES: Record<ViewKind, string> = { axial: "Axial", coronal: "Koronar", sagittal: "Sagittal", mip: "MIP" };
 const GRID_ORDER: ViewKind[] = ["axial", "sagittal", "coronal", "mip"];
@@ -63,6 +67,24 @@ export function Viewer(props: ViewerProps) {
     mip: IDENTITY_TRANSFORM,
   });
   const [hover, setHover] = useState<Vec3 | null>(null);
+  const [layersOpen, setLayersOpen] = useState(() => {
+    try {
+      return localStorage.getItem(LAYERS_KEY) !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const toggleLayers = () => {
+    setLayersOpen((o) => {
+      try {
+        localStorage.setItem(LAYERS_KEY, o ? "0" : "1");
+      } catch {
+        /* storage unavailable */
+      }
+      return !o;
+    });
+  };
+  const [helpOpen, setHelpOpen] = useState(false);
   const active = layers.find((l) => l.id === activeLayerId) ?? layers[layers.length - 1];
   const mipLayer = visible.find((l) => l.id === (props.mipLayerId ?? activeLayerId)) ?? visible[visible.length - 1];
   const mipVolume = mipLayer?.volume;
@@ -183,11 +205,37 @@ export function Viewer(props: ViewerProps) {
           Screenshot
         </button>
         {props.toolbar}
-        <span className="viewer-hint">
-          Klick: Fadenkreuz · Mausrad: Schicht · Strg+Mausrad: Zoom · Rechts ziehen: Fenster · Shift/Mitte ziehen: verschieben · Doppelklick: maximieren
+        <span className="viewer-toolbar-right">
+          {props.layerPanel && (
+            <button className={layersOpen ? "active" : ""} aria-pressed={layersOpen} title="Ebenen ein-/ausblenden" onClick={toggleLayers}>
+              <Layers size={13} /> Ebenen
+            </button>
+          )}
+          <button className={helpOpen ? "active" : ""} aria-pressed={helpOpen} aria-label="Maus- und Tastenbedienung" title="Maus- und Tastenbedienung" onClick={() => setHelpOpen((o) => !o)}>
+            ?
+          </button>
+          {helpOpen && (
+            <div className="viewer-help" role="dialog" aria-label="Bedienung">
+              <dl>
+                <dt>Klick</dt>
+                <dd>Fadenkreuz setzen</dd>
+                <dt>Mausrad</dt>
+                <dd>Schicht wechseln</dd>
+                <dt>Strg + Mausrad</dt>
+                <dd>Zoom</dd>
+                <dt>Rechts ziehen</dt>
+                <dd>Fenster (Helligkeit/Kontrast)</dd>
+                <dt>Shift / Mitte ziehen</dt>
+                <dd>Bild verschieben</dd>
+                <dt>Doppelklick</dt>
+                <dd>Ansicht maximieren</dd>
+              </dl>
+            </div>
+          )}
         </span>
       </div>
       <div ref={layoutRef} className={`viewer-layout layout-${layout}`}>
+        {props.layerPanel && layersOpen && <div className="viewer-layer-panel">{props.layerPanel}</div>}
         {layout === "grid" && GRID_ORDER.map(renderView)}
         {layout === "single" && renderView(focusView)}
         {layout === "focus" && (
@@ -201,13 +249,17 @@ export function Viewer(props: ViewerProps) {
         <span>
           {hover ? "Maus" : "Cursor"}: {statusPoint.map((v) => v.toFixed(1)).join(" / ")} mm (LPS)
         </span>
-        {layers.filter((l) => !l.hideInStatus).map((l) => {
+        {layers.filter((l) => !l.hideInStatus && l.display.visible).map((l) => {
           const raw = valueAt(l.volume, l.w2v, statusPoint);
           const unit = l.unit;
+          const region = l.labelNames && Number.isFinite(raw) ? (Math.round(raw) === 0 ? "–" : (l.labelNames.get(Math.round(raw)) ?? String(Math.round(raw)))) : undefined;
           return (
-            <span key={l.id}>
+            <span key={l.id} className="status-value" title={l.title}>
+              <i className="lut-swatch" style={{ background: lutGradient(l.display.lut) }} aria-hidden="true" />
               {l.label}:{" "}
-              {Number.isFinite(raw)
+              {region !== undefined
+                ? region
+                : Number.isFinite(raw)
                 ? unit && unit.scale !== 1
                   ? `${formatValue(raw * unit.scale)} ${unit.label}`
                   : `${formatValue(raw)}${unit?.label ? ` ${unit.label}` : ""}`
