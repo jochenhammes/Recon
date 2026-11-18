@@ -47,8 +47,8 @@ Beispieldaten (keine Patientendaten).
   bei Labelbildern die Region unter dem Cursor; sie erscheint auch im Screenshot. Sie ist zugleich Bedienelement:
   - **Enden des Balkens ziehen** (weiße Griffe): Fenster-Minimum bzw. -Maximum,
   - **Mitte ziehen**: ganzes Fenster verschieben,
-  - **Rechtsklick** auf den Balken: Farbtabelle wählen – Graustufen, Invertiert, Hot, Kidney (Schwarz–Blau–Grün–Gelb–Rot–
-    Weiß), Blau (Schwarz–Blau–Hellblau–Weiß), Regenbogen.
+  - **Rechtsklick** auf den Balken: Farbtabelle wählen – Graustufen, Invertiert, Hot, DaT (Schwarz–Grün–Gelb–Hellrot, typische
+    DaTSCAN-Darstellung), Blau (Schwarz–Blau–Hellblau–Weiß), Regenbogen.
   Statuszeile unten: Position in mm (Patientenkoordinaten LPS) und die Werte aller sichtbaren Ebenen unter dem
   Fadenkreuz – je Ebene mit Farbbalken ihrer Farbtabelle, Modalität und Schlagwort bzw. Dateiname; bei Labelbildern
   der Name der Region.
@@ -143,7 +143,7 @@ Karte **Projekt** im Bereich *Daten*:
 
 Bereich **Ansicht** – eine Karte je angezeigter Ebene (oben = oberste Ebene):
 
-1. **Farbtabelle**: Graustufen, invertiert, Hot, Kidney, Blau, Regenbogen, Atlas-Regionen (auch per Rechtsklick auf
+1. **Farbtabelle**: Graustufen, invertiert, Hot, DaT, Blau, Regenbogen, Atlas-Regionen (auch per Rechtsklick auf
    die Farbskala im Viewer).
 2. **Fenster**: *Min*/*Max* eintragen, *Auto*, oder Presets (PET: SUV 0–5/10/15; CT: Weichteil, Lunge, Knochen,
    Gehirn, Leber). Alternativ im Bild mit der rechten Maustaste ziehen.
