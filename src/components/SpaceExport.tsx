@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { withPatientId } from "../core/exportName";
+import { umlaut, withPatientId } from "../core/exportName";
 import { Card } from "../ui/Card";
 import { InfoText } from "../ui/Info";
 import type { Vec3, WorldToVoxel } from "../core/geometry";
@@ -31,7 +31,7 @@ export interface SpaceDataset {
 type GridMode = "target" | "matrix" | "voxel";
 
 function safe(s: string): string {
-  return s.trim().replace(/[^A-Za-z0-9_.-]+/g, "_") || "volume";
+  return s.trim().replace(/[äöüÄÖÜß]/g, umlaut).replace(/[^A-Za-z0-9_.-]+/g, "_") || "volume";
 }
 
 function download(bytes: Uint8Array<ArrayBuffer>, name: string, type: string, allNifti = false) {

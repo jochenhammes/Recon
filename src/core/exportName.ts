@@ -31,3 +31,16 @@ export function withPatientId(name: string, opts: { archive?: boolean } = {}): s
   if (!eligible || file.startsWith(`${patientId}_`)) return name;
   return `${dir}${patientId}_${file}`;
 }
+
+const UMLAUTS: Record<string, string> = { ä: "ae", ö: "oe", ü: "ue", Ä: "Ae", Ö: "Oe", Ü: "Ue", ß: "ss" };
+
+/** Replacement for one umlaut/ß (use with .replace(/[äöüÄÖÜß]/g, umlaut)). */
+export const umlaut = (c: string): string => UMLAUTS[c] ?? c;
+
+/** File-name-safe text: umlauts transliterated, everything else outside [A-Za-z0-9_.-] becomes "_". */
+export function safeFileName(s: string): string {
+  return s
+    .trim()
+    .replace(/[äöüÄÖÜß]/g, (c) => UMLAUTS[c])
+    .replace(/[^A-Za-z0-9_.-]+/g, "_");
+}

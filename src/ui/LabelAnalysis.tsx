@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { withPatientId } from "../core/exportName";
+import { umlaut, withPatientId } from "../core/exportName";
 import { BigTable } from "./BigTable";
 import { Card } from "./Card";
 import { InfoText } from "./Info";
@@ -115,12 +115,12 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
     const url = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = withPatientId(`Labelanalyse_${current.datasetLabel.replace(/[^A-Za-z0-9_.-]+/g, "_")}.csv`);
+    a.download = withPatientId(`Labelanalyse_${current.datasetLabel.replace(/[äöüÄÖÜß]/g, umlaut).replace(/[^A-Za-z0-9_.-]+/g, "_")}.csv`);
     a.click();
     URL.revokeObjectURL(url);
   }
 
-  const safe = (t: string) => t.replace(/[^A-Za-z0-9_.-]+/g, "_");
+  const safe = (t: string) => t.replace(/[äöüÄÖÜß]/g, umlaut).replace(/[^A-Za-z0-9_.-]+/g, "_");
   const download = (bytes: BlobPart, name: string, type: string) => {
     const url = URL.createObjectURL(new Blob([bytes], { type }));
     const a = document.createElement("a");

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { sanitizePatientId, setExportPatientId, withPatientId } from "./exportName";
+import { safeFileName, sanitizePatientId, setExportPatientId, umlaut, withPatientId } from "./exportName";
 
 describe("patient ID in export file names", () => {
   afterEach(() => setExportPatientId(""));
@@ -18,5 +18,10 @@ describe("patient ID in export file names", () => {
   it("sanitizes the ID", () => {
     expect(sanitizePatientId("  Müller, Hans / 12 ")).toBe("Müller,_Hans_12");
     expect(sanitizePatientId("a:b*c")).toBe("a_b_c");
+  });
+
+  it("transliterates umlauts in file names", () => {
+    expect(safeFileName("Läsionen · Größe")).toBe("Laesionen_Groesse");
+    expect("Übersicht".replace(/[äöüÄÖÜß]/g, umlaut)).toBe("Uebersicht");
   });
 });

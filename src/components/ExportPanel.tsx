@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { withPatientId } from "../core/exportName";
+import { umlaut, withPatientId } from "../core/exportName";
 import { Card } from "../ui/Card";
 import type { LoadedDataset } from "../dataset/types";
 import { modalityLabel } from "../dataset/describe";
@@ -38,7 +38,7 @@ function describeRecon(params: ReconParams | undefined): string {
 }
 
 function safeFileName(s: string): string {
-  return s.trim().replace(/[^A-Za-z0-9_.-]+/g, "_");
+  return s.trim().replace(/[äöüÄÖÜß]/g, umlaut).replace(/[^A-Za-z0-9_.-]+/g, "_");
 }
 
 function downloadBytes(bytes: Uint8Array<ArrayBuffer>, fileName: string, mimeType: string) {

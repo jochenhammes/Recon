@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { withPatientId } from "../core/exportName";
+import { umlaut, withPatientId } from "../core/exportName";
 import { BigTable } from "./BigTable";
 import { Card } from "./Card";
 import { type AtlasInfo, REFERENCE_PRESETS, type RegionStat, pooledMean, presetIndices, regionCsv } from "../atlas/atlas";
@@ -81,7 +81,7 @@ export function AtlasPanel(props: AtlasPanelProps) {
     const url = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = withPatientId(`SUVR_${current.datasetLabel.replace(/[^A-Za-z0-9_.-]+/g, "_")}.csv`);
+    a.download = withPatientId(`SUVR_${current.datasetLabel.replace(/[äöüÄÖÜß]/g, umlaut).replace(/[^A-Za-z0-9_.-]+/g, "_")}.csv`);
     a.click();
     URL.revokeObjectURL(url);
   }

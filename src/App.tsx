@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { sanitizePatientId, setExportPatientId, withPatientId } from "./core/exportName";
+import { sanitizePatientId, setExportPatientId, umlaut, withPatientId } from "./core/exportName";
 import { Card } from "./ui/Card";
 import { Activity, BarChart3, Brain, Crosshair, Download, Eye, FileCode2, FolderOpen, Gauge, Target, Wand2 } from "lucide-react";
 import { KineticsPanel, type KineticsApi } from "./kinetics/KineticsPanel";
@@ -241,7 +241,8 @@ function App() {
   // ── Tumor burden (MTV) ──
   const [tumorTargetId, setTumorTargetId] = useState<string | null>(null);
   const [tumorIndication, setTumorIndication] = useState<TumorIndication>("lymphoma");
-  const [tumor, setTumor] = useState<{ entryId: string; labels: Int32Array; lesions: Lesion[]; description: string; version: number } | null>(null);
+  /** Tumor burden result; `datasetId` is the label dataset "Läsionen · …" that mirrors the included lesions. */
+  const [tumor, setTumor] = useState<{ entryId: string; labels: Int32Array; lesions: Lesion[]; description: string; version: number; datasetId?: string } | null>(null);
   const [tumorBusy, setTumorBusy] = useState(false);
   const [tumorError, setTumorError] = useState<string | null>(null);
   const [tumorMode, setTumorMode] = useState<TumorMode>("none");
@@ -344,18 +345,6 @@ function App() {
     [voiMaskData, volume, voiBounds],
   );
 
-  // Included lesions as label image (color by lesion number) for the viewer.
-  const tumorDisplay = useMemo(() => {
-    if (!tumor) return null;
-    const inc = new Set(tumor.lesions.filter((l) => l.included).map((l) => l.id));
-    const out = new Float32Array(tumor.labels.length);
-    for (let i = 0; i < out.length; i++) {
-      const id = tumor.labels[i];
-      if (id && inc.has(id)) out[i] = ((id - 1) % 254) + 1;
-    }
-    return out;
-  }, [tumor]); // tumor.version changes with every edit (new object)
-
   // ── Viewer layers: reference at the bottom, overlay on top, VOI above. ──
   const layerUnits = new Map(entries.map((e) => [e.id, unitFor(e)]));
   const unitsKey = [...layerUnits.values()].map((u) => `${u.scale}:${u.label}`).join("|");
@@ -369,17 +358,6 @@ function App() {
     };
     add(reference, reference ? { ...reference.display, opacity: 1 } : undefined);
     for (const o of overlays) add(o);
-    const tEntry = tumor && byId(tumor.entryId);
-    const tW2v = tEntry && w2vById.get(tEntry.id);
-    if (tumor && tEntry && tW2v && tumorDisplay)
-      out.push({
-        id: "tumor",
-        label: "Läsionen",
-        volume: { nx: tEntry.dataset.current.nx, ny: tEntry.dataset.current.ny, nz: tEntry.dataset.current.nz, data: tumorDisplay, geometry: tEntry.dataset.current.geometry },
-        w2v: tW2v,
-        display: { window: [0, 255], lut: "labels", opacity: 0.55, visible: true, nearest: true },
-        hideInStatus: true,
-      });
     if (voiMaskData && volume && activeW2v)
       out.push({
         id: "voi",
@@ -390,7 +368,7 @@ function App() {
         hideInStatus: true,
       });
     return out;
-  }, [reference, overlays, w2vById, unitsKey, voiMaskData, volume, activeW2v, voi, tumorDisplay]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [reference, overlays, w2vById, unitsKey, voiMaskData, volume, activeW2v, voi]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function updateEntry(id: string, patch: Partial<Entry>) {
     setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
@@ -567,6 +545,13 @@ function App() {
     }
     if (id === active?.id) setActiveId(rest[0]?.id ?? null);
     if (voi?.entryId === id) setVoi(null);
+    if (tumor && (tumor.datasetId === id || tumor.entryId === id)) {
+      setTumor(null);
+      if (tumor.entryId === id && tumor.datasetId) {
+        setEntries((prev) => prev.filter((x) => x.id !== tumor.datasetId));
+        removeOverlay(tumor.datasetId);
+      }
+    }
   }
 
   // ── Project file (.recon): whole session ──
@@ -956,7 +941,7 @@ function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${moving.dataset.displayName.replace(/[^A-Za-z0-9_.-]+/g, "_")}_to_${reference.dataset.displayName.replace(/[^A-Za-z0-9_.-]+/g, "_")}.json`;
+    a.download = `${moving.dataset.displayName.replace(/[äöüÄÖÜß]/g, umlaut).replace(/[^A-Za-z0-9_.-]+/g, "_")}_to_${reference.dataset.displayName.replace(/[äöüÄÖÜß]/g, umlaut).replace(/[^A-Za-z0-9_.-]+/g, "_")}.json`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -1131,7 +1116,7 @@ function App() {
         return w2v ? [{ volume: e.dataset.current, w2v, display: e.id === reference.id ? { ...e.display, opacity: 1 } : e.display }] : [];
       });
       const rgb = renderFusion(fusionLayers, grid);
-      const name = `Fusion_${stack.map((e) => datasetModality(e.dataset)).join("_")}`.replace(/[^A-Za-z0-9_.-]+/g, "_");
+      const name = `Fusion_${stack.map((e) => datasetModality(e.dataset)).join("_")}`.replace(/[äöüÄÖÜß]/g, umlaut).replace(/[^A-Za-z0-9_.-]+/g, "_");
       let bytes: Uint8Array<ArrayBuffer>;
       let fileName: string;
       if (format === "nifti") {
@@ -1174,7 +1159,33 @@ function App() {
   const tumorSuv = tumorEntry ? suvById.get(tumorEntry.id) : undefined;
   const tumorFactor = tumorSuv?.ok ? tumorSuv.info.factor : 1;
 
-  const organEntries = entries.filter((e) => e.dataset.atlas);
+  const organEntries = entries.filter((e) => e.dataset.atlas && e.id !== tumor?.datasetId);
+  // The included lesions as a regular label dataset ("Läsionen · PET"): shown, analysed, exported and saved like
+  // every other dataset; kept in sync with the tumor result (include/exclude, brush) and the PET's placement.
+  const lesionPet = tumor ? byId(tumor.entryId) : undefined;
+  useEffect(() => {
+    if (!tumor || !lesionPet) return;
+    const inc = new Map(tumor.lesions.filter((l) => l.included).map((l) => [l.id, l]));
+    const data = new Float32Array(tumor.labels.length);
+    for (let i = 0; i < data.length; i++) if (inc.has(tumor.labels[i])) data[i] = tumor.labels[i];
+    const labels = new Map(
+      [...inc.values()].sort((a, b) => a.id - b.id).map((l) => [l.id, `Läsion ${l.id}${l.organ ? ` · ${l.organ.replace(/_/g, " ")}` : ""}${l.bone ? " · Knochen" : ""}`] as [number, string]),
+    );
+    const name = `Läsionen · ${lesionPet.dataset.displayName}`;
+    const atlas = { name: `Läsionen (${tumor.description}) · ${lesionPet.dataset.displayName}`, labels };
+    const vol = lesionPet.dataset.current.withData(data);
+    const existing = tumor.datasetId ? entries.find((x) => x.id === tumor.datasetId) : undefined;
+    if (existing) {
+      setEntries((prev) => prev.map((x) => (x.id === existing.id ? { ...x, matrix: lesionPet.matrix, dataset: { ...x.dataset, original: vol, current: vol, atlas } } : x)));
+    } else {
+      const id = `ds${nextEntryId++}`;
+      const d = createDataset(vol, { kind: "reconstruction" }, name);
+      setEntries((prev) => [...prev, { id, dataset: { ...d, atlas }, display: { window: [0, 255], lut: "labels", opacity: 0.55, visible: true, nearest: true }, matrix: lesionPet.matrix }]);
+      addOverlay(id);
+      setTumor((t) => (t ? { ...t, datasetId: id } : t));
+    }
+  }, [tumor?.labels, tumor?.lesions, tumor?.version, lesionPet?.matrix, lesionPet?.dataset.current]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const organEntry = tumorOrganId === null ? undefined : (byId(tumorOrganId ?? null) ?? organEntries.findLast((e) => e.dataset.displayName.startsWith("CT-Organe")));
 
   /** Organ labels on the tumor PET grid (through both placements). */
@@ -1201,7 +1212,7 @@ function App() {
           if (tumorAutoExclude) description += `; automatisch ausgeschlossen: ${EXCLUSION_PRESETS[tumorIndication].map((n) => n.replace(/_/g, " ")).join(", ")}`;
         }
       }
-      setTumor({ entryId: e.id, labels: r.labels, lesions, description, version: 0 });
+      setTumor({ entryId: e.id, labels: r.labels, lesions, description, version: 0, datasetId: tumor?.entryId === e.id ? tumor.datasetId : undefined });
       setTumorMode("pick");
     } catch (err) {
       setTumorError(err instanceof Error ? err.message : String(err));
@@ -1355,7 +1366,7 @@ function App() {
     const e = tumor && byId(tumor.entryId);
     if (!tumor || !e) return;
     const csv = burdenCsv(tumorBurden(tumor.lesions), tumor.lesions, { dataset: e.dataset.displayName, method: tumor.description, tlgLabel: tumorIndication === "psma" ? "TL-PSMA" : "TLG" });
-    downloadBytes(new TextEncoder().encode("\ufeff" + csv) as Uint8Array<ArrayBuffer>, `Tumorlast_${e.dataset.displayName.replace(/[^A-Za-z0-9_.-]+/g, "_")}.csv`, "text/csv;charset=utf-8");
+    downloadBytes(new TextEncoder().encode("\ufeff" + csv) as Uint8Array<ArrayBuffer>, `Tumorlast_${e.dataset.displayName.replace(/[äöüÄÖÜß]/g, umlaut).replace(/[^A-Za-z0-9_.-]+/g, "_")}.csv`, "text/csv;charset=utf-8");
   }
 
   function exportTumorNifti() {
@@ -1365,7 +1376,7 @@ function App() {
     const data = new Float32Array(tumor.labels.length);
     for (let i = 0; i < data.length; i++) if (inc.has(tumor.labels[i])) data[i] = tumor.labels[i];
     const atlas = { name: `Läsionen · ${e.dataset.displayName}`, labels: new Map([...inc].sort((a, b) => a - b).map((id) => [id, `Läsion ${id}`] as [number, string])) };
-    downloadBytes(buildNiftiFile(e.dataset.current.withData(data), { atlas }), `Laesionen_${e.dataset.displayName.replace(/\.nii(\.gz)?$/i, "").replace(/[^A-Za-z0-9_.-]+/g, "_")}.nii`);
+    downloadBytes(buildNiftiFile(e.dataset.current.withData(data), { atlas }), `Laesionen_${e.dataset.displayName.replace(/\.nii(\.gz)?$/i, "").replace(/[äöüÄÖÜß]/g, umlaut).replace(/[^A-Za-z0-9_.-]+/g, "_")}.nii`);
   }
 
   // ── CT organ segmentation (browser, ONNX) ──
@@ -1831,7 +1842,7 @@ function App() {
     const url = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = withPatientId(`y_${(subject?.dataset.displayName ?? "subject").replace(/\.nii(\.gz)?$/i, "").replace(/[^A-Za-z0-9_.-]+/g, "_")}.nii`);
+    a.download = withPatientId(`y_${(subject?.dataset.displayName ?? "subject").replace(/\.nii(\.gz)?$/i, "").replace(/[äöüÄÖÜß]/g, umlaut).replace(/[^A-Za-z0-9_.-]+/g, "_")}.nii`);
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -2476,7 +2487,7 @@ function App() {
           onGoto={gotoLesion}
           onExportCsv={exportTumorCsv}
           onExportNifti={exportTumorNifti}
-          onClear={() => setTumor(null)}
+          onClear={() => tumor?.datasetId ? removeEntry(tumor.datasetId) : setTumor(null)}
           indication={tumorIndication}
           onIndicationChange={setTumorIndication}
           organOptions={organEntries.map((e) => ({ id: e.id, label: entryLabel(e) }))}
