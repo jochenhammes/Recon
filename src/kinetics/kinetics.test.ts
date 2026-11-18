@@ -111,3 +111,14 @@ describe("SRTM (basis functions)", () => {
     expect(maps.r1[1]).toBeCloseTo(1, 2);
   });
 });
+
+describe("frame duration input", () => {
+  it("accepts one value, lists and count×duration", async () => {
+    const { parseFrameDurations } = await import("./tac");
+    expect(parseFrameDurations("60", 3)).toEqual([60, 60, 60]);
+    expect(parseFrameDurations("2x10, 30", 3)).toEqual([10, 10, 30]);
+    expect(parseFrameDurations("6×10; 3*20 1x60", 10)).toEqual([10, 10, 10, 10, 10, 10, 20, 20, 20, 60]);
+    expect(parseFrameDurations("10, 20", 3)).toMatch(/3 Frames/);
+    expect(parseFrameDurations("abc", 3)).toMatch(/keine gültige/);
+  });
+});

@@ -9,7 +9,7 @@ import type { FrameMotion } from "./motion";
 import { type PatlakFit, patlakFit, patlakSetup } from "./patlak";
 import { runKineticsJob } from "./runner";
 import { type SrtmFit, srtmFit, srtmSetup } from "./srtm";
-import { type FrameTiming, frameMids, regionTac } from "./tac";
+import { type FrameTiming, frameMids, parseFrameDurations, regionTac } from "./tac";
 
 export interface KineticsApi {
   dynamics: { id: string; label: string; dataset: LoadedDataset; inMni: boolean }[];
@@ -57,6 +57,7 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
   const dyn = api.dynamics.find((d) => d.id === dynId) ?? api.dynamics.findLast((d) => d.inMni) ?? api.dynamics[0] ?? null;
   const info = dyn?.dataset.dynamic;
   const [durText, setDurText] = useState("");
+  const [timingMsg, setTimingMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [fromSec, setFromSec] = useState("120");
   const [t1Id, setT1Id] = useState<string>("");
   const [motionRef, setMotionRef] = useState<string>("sum");
@@ -103,9 +104,9 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
 
   function applyDurations() {
     if (!dyn || !info) return;
-    const d = durText.split(/[;,\s]+/).filter(Boolean).map((x) => parseFloat(x.replace(",", ".")));
-    if (d.length !== info.frames.length || d.some((x) => !(x > 0))) {
-      setError(`Bitte ${info.frames.length} positive Frame-Dauern (Sekunden) eingeben.`);
+    const d = parseFrameDurations(durText, info.frames.length);
+    if (typeof d === "string") {
+      setTimingMsg({ ok: false, text: d });
       return;
     }
     const start: number[] = [];
@@ -114,8 +115,8 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
       start.push(acc);
       acc += x;
     }
-    setError(null);
     api.setTiming(dyn.id, start, d);
+    setTimingMsg({ ok: true, text: `Übernommen: ${d.length} Frames, Gesamtdauer ${fmt(acc / 60, 1)} min.` });
   }
 
   const motionCorrect = () =>
@@ -301,12 +302,18 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
                     </tbody>
                   </table>
                   <label className="field">
-                    Frame-Dauern in Sekunden (kommagetrennt, {info.frames.length} Werte; Start = Summe der vorherigen)
-                    <input value={durText} placeholder="z. B. 30, 30, 60, 60, 120, …" onChange={(e) => setDurText(e.target.value)} />
+                    Frame-Dauern in Sekunden ({info.frames.length} Frames): ein Wert für alle, eine Liste oder Anzahl×Dauer; Start = Summe der vorherigen
+                    <input
+                      value={durText}
+                      placeholder="z. B. 60  oder  6x10, 3x20, 2x30, 2x60, 2x150, 10x300"
+                      onChange={(e) => (setDurText(e.target.value), setTimingMsg(null))}
+                      onKeyDown={(e) => e.key === "Enter" && applyDurations()}
+                    />
                   </label>
                   <button className="secondary-btn" onClick={applyDurations}>
                     Frame-Zeiten übernehmen
                   </button>
+                  {timingMsg && <p className={timingMsg.ok ? "tool-hint success-text" : "error-banner"}>{timingMsg.text}</p>}
                 </details>
               </>
             )}

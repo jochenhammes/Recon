@@ -65,3 +65,23 @@ export function matlabTrapezIntegral(values: ArrayLike<number>, frameLength: num
   }
   return out;
 }
+
+/**
+ * Frame durations (seconds) from user input: values separated by comma, semicolon or space; "6x10" (also 6*10, 6×10)
+ * = 6 frames of 10 s; a single value applies to every frame. Returns the durations or an error message.
+ */
+export function parseFrameDurations(text: string, frames: number): number[] | string {
+  const tokens = text.split(/[;,\s]+/).filter(Boolean);
+  if (!tokens.length) return "Bitte Frame-Dauern eingeben.";
+  const out: number[] = [];
+  for (const t of tokens) {
+    const m = t.match(/^(\d+)\s*[x×*]\s*(\d+(?:\.\d+)?)$/i);
+    const count = m ? parseInt(m[1], 10) : 1;
+    const value = parseFloat(m ? m[2] : t);
+    if (!(value > 0) || !(count > 0)) return `„${t}“ ist keine gültige Dauer.`;
+    for (let i = 0; i < count; i++) out.push(value);
+  }
+  if (out.length === 1) return Array(frames).fill(out[0]);
+  if (out.length !== frames) return `${out.length} Dauern eingegeben, der Datensatz hat aber ${frames} Frames.`;
+  return out;
+}

@@ -1494,3 +1494,6 @@ tr.excluded-row td {
   flex-shrink: 0;
   white-space: nowrap;
 }
+.success-text {
+  color: var(--success);
+}
