@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Activity, BarChart3, Brain, Crosshair, Download, Eye, FileCode2, FolderOpen, Target, Wand2 } from "lucide-react";
 import { KineticsPanel, type KineticsApi } from "./kinetics/KineticsPanel";
 import { LayerToggle } from "./ui/LayerToggle";
+import { type Activity as JobActivity, ActivityBar } from "./ui/ActivityBar";
 import { FrameSlider } from "./ui/FrameSlider";
 import { runKineticsJob } from "./kinetics/runner";
 import type { FrameMotion } from "./kinetics/motion";
@@ -256,6 +257,8 @@ function App() {
   const [centiloidOutcome, setCentiloidOutcome] = useState<CentiloidOutcome | null>(null);
   const centiloidCancelled = useRef(false);
   const normRun = useRef<{ cancel: () => void } | null>(null);
+  const [loadBusy, setLoadBusy] = useState(false);
+  const [kineticsActivity, setKineticsActivity] = useState<{ label: string; fraction: number | null } | null>(null);
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     try {
       return localStorage.getItem("recon-studio-theme") === "light" ? "light" : "dark";
@@ -1520,6 +1523,7 @@ function App() {
     dynamics: entries.filter((e) => e.dataset.dynamic).map((e) => ({ id: e.id, label: entryLabel(e), dataset: e.dataset, inMni: !!e.dataset.derivedFrom })),
     t1s: subjectCandidates.filter((e) => !e.dataset.dynamic).sort((a, b) => Number(isAnatomical(unitSource(b.dataset))) - Number(isAnatomical(unitSource(a.dataset)))).map((e) => ({ id: e.id, label: entryLabel(e) })),
     atlases: entries.filter((e) => e.dataset.atlas).map((e) => ({ id: e.id, label: entryLabel(e), atlas: e.dataset.atlas! })),
+    onActivity: setKineticsActivity,
     setTiming: (id, start, duration) => {
       const e = byId(id);
       if (e?.dataset.dynamic) setDataset(id, { ...e.dataset, dynamic: { ...e.dataset.dynamic, start, duration, timeSource: "manuell", note: undefined } });
@@ -1729,6 +1733,7 @@ function App() {
       <VolumeUploadPanel
         title={entries.length ? "Weiteren Datensatz laden" : "Volumen laden"}
         onLoaded={handleVolumeLoaded}
+        onBusyChange={setLoadBusy}
         description="PET, SPECT, CT oder MRT als DICOM (Datei oder Serie) bzw. NIfTI – beliebig viele."
       />
       {entries.map((e) => (
@@ -2307,6 +2312,44 @@ function App() {
   ];
 
   const displayedIds = layers.map((l) => l.id);
+
+  // ── Activity indicator: running jobs and errors, wherever they were started ──
+  const activities: JobActivity[] = [];
+  const act = (a: JobActivity | false | "" | null | undefined) => {
+    if (a) activities.push(a);
+  };
+  act(loadBusy && { id: "load", label: "Laden", detail: "Dateien werden gelesen", tab: "data" });
+  act(busy && { id: "recon", label: "Rekonstruktion", fraction: progress, tab: "data" });
+  act(
+    coregRunning && {
+      id: "coreg",
+      label: "Registrierung",
+      detail: `${regQueue.running ? (byId(regQueue.running) ? entryShort(byId(regQueue.running)!) : "") : ""}${regQueue.waiting.length ? ` · ${regQueue.waiting.length} wartend` : ""}${coregProgress ? ` · ${coregProgress.stage}` : ""}`,
+      tab: "registration",
+    },
+  );
+  act(normRunning && !centiloidRunning && { id: "norm", label: "Normalisierung", detail: normProgress?.stage, fraction: normProgress?.fraction ?? null, tab: "normalization" });
+  act(transferBusy && { id: "transfer", label: "Übertragung", detail: transferStatus ?? undefined, tab: "normalization" });
+  act(centiloidRunning && { id: "centiloid", label: "Centiloid", detail: normProgress ? normProgress.stage : (centiloidStatus ?? undefined), fraction: normProgress?.fraction ?? null, tab: "normalization" });
+  act(
+    ctSegRunning && {
+      id: "ctseg",
+      label: "CT-Segmentierung",
+      detail: ctSegProgress ? `${ctSegProgress.stage}${ctSegProgress.total ? ` · Kachel ${Math.min(ctSegProgress.done + 1, ctSegProgress.total)}/${ctSegProgress.total}` : ""}` : "Vorbereitung",
+      fraction: ctSegProgress?.total ? ctSegProgress.done / ctSegProgress.total : null,
+      tab: "tumor",
+    },
+  );
+  act(tumorBusy && { id: "tumor", label: "Tumorlast", detail: "Segmentierung", tab: "tumor" });
+  act(fusionBusy && { id: "fusion", label: "Fusionsexport", tab: "view" });
+  act(editBusy && { id: "edit", label: "Bearbeiten", tab: "edit" });
+  act((templateBusy || atlasBusy) && { id: "bundled", label: templateBusy ? "Vorlage laden" : "Atlas laden", tab: templateBusy ? "normalization" : "analysis" });
+  act(kineticsActivity && { id: "kinetics", label: "Kinetik", detail: kineticsActivity.label, fraction: kineticsActivity.fraction, tab: "kinetics" });
+  act(ctSegError && !ctSegRunning && { id: "ctseg-error", label: "CT-Segmentierung", error: ctSegError, tab: "tumor" });
+  act(normError && !normRunning && { id: "norm-error", label: "Normalisierung", error: normError, tab: "normalization" });
+  act(coregError && !coregRunning && { id: "coreg-error", label: "Registrierung", error: coregError, tab: "registration" });
+  act(centiloidError && !centiloidRunning && { id: "centiloid-error", label: "Centiloid", error: centiloidError, tab: "normalization" });
+  act(tumorError && !tumorBusy && { id: "tumor-error", label: "Tumorlast", error: tumorError, tab: "tumor" });
   const mipLayerId = [overlay, reference].find((e) => e && !isAnatomical(e.dataset.source))?.id ?? reference?.id;
 
   return (
@@ -2318,20 +2361,16 @@ function App() {
       onPanelOpenChange={setPanelOpen}
       theme={theme}
       onThemeChange={setTheme}
-      headerInfo={entries.map((e) => (
-        <button
-          key={e.id}
-          className={`dataset-chip clickable${e.id === active?.id && entries.length > 1 ? " active" : ""}`}
-          title={`${e.dataset.displayName}${entries.length > 1 ? " – klicken, um Analyse, Bearbeitung, Header und Export auf diesen Datensatz anzuwenden" : ""}`}
-          onClick={() => switchActive(e.id)}
-        >
-          <span className="badge">{datasetModality(e.dataset)}</span>
-          {e.tag && <span className="chip-tag">{e.tag}</span>}
-          <span className="chip-name">{middleEllipsis(shortName(e.dataset.displayName), 24)}</span>
-          {e.id === reference?.id && entries.length > 1 && <span className="chip-edited chip-ref">Ref</span>}
-          {e.dataset.edits.length > 0 && <span className="chip-edited">bearbeitet</span>}
-        </button>
-      ))}
+      headerInfo={
+        <ActivityBar
+          activities={activities}
+          idleText={entries.length ? `${entries.length} ${entries.length === 1 ? "Datensatz" : "Datensätze"} geladen` : undefined}
+          onOpen={(tab) => {
+            setActiveTab(tab);
+            setPanelOpen(true);
+          }}
+        />
+      }
     >
       {layers.length > 0 ? (
         <Viewer

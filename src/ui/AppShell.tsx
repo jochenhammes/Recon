@@ -22,7 +22,7 @@ export interface AppShellProps {
   onTabChange: (id: string) => void;
   panelOpen: boolean;
   onPanelOpenChange: (open: boolean) => void;
-  /** Chips / info in the header (loaded datasets). */
+  /** Content in the middle of the header (activity indicator). */
   headerInfo?: ReactNode;
   theme: "dark" | "light";
   onThemeChange: (theme: "dark" | "light") => void;
@@ -33,6 +33,9 @@ export function AppShell(props: AppShellProps) {
   const { tabs, activeTab, onTabChange, panelOpen, onPanelOpenChange, theme } = props;
   const current = tabs.find((t) => t.id === activeTab) ?? tabs[0];
   const [panelWidth, setPanelWidth] = usePanelWidth();
+  // Tabs stay mounted once visited (hidden when inactive), so running jobs, results and open cards survive a tab switch.
+  const [visited, setVisited] = useState<Set<string>>(() => new Set([current.id]));
+  if (!visited.has(current.id)) setVisited(new Set(visited).add(current.id));
   const width = current.wide ? Math.max(panelWidth, WIDE_WIDTH) : panelWidth;
 
   return (
@@ -88,15 +91,19 @@ export function AppShell(props: AppShellProps) {
             {panelOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
           </button>
         </nav>
-        {panelOpen && (
-          <aside className="side-panel" style={{ width }} aria-label={current.label}>
-            <div className="side-panel-head">
-              <h2>{current.label}</h2>
-            </div>
-            <div className="side-panel-body">{current.content}</div>
-            <ResizeHandle width={width} onChange={setPanelWidth} />
-          </aside>
-        )}
+        <aside className="side-panel" style={{ width }} aria-label={current.label} hidden={!panelOpen}>
+          <div className="side-panel-head">
+            <h2>{current.label}</h2>
+          </div>
+          {tabs
+            .filter((t) => visited.has(t.id))
+            .map((t) => (
+              <div key={t.id} className="side-panel-body" hidden={t.id !== current.id}>
+                {t.content}
+              </div>
+            ))}
+          <ResizeHandle width={width} onChange={setPanelWidth} />
+        </aside>
         <main className="workspace">{props.children}</main>
       </div>
     </div>

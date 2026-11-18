@@ -8,9 +8,11 @@ export interface VolumeUploadPanelProps {
   description?: string;
   /** Load only one volume (largest series) instead of every series in the selection. */
   single?: boolean;
+  /** Reports loading start/end (for the activity indicator). */
+  onBusyChange?: (busy: boolean) => void;
 }
 
-export function VolumeUploadPanel({ onLoaded, title = "Volumen laden", description, single }: VolumeUploadPanelProps) {
+export function VolumeUploadPanel({ onLoaded, title = "Volumen laden", description, single, onBusyChange }: VolumeUploadPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -21,6 +23,7 @@ export function VolumeUploadPanel({ onLoaded, title = "Volumen laden", descripti
   async function handleFiles(fileList: FileList | File[] | null) {
     if (!fileList || fileList.length === 0) return;
     setBusy(true);
+    onBusyChange?.(true);
     setError(null);
     setInfo(null);
     try {
@@ -44,6 +47,7 @@ export function VolumeUploadPanel({ onLoaded, title = "Volumen laden", descripti
       setError(e instanceof VolumeLoadError ? e.message : `Unerwarteter Fehler: ${String(e)}`);
     } finally {
       setBusy(false);
+      onBusyChange?.(false);
     }
   }
 

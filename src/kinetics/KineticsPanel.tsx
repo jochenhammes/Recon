@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { type AtlasInfo, REFERENCE_PRESETS, presetIndices } from "../atlas/atlas";
 import { formatValue } from "../components/format";
 import { csvText, csvWithInfo } from "../core/csv";
@@ -28,6 +28,8 @@ export interface KineticsApi {
   showDataset: (id: string) => void;
   loadCerebra: () => void;
   atlasBusy: boolean;
+  /** Reports the running step (for the activity indicator); null when idle. */
+  onActivity?: (a: { label: string; fraction: number | null } | null) => void;
 }
 
 type Model = "patlak" | "srtm";
@@ -77,6 +79,10 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
   const [tStar, setTStar] = useState("15");
   const [makeMaps, setMakeMaps] = useState(true);
   const [result, setResult] = useState<Result | null>(null);
+  const onActivity = api.onActivity;
+  useEffect(() => {
+    onActivity?.(busy ? { label: busy, fraction: progress } : null);
+  }, [busy, progress, onActivity]);
   const [selected, setSelected] = useState<number | null>(null);
   const [createdMaps, setCreatedMaps] = useState<{ dynId: string; maps: { id: string; label: string; hint: string }[] } | null>(null);
 

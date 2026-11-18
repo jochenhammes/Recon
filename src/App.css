@@ -1704,3 +1704,94 @@ tr.excluded-row td {
 .info-text p:last-child {
   margin-bottom: 0;
 }
+
+[hidden] {
+  display: none !important;
+}
+
+/* ─── Activity indicator (header) ─────────────────────────────────────── */
+.activity-bar {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+.activity-idle {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.activity-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 420px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--text-h);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.activity-item svg {
+  flex-shrink: 0;
+  color: var(--accent-strong);
+}
+.activity-item.done {
+  border-color: var(--border);
+  background: var(--surface-2);
+}
+.activity-item.done svg {
+  color: var(--success, #3fb27f);
+}
+.activity-item.error {
+  border-color: var(--warning);
+  background: transparent;
+}
+.activity-item.error svg {
+  color: var(--warning);
+}
+.activity-label {
+  font-weight: 600;
+}
+.activity-detail {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.activity-progress {
+  flex-shrink: 0;
+  width: 70px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+.activity-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s;
+}
+.activity-pct {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.spin {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}
