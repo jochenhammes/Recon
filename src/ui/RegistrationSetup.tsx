@@ -53,7 +53,22 @@ export function RegistrationSetup(props: RegistrationSetupProps) {
 
   return (
     <>
-      <Card title={<>1 · Zielraum (Basis)</>} info="Der Basis-Datensatz definiert den Raum – alle anderen werden darauf ausgerichtet und darin angezeigt. Export „im Raum eines anderen Datensatzes“ und Fusionen nutzen dieses Raster.">
+      <Card
+        title={<>1 · Zielraum (Basis)</>}
+        info={
+          <>
+            <p>
+              Koregistrierung im Patientenraum – für alle Körperregionen: PET/SPECT (auch dynamische Serien; die Frames folgen der Registrierung
+              des Mittelbilds) werden auf CT oder MRT desselben Patienten ausgerichtet, ebenso Folgeuntersuchungen auf die Basis.
+            </p>
+            <p>
+              Der Basis-Datensatz definiert den Raum – alle anderen werden darauf ausgerichtet und darin angezeigt. Export „im Raum eines anderen
+              Datensatzes“ und Fusionen nutzen dieses Raster. Die Normalisierung in den Standardraum (nur Hirn) ist ein eigener Bereich und nimmt alle
+              hier registrierten Datensätze mit.
+            </p>
+          </>
+        }
+      >
         <label className="field">
           Basis-Datensatz
           <select value={props.referenceId} disabled={props.running} onChange={(e) => props.onReferenceChange(e.target.value)}>

@@ -37,6 +37,22 @@ describe("bundled SPM PET/SPECT templates", () => {
       return parseNifti1(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength) as ArrayBuffer).volume;
     };
     const brain = load("MNI152NLin2009cAsym_res-02_brainmask.nii.gz");
+    // Transmission template (CT-like): the MNI brain lies inside the head (tissue attenuation, not air).
+    const tr = load("spm12_Transm.nii.gz");
+    expect([tr.nx, tr.ny, tr.nz]).toEqual([91, 109, 91]);
+    let max = 0;
+    for (const v of tr.data) max = Math.max(max, v);
+    // Same 91×109×91 grid as the SPM PET template: its brain (> 40 % of max) must be tissue in the transmission image.
+    const pet = load("spm12_PET.nii.gz");
+    let pmax = 0;
+    for (const v of pet.data) pmax = Math.max(pmax, v);
+    let inBrain = 0, n = 0;
+    for (let i = 0; i < pet.data.length; i++)
+      if (pet.data[i] > 0.4 * pmax) {
+        n++;
+        if (tr.data[i] > 0.3 * max) inBrain++;
+      }
+    expect(inBrain / n).toBeGreaterThan(0.95);
     for (const f of ["spm12_PET.nii.gz", "spm12_SPECT.nii.gz"]) {
       const t = load(f);
       expect([t.nx, t.ny, t.nz]).toEqual([91, 109, 91]);

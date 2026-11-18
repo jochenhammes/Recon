@@ -83,7 +83,15 @@ export interface LoadedDataset {
   /** Set when the dataset is a label atlas (region indices). */
   atlas?: AtlasInfo;
   /** Set for datasets resampled into a standard space: name, original source (for SUV/units) and space. */
-  derivedFrom?: { name: string; source: VolumeSource; space: string; /** Overrides the modality label (e.g. "SUVR"). */ label?: string };
+  derivedFrom?: {
+    name: string;
+    source: VolumeSource;
+    space: string;
+    /** Overrides the modality label (e.g. "SUVR"). */
+    label?: string;
+    /** Entry id of the patient-space dataset this was transferred from (a new transfer replaces older copies). */
+    sourceId?: string;
+  };
   source: VolumeSource;
   displayName: string;
   /** Dynamic acquisition (frames + timing), if the data were 4D. */

@@ -58,7 +58,7 @@ import { LayerSettings, type WindowPreset } from "./ui/ViewSettingsPanel";
 import { type RegRow, type RegStatusKind, RegistrationSetup } from "./ui/RegistrationSetup";
 import { RegistrationPanel } from "./ui/RegistrationPanel";
 import { CT_PRESETS, datasetModality, defaultDisplay, isAnatomical, middleEllipsis, modalityLabel, rawUnitLabel, shortName, suvForSource, unitSource } from "./dataset/describe";
-import { BUNDLED_MNI, BUNDLED_PET_TEMPLATES, SPM_TEMPLATE_ATTRIBUTION, SPM_TEMPLATE_LICENSE, loadBundledMni, loadBundledPetTemplate, loadPetTemplate } from "./normalization/templates";
+import { BUNDLED_MNI, BUNDLED_PET_TEMPLATES, SPM_TEMPLATE_ATTRIBUTION, SPM_TEMPLATE_LICENSE, type TemplateKind, loadBundledMni, loadBundledPetTemplate, loadPetTemplate } from "./normalization/templates";
 import { AnalysisPanel } from "./components/AnalysisPanel";
 import { type BrushState, FilterSection, GeometrySection, HistorySection, ValueSection, VoiSection, type VoiTool } from "./components/EditTools";
 import { runEdits } from "./edit/runner";
@@ -141,14 +141,24 @@ function frameWindow(data: Float32Array): [number, number] {
 }
 
 /** Name of a dataset in lists and selections: tag (if any), modality, file/series name. */
+/** Datasets transferred into a standard space are named after their source plus " · MNI". */
+function spaceSuffix(e: Entry): string {
+  const d = e.dataset.derivedFrom;
+  return d && !d.label ? " · MNI" : "";
+}
+function baseName(e: Entry): string {
+  const d = e.dataset.derivedFrom;
+  return shortName(d && !d.label ? d.name : e.dataset.displayName);
+}
+
 function entryLabel(e: Entry): string {
-  const base = `${datasetModality(e.dataset)} · ${shortName(e.dataset.displayName)}`;
+  const base = `${datasetModality(e.dataset)} · ${baseName(e)}${spaceSuffix(e)}`;
   return e.tag ? `${e.tag} – ${base}` : base;
 }
 
 /** Short name for the status bar and the layer overlay: modality and tag, else modality and shortened file name. */
 function entryShort(e: Entry, max = 22): string {
-  return `${datasetModality(e.dataset)} · ${e.tag || middleEllipsis(shortName(e.dataset.displayName), max)}`;
+  return `${datasetModality(e.dataset)} · ${e.tag || middleEllipsis(baseName(e), max)}${spaceSuffix(e)}`;
 }
 
 /** Current (not yet applied) VOI on dataset `entryId`; `version` changes on every modification. */
@@ -217,7 +227,7 @@ function App() {
   const [normMethod, setNormMethod] = useState<NormMethod>("affine");
   const [normRegularization, setNormRegularization] = useState<Regularization>("medium");
   const [normUseMask, setNormUseMask] = useState(true);
-  const [normSubjectKindOverride, setNormSubjectKindOverride] = useState<"T1" | "PET" | null>(null);
+  const [normSubjectKindOverride, setNormSubjectKindOverride] = useState<TemplateKind | null>(null);
   const [normalization, setNormalization] = useState<Normalization | null>(null);
   const [normRunning, setNormRunning] = useState(false);
   const [normProgress, setNormProgress] = useState<{ stage: string; detail: string; fraction: number } | null>(null);
@@ -957,13 +967,36 @@ function App() {
 
   // ── Spatial normalization (standard space) ──
   const templateEntries = entries.filter((e) => e.dataset.template);
-  const normTemplate = byId(normTemplateId)?.dataset.template ? byId(normTemplateId) : templateEntries[0];
   const subjectCandidates = entries.filter((e) => !e.dataset.template && !e.dataset.derivedFrom && !e.dataset.atlas);
+  /** All datasets in patient space (not templates, not already in a standard space): transferred together. */
+  const patientSpaceEntries = entries.filter((e) => !e.dataset.template && !e.dataset.derivedFrom);
+  const modalityRank = (e: Entry) => ["MR", "PT", "NM", "CT"].indexOf(modalityLabel(e.dataset.source)) + 1 || 9;
   const normSubject =
-    byId(normSubjectId) && !byId(normSubjectId)!.dataset.template ? byId(normSubjectId) : (subjectCandidates.find((e) => modalityLabel(e.dataset.source) === "MR") ?? subjectCandidates[0]);
-  const guessedKind: "T1" | "PET" = normSubject && ["MR", "NIfTI"].includes(modalityLabel(normSubject.dataset.source)) ? "T1" : "PET";
+    byId(normSubjectId) && !byId(normSubjectId)!.dataset.template
+      ? byId(normSubjectId)
+      : [...subjectCandidates].filter((e) => !e.dataset.dynamic).sort((a, b) => modalityRank(a) - modalityRank(b))[0] ?? subjectCandidates[0];
+  const subjectModality = normSubject ? modalityLabel(normSubject.dataset.source) : "";
+  const guessedKind: TemplateKind = subjectModality === "CT" ? "CT" : ["MR", "NIfTI"].includes(subjectModality) ? "T1" : "PET";
   const subjectKind = normSubjectKindOverride ?? guessedKind;
-  const sameContrast = !!normTemplate?.dataset.template && normTemplate.dataset.template.kind === subjectKind;
+  // Template: chosen by the user, else the loaded or bundled template matching the subject's contrast.
+  const bundledTemplates = [
+    { id: "mni", name: BUNDLED_MNI.name, kind: "T1" as TemplateKind },
+    ...BUNDLED_PET_TEMPLATES.map((t) => ({ id: t.id as string, name: t.name as string, kind: t.kind as TemplateKind })),
+  ];
+  const defaultBundled = subjectKind === "T1" ? "mni" : subjectKind === "CT" ? "spm-transm" : subjectModality === "NM" ? "spm-spect" : "spm-pet";
+  const defaultName = bundledTemplates.find((b) => b.id === defaultBundled)!.name;
+  const templateOptions = [
+    ...templateEntries.map((e) => ({ id: e.id, label: e.dataset.template!.name, kind: e.dataset.template!.kind })),
+    ...bundledTemplates.filter((b) => !templateEntries.some((e) => e.dataset.template?.name === b.name)).map((b) => ({ id: `bundled:${b.id}`, label: `${b.name} (wird geladen)`, kind: b.kind })),
+  ];
+  const autoTemplateId =
+    templateEntries.find((e) => e.dataset.template?.name === defaultName)?.id ??
+    templateEntries.find((e) => e.dataset.template?.kind === subjectKind && !bundledTemplates.some((b) => b.name === e.dataset.template?.name))?.id ??
+    `bundled:${defaultBundled}`;
+  const normTemplateChoice = normTemplateId && templateOptions.some((o) => o.id === normTemplateId) ? normTemplateId : autoTemplateId;
+  const normTemplate = byId(normTemplateChoice)?.dataset.template ? byId(normTemplateChoice) : undefined;
+  const templateKind = templateOptions.find((o) => o.id === normTemplateChoice)?.kind;
+  const sameContrast = templateKind === subjectKind;
   const normCost = sameContrast ? "ncc" : "nmi";
   const normFor = normalization && normSubject && normalization.subjectId === normSubject.id ? normalization : null;
 
@@ -1031,20 +1064,40 @@ function App() {
     return n;
   }
 
+  /** The chosen template as dataset (bundled templates are loaded on demand). */
+  async function resolveTemplate(choice: string): Promise<Entry | undefined> {
+    const existing = byId(choice);
+    if (existing?.dataset.template) return existing;
+    const id = choice.replace(/^bundled:/, "");
+    setNormProgress({ stage: "Vorlage", detail: "wird geladen", fraction: 0.01 });
+    const d = id === "mni" ? await loadBundledMni() : await loadBundledPetTemplate(id as (typeof BUNDLED_PET_TEMPLATES)[number]["id"]);
+    const e = addDataset(d);
+    setNormTemplateId(e.id);
+    return e;
+  }
+
+  /**
+   * Normalizes the chosen patient dataset (MR, PET/SPECT or CT) to the matching template and then transfers ALL
+   * patient-space datasets (via their registration to the subject) into the standard space.
+   */
   function startNormalization() {
-    const T = normTemplate;
     const S = normSubject;
-    if (!T || !S || normRunning) return;
+    if (!S || normRunning) return;
     setNormError(null);
     setNormProgress(null);
     setNormRunning(true);
-    const mask = normUseMask ? (T.dataset.template?.mask ?? undefined) : undefined;
-    estimateNormalization(T, S, { nonlinear: sameContrast && normMethod === "nonlinear", cost: normCost, mask, regularization: normRegularization })
-      .then(async (n) => {
-        setNormalization(n);
-        // Quality check: show the normalized subject on the template right away.
-        await transferToStandardSpace(n, [S.id], "linear", T);
-      })
+    const transferIds = patientSpaceEntries.map((e) => e.id);
+    const nonlinear = sameContrast && normMethod === "nonlinear";
+    (async () => {
+      const T = await resolveTemplate(normTemplateChoice);
+      if (!T) throw new Error("Keine Vorlage.");
+      const mask = normUseMask ? (T.dataset.template?.mask ?? undefined) : undefined;
+      // CT: limit to the HU range of tissue and bone (metal/contrast outliers would dominate the matching).
+      const subject = subjectKind === "CT" ? { ...S, dataset: { ...S.dataset, current: S.dataset.current.withData(Float32Array.from(S.dataset.current.data, (v) => Math.min(2000, Math.max(-1000, v)))) } } : S;
+      const n = await estimateNormalization(T, subject, { nonlinear, cost: normCost, mask, regularization: normRegularization });
+      setNormalization(n);
+      await transferToStandardSpace(n, transferIds, "linear", T);
+    })()
       .catch((e) => {
         if (!(e instanceof DOMException && e.name === "AbortError")) setNormError(`Normalisierung fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
       })
@@ -1807,14 +1860,35 @@ function App() {
         const e = byId(id);
         const w2v = e && (matrixOverrides?.has(id) ? transformedWorldToVoxel(worldToVoxelTransform(e.dataset.current.geometry), matrixOf(e)) : w2vById.get(id));
         if (!e || !w2v) continue;
-        setTransferStatus(`${i + 1}/${ids.length}: ${datasetModality(e.dataset)} wird übertragen …`);
-        const data = await runResample(e.dataset.current, w2v, points, method, (f) => setTransferStatus(`${i + 1}/${ids.length}: ${datasetModality(e.dataset)} ${Math.round(f * 100)} %`));
+        const label = `${i + 1}/${ids.length}: ${entryShort(e)}`;
+        setTransferStatus(`${label} wird übertragen …`);
+        // Label images keep their label numbers (nearest neighbour) and region names.
+        const m: Interpolation = e.dataset.atlas ? "nearest" : method;
+        const data = await runResample(e.dataset.current, w2v, points, m, (f) => setTransferStatus(`${label} ${Math.round(f * 100)} %`));
         const vol = tpl ? tpl.dataset.current.withData(data) : new Volume3D(data, nz, ny, nx, [geometry.spacing[2], geometry.spacing[1], geometry.spacing[0]], geometry);
+        // Dynamic data: every frame with the same transformation (kinetic modelling in the standard space).
+        let dynamic = e.dataset.dynamic;
+        if (dynamic) {
+          const frames: Float32Array[] = [];
+          for (const [k, f] of dynamic.frames.entries()) {
+            setTransferStatus(`${label}: Frame ${k + 1}/${dynamic.frames.length}`);
+            frames.push(await runResample(e.dataset.current.withData(f), w2v, points, m));
+          }
+          dynamic = { ...dynamic, frames };
+        }
         const source = tpl?.dataset.source.kind === "nifti" ? tpl.dataset.source : ({ kind: "reconstruction" } as const);
         const d = createDataset(vol, source, `${e.dataset.displayName} · ${n.templateName}`);
-        const derived: LoadedDataset = { ...d, derivedFrom: { name: e.dataset.displayName, source: unitSource(e.dataset), space: n.templateName } };
-        created.push({ id: `ds${nextEntryId++}`, dataset: derived, display: { ...e.display, opacity: 1, visible: true }, matrix: IDENTITY_MAT4 });
+        const derived: LoadedDataset = {
+          ...d,
+          ...(e.dataset.atlas ? { atlas: e.dataset.atlas } : {}),
+          ...(dynamic ? { dynamic } : {}),
+          derivedFrom: { name: e.dataset.displayName, source: unitSource(e.dataset), space: n.templateName, sourceId: e.id },
+        };
+        created.push({ id: `ds${nextEntryId++}`, dataset: derived, display: { ...e.display, opacity: 1, visible: true }, matrix: IDENTITY_MAT4, tag: e.tag, labelFilter: e.labelFilter });
       }
+      // A new transfer replaces older copies of the same datasets in the same standard space.
+      const replaced = new Set(entries.filter((x) => x.dataset.derivedFrom?.sourceId && ids.includes(x.dataset.derivedFrom.sourceId) && x.dataset.derivedFrom.space === n.templateName && !x.dataset.derivedFrom.label).map((x) => x.id));
+      if (replaced.size) setEntries((prev) => prev.filter((x) => !replaced.has(x.id)));
       // Switch the display to the standard space.
       if (tpl) {
         const inv = invert4(tpl.matrix);
@@ -1824,7 +1898,7 @@ function App() {
         setEntries((prev) => [...prev, ...created]);
         setReferenceId((created.find((c) => isAnatomical(unitSource(c.dataset))) ?? created[0]).id);
       }
-      const overlayEntry = created.find((c) => !isAnatomical(unitSource(c.dataset))) ?? created[0];
+      const overlayEntry = created.find((c) => !c.dataset.atlas && !c.dataset.dynamic && !isAnatomical(unitSource(c.dataset))) ?? created.find((c) => !c.dataset.atlas) ?? created[0];
       if (overlayEntry) {
         // New space: the previous overlays (native space) are replaced by the transferred dataset.
         setOverlayIds([overlayEntry.id]);
@@ -2211,23 +2285,21 @@ function App() {
 
   const normalizationTab = (
     <NormalizationPanel
-      templates={templateEntries.map((e) => ({ id: e.id, label: e.dataset.template!.name }))}
-      templateId={normTemplate?.id ?? null}
+      templates={templateOptions}
+      templateId={normTemplateChoice}
       onTemplateChange={setNormTemplateId}
-      bundled={[
-        { id: "mni", label: BUNDLED_MNI.name, hint: "T1-MRT-Vorlage (MNI ICBM 2009c)", loaded: entries.some((e) => e.dataset.template?.name === BUNDLED_MNI.name) },
-        ...BUNDLED_PET_TEMPLATES.map((t) => ({ id: t.id, label: t.name, hint: t.hint, loaded: entries.some((e) => e.dataset.template?.name === t.name) })),
-      ]}
-      onLoadBundled={(id) => void (id === "mni" ? addBundledTemplate() : addBundledPetTemplate(id as (typeof BUNDLED_PET_TEMPLATES)[number]["id"]))}
-      bundledLoading={templateBusy}
       subjects={subjectCandidates.map((e) => ({ id: e.id, label: entryLabel(e) }))}
       subjectId={normSubject?.id ?? null}
       onSubjectChange={(id) => {
         setNormSubjectId(id);
         setNormSubjectKindOverride(null);
+        setNormTemplateId(null);
       }}
       subjectKind={subjectKind}
-      onSubjectKindChange={setNormSubjectKindOverride}
+      onSubjectKindChange={(k) => {
+        setNormSubjectKindOverride(k);
+        setNormTemplateId(null);
+      }}
       method={sameContrast ? normMethod : "affine"}
       onMethodChange={setNormMethod}
       nonlinearAvailable={sameContrast}
@@ -2235,14 +2307,15 @@ function App() {
       onRegularizationChange={setNormRegularization}
       useMask={normUseMask}
       onUseMaskChange={setNormUseMask}
-      maskAvailable={!!normTemplate?.dataset.template?.mask}
+      maskAvailable={subjectKind !== "CT" && (normTemplate ? !!normTemplate.dataset.template?.mask : templateKind !== "CT")}
       costLabel={normCost === "ncc" ? "Kreuzkorrelation (gleicher Kontrast)" : "Normalisierte Mutual Information (unterschiedlicher Kontrast)"}
       running={normRunning}
       progress={normProgress}
       onStart={startNormalization}
       onCancel={() => normRun.current?.cancel()}
       normalization={normFor}
-      transferCandidates={subjectCandidates.map((e) => ({ id: e.id, label: entryLabel(e) }))}
+      transferCandidates={patientSpaceEntries.map((e) => ({ id: e.id, label: entryLabel(e) }))}
+      transferred={normFor ? entries.filter((e) => e.dataset.derivedFrom?.space === normFor.templateName && !e.dataset.derivedFrom.label).map((e) => ({ id: e.id, label: entryLabel(e) })) : []}
       onTransfer={(ids, method) => normFor && void transferToStandardSpace(normFor, ids, method)}
       transferStatus={transferStatus}
       transferBusy={transferBusy}
@@ -2308,10 +2381,10 @@ function App() {
   const tabs: ShellTab[] = [
     { id: "data", label: "Daten", icon: FolderOpen, content: dataTab, badge: entries.length > 1 ? entries.length : undefined },
     { id: "view", label: "Ansicht", icon: Eye, disabled: layers.length === 0, disabledReason: "Erst einen Datensatz laden", content: viewTab },
-    { id: "registration", label: "Registrierung", shortLabel: "Regis\u00adtrierung", icon: Crosshair, disabled: entries.length < 2, disabledReason: "Registrierung ab zwei Datensätzen", content: registrationTab },
+    { id: "registration", label: "Koregistrierung (Patientenraum)", shortLabel: "Ko\u00adregis\u00adtrierung", icon: Crosshair, disabled: entries.length < 2, disabledReason: "Koregistrierung ab zwei Datensätzen", content: registrationTab },
     {
       id: "normalization",
-      label: "Standardraum (MNI)",
+      label: "Standardraum (MNI, Hirn)",
       shortLabel: "Standard\u00adraum",
       icon: Brain,
       disabled: entries.filter((e) => !e.dataset.template).length === 0,
@@ -2530,7 +2603,7 @@ function App() {
   act(
     coregRunning && {
       id: "coreg",
-      label: "Registrierung",
+      label: "Koregistrierung",
       detail: `${regQueue.running ? (byId(regQueue.running) ? entryShort(byId(regQueue.running)!) : "") : ""}${regQueue.waiting.length ? ` · ${regQueue.waiting.length} wartend` : ""}${coregProgress ? ` · ${coregProgress.stage}` : ""}`,
       tab: "registration",
     },
@@ -2554,7 +2627,7 @@ function App() {
   act(kineticsActivity && { id: "kinetics", label: "Kinetik", detail: kineticsActivity.label, fraction: kineticsActivity.fraction, tab: "kinetics" });
   act(ctSegError && !ctSegRunning && { id: "ctseg-error", label: "CT-Segmentierung", error: ctSegError, tab: "tumor" });
   act(normError && !normRunning && { id: "norm-error", label: "Normalisierung", error: normError, tab: "normalization" });
-  act(coregError && !coregRunning && { id: "coreg-error", label: "Registrierung", error: coregError, tab: "registration" });
+  act(coregError && !coregRunning && { id: "coreg-error", label: "Koregistrierung", error: coregError, tab: "registration" });
   act(centiloidError && !centiloidRunning && { id: "centiloid-error", label: "Centiloid", error: centiloidError, tab: "suvr" });
   act(tumorError && !tumorBusy && { id: "tumor-error", label: "Tumorlast", error: tumorError, tab: "tumor" });
   // MIP of the topmost visible functional image (not of label images or CT/MR).

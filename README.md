@@ -20,8 +20,8 @@ Alles läuft im Browser; es gibt keinen Server, **die Daten verlassen den Rechne
 | **Projekt** | Ganze Sitzung als `.recon`-Datei speichern und wieder öffnen (Datensätze inkl. DICOM-Header, Registrierungen, Anzeige, Normalisierung, Ergebnisse) |
 | **SPECT-Rekonstruktion** | Projektionen (NM Multi-Frame, 1–2 Köpfe) mit FBP (Rampe, Shepp-Logan, Kosinus, Hamming, Hann, Butterworth) oder OSEM (Subsets, Iterationen) |
 | **Ansicht** | Axial, sagittal, koronar und rotierende MIP in Patientenorientierung; beliebig viele Overlays mit eigener Farbtabelle, eigenem Fenster und eigener Deckkraft; Ebenen-Schnellwahl über den Bildern (in jedem Bereich); Farbskala mit Fenster in SUV/HU/…; Region unter dem Cursor; WebGL2-Darstellung; Screenshot mit Farbskala; Fusion als DICOM/NIfTI exportieren |
-| **Registrierung** | Basis-Datensatz definiert den Raum; beliebige Datensätze darauf registrieren (rigide/affin; NMI, MI, Correlation Ratio, Kreuzkorrelation; Mehrstufen, Grobsuche); Ergebnis prüfen, übernehmen oder verwerfen; manuelle Feinkorrektur; Matrix als JSON |
-| **Standardraum (MNI)** | MNI152-2009c-T1-, SPM-PET- und SPM-SPECT-Vorlage; affine und nichtlineare Normalisierung (SPM-artig); Übertragung coregistrierter Datensätze (z. B. PET über das T1); SPM/CAT12-`y_*.nii` importieren/exportieren |
+| **Koregistrierung (Patientenraum)** | Für alle Körperregionen: PET/SPECT (auch dynamisch) auf CT/MRT des Patienten; Basis-Datensatz definiert den Raum; beliebige Datensätze darauf registrieren (rigide/affin; NMI, MI, Correlation Ratio, Kreuzkorrelation; Mehrstufen, Grobsuche); Ergebnis prüfen, übernehmen oder verwerfen; manuelle Feinkorrektur; Matrix als JSON |
+| **Standardraum (MNI, Hirn)** | Normalisierung auf Basis eines Patientendatensatzes – T1-MRT (MNI152 2009c), PET/SPECT (SPM-Vorlagen) oder Kopf-CT (SPM-Transmissionsvorlage); affin und nichtlinear (SPM-artig); danach werden **alle** Datensätze des Patientenraums mitübertragen (Labelbilder mit Regionsnamen, dynamische Serien Frame für Frame); SPM/CAT12-`y_*.nii` importieren/exportieren |
 | **Centiloid & SUVR: Atlas** | CerebrA (mitgeliefert), AAL3 (ZIP-Download) oder eigener Atlas; regionale Statistik, Referenzregion, SUVR-Tabelle und SUVR-Bild |
 | **Centiloid & SUVR: Centiloid** | Amyloid-PET mit GAAIN-Standard-VOIs (vom Nutzer geladen); MRT-Pipeline (affin) an den GAAIN-Referenzdaten kalibriert (Florbetaben und PiB, Kreuzvalidierung RMSE 4–6 CL), Standardgleichungen für extern normalisierte Daten, eigene Gleichung; PET-only (nicht validiert) |
 | **Kinetik (dynamisches PET)** | Dynamische DICOM-Serien und 4D-NIfTI (BIDS-JSON); Bewegungskorrektur der Frames; Übertragung in den MNI-Raum (über T1); Referenzregion aus Atlas; **Patlak (Ki_ref)** und **SRTM (BP_ND, R1)** regional und als Parameterkarten, Kurven, CSV – nach dem MATLAB-Paket der Arbeitsgruppe ([ghaefner/kinetic-modeling](https://github.com/ghaefner/kinetic-modeling)) |
@@ -63,7 +63,7 @@ die CT-Segmentierung läuft dort ggf. auf der CPU.
 ## Mitgelieferte Daten und Lizenzen
 
 - `public/templates/`: MNI ICBM 152 Nonlinear Asymmetrical 2009c (Fonov et al. 2009/2011), © McConnell Brain Imaging
-  Centre (`LICENSE-MNI152NLin2009cAsym.txt`); SPM12-PET- und -SPECT-Vorlage, GNU GPL v2+ (`LICENSE-SPM12-GPL.txt`).
+  Centre (`LICENSE-MNI152NLin2009cAsym.txt`); SPM12-PET-, -SPECT- und -Transmissionsvorlage (toolbox/OldNorm), GNU GPL v2+ (`LICENSE-SPM12-GPL.txt`).
 - `public/atlases/`: CerebrA (Manera et al. 2020, Sci Data 7:237), CC0 1.0, auf das 2-mm-Raster der Vorlage übertragen.
 - `public/models/totalseg-total-3mm/`: TotalSegmentator „total“ 3 mm (Wasserthal et al., Radiology: AI 2023; nnU-Net),
   Apache 2.0, nach ONNX exportiert (`tools/totalseg-onnx/export.py`), siehe `NOTICE.txt`.

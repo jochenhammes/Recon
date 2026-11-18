@@ -2222,3 +2222,14 @@ tr.excluded-row td {
   font: inherit;
   font-size: 12px;
 }
+
+.plain-list {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--text-h);
+}
+.plain-list li {
+  margin: 2px 0;
+  overflow-wrap: anywhere;
+}

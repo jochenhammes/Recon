@@ -4,10 +4,13 @@ import { Volume3D } from "../viewer/volume";
 import { decompressGzip, parseNifti1, readNiftiAll } from "../viewer/volumeLoader";
 
 /** Marks a dataset as a standard-space template. */
+/** Contrast of a template: T1 MRI, tracer PET/SPECT or CT-like (attenuation). */
+export type TemplateKind = "T1" | "PET" | "CT";
+
 export interface TemplateInfo {
   name: string;
   /** Contrast of the template (T1 MRI or tracer PET); decides the default cost function. */
-  kind: "T1" | "PET";
+  kind: TemplateKind;
   /** Optional brain mask on the template grid (1 = brain). */
   mask?: Float32Array | null;
   /**
@@ -86,19 +89,28 @@ function maskFromBase(base: Float32Array): Float32Array {
   return Float32Array.from(base, (x) => (x > thr ? 1 : 0));
 }
 
-/** PET/SPECT templates bundled from SPM12 (toolbox/OldNorm, GPL v2+), MNI space 2 mm (91×109×91). */
+/** PET/SPECT/transmission templates bundled from SPM12 (toolbox/OldNorm, GPL v2+), MNI space 2 mm (91×109×91). */
 export const BUNDLED_PET_TEMPLATES = [
   {
     id: "spm-pet",
     name: "SPM12 PET (H₂¹⁵O-Perfusion, 2 mm)",
     file: `${BASE}spm12_PET.nii.gz`,
     hint: "für Hirn-PET ohne MRT (Perfusion, näherungsweise auch FDG)",
+    kind: "PET",
   },
   {
     id: "spm-spect",
     name: "SPM12 SPECT (Perfusion, 2 mm)",
     file: `${BASE}spm12_SPECT.nii.gz`,
     hint: "für Hirnperfusions-SPECT (HMPAO/ECD)",
+    kind: "PET",
+  },
+  {
+    id: "spm-transm",
+    name: "SPM12 Transmission (CT-ähnlich, 2 mm)",
+    file: `${BASE}spm12_Transm.nii.gz`,
+    hint: "für das Kopf-CT (z. B. aus PET/CT): Schwächungsbild mit hellem Knochen",
+    kind: "CT",
   },
 ] as const;
 
@@ -109,5 +121,6 @@ export async function loadBundledPetTemplate(id: (typeof BUNDLED_PET_TEMPLATES)[
   const t = BUNDLED_PET_TEMPLATES.find((x) => x.id === id)!;
   const img = await fetchNifti(t.file);
   const d = createDataset(img.volume, { kind: "nifti", fileName: t.file.split("/").pop()!, nifti: img.nifti }, t.name);
-  return { ...d, template: { name: t.name, kind: "PET", mask: maskFromBase(img.volume.data), attribution: SPM_TEMPLATE_ATTRIBUTION } };
+  // The transmission template is matched as a whole head (bone carries the information): no brain mask.
+  return { ...d, template: { name: t.name, kind: t.kind, mask: t.kind === "CT" ? null : maskFromBase(img.volume.data), attribution: SPM_TEMPLATE_ATTRIBUTION } };
 }

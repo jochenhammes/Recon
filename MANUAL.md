@@ -8,7 +8,7 @@ Beispieldaten (keine Patientendaten).
 2. [Daten laden](#2-daten-laden)
 3. [SPECT-Rohdaten rekonstruieren](#3-spect-rohdaten-rekonstruieren)
 4. [Ansicht, Ebenen und Fusion](#4-ansicht-ebenen-und-fusion)
-5. [Registrierung (Coregistrierung)](#5-registrierung-coregistrierung)
+5. [Koregistrierung (Patientenraum)](#5-koregistrierung-patientenraum)
 6. [Standardraum (MNI), Atlas und SUVR](#6-standardraum-mni-atlas-und-suvr)
 7. [Centiloid](#7-centiloid)
 8. [Kinetik (dynamisches PET)](#8-kinetik-dynamisches-pet)
@@ -155,11 +155,16 @@ schaltet die Liste wieder aus; der Zustand bleibt gespeichert.
 
 ---
 
-## 5. Registrierung (Coregistrierung)
+## 5. Koregistrierung (Patientenraum)
+
+Ausrichtung der Datensätze **eines Patienten** zueinander – für jede Körperregion (Ganzkörper wie Hirn): PET/SPECT auf
+das CT oder MRT, Folgeuntersuchungen auf die Basis. Dynamische Serien werden über ihr Mittelbild registriert; alle
+Frames folgen. Die Normalisierung in einen Standardraum ist davon getrennt ([Abschnitt 6](#6-standardraum-mni-atlas-und-suvr))
+und nimmt alle hier registrierten Datensätze mit.
 
 ![Basis und zu registrierende Datensätze](docs/images/12-registrierung-auswahl.jpg)
 
-1. Bereich **Registr.** öffnen.
+1. Bereich **Koregistrierung** öffnen.
 2. **1 · Zielraum (Basis)**: den Datensatz wählen, der den Raum definiert (meist CT oder MRT).
 3. **2 · Auf die Basis registrieren**: die zu registrierenden Datensätze anhaken (*alle* / *keine*).
    Labelbilder, Vorlagen und abgeleitete Datensätze werden nicht automatisch angehakt.
@@ -180,29 +185,48 @@ schaltet die Liste wieder aus; der Zustand bleibt gespeichert.
 
 ## 6. Standardraum (MNI), Atlas und SUVR
 
+Räumliche Normalisierung in den MNI-Standardraum – **nur für Hirnuntersuchungen**. Grundlage ist *ein* Datensatz des
+Patienten; **alle** Datensätze des Patientenraums werden anschließend mit übertragen und lassen sich dann
+atlasbasiert auswerten oder im Standardraum speichern.
+
 ### 6.1 Normalisierung
 
 ![Vorlage und Normalisierung](docs/images/14-mni-einstellungen.jpg)
 
-1. Subjekt-Datensätze laden (z. B. T1-MRT + PET) und das PET zuerst auf das T1 registrieren ([Abschnitt 5](#5-registrierung-coregistrierung)).
-2. Bereich **Standardraum** öffnen, unter *Vorlage* den Standardraum wählen bzw. laden:
-   - *MNI152 2009c (T1, 2 mm)* für T1-MRT,
-   - *SPM12 PET* (Perfusion) für Hirn-PET ohne MRT, *SPM12 SPECT* für Perfusions-SPECT,
-   - eigene Vorlagen im Bereich *Daten* → *Standardraum-Vorlage* (z. B. Amyloid-PET-Vorlage, auch 4D/adaptiv).
-3. *Normalisierung schätzen*: **Subjekt** (meist das T1) und **Kontrast** wählen, dann
-   *Affin (12)* oder *Affin + nichtlinear* (nur bei gleichem Kontrast von Subjekt und Vorlage),
-   optional *Nur Gehirn der Vorlage verwenden*.
-4. **Normalisierung starten**. Das Subjekt wird als neuer Datensatz im Standardraum angelegt; angezeigt wird die
-   Ähnlichkeit vorher → nachher.
+1. Datensätze laden und im Bereich **Koregistrierung** aufeinander ausrichten (z. B. PET auf das CT des PET/CT oder auf
+   das T1-MRT, [Abschnitt 5](#5-koregistrierung-patientenraum)). Datensätze mit gemeinsamen Patientenkoordinaten
+   (PET und CT derselben PET/CT-Untersuchung) passen bereits zueinander.
+2. Bereich **Standardraum** öffnen, Karte **1 · Normalisierung**:
+   - **Grundlage (Patientendatensatz)**: am besten das T1-MRT, sonst das Hirn-PET/SPECT oder das **Kopf-CT**.
+   - **Kontrast** und **Vorlage** werden passend vorgeschlagen und bei Bedarf automatisch geladen:
 
-### 6.2 Weitere Datensätze übertragen
+     | Grundlage | Vorlage |
+     |---|---|
+     | T1-MRT | MNI152 2009c (T1, 2 mm) |
+     | PET | SPM12 PET (Perfusion) |
+     | SPECT | SPM12 SPECT (Perfusion) |
+     | CT | SPM12 Transmission (Schwächungsbild, Knochen hell) |
+
+     Eigene Vorlagen (z. B. Amyloid-PET, auch 4D/adaptiv) im Bereich *Daten* → *Standardraum-Vorlage*.
+   - *Affin (12)* oder *Affin + nichtlinear* (nur bei gleichem Kontrast von Datensatz und Vorlage), optional
+     *Nur Gehirn der Vorlage verwenden*.
+   - CT: nur ein Kopf-CT verwenden (bei Ganzkörper-CT vorher auf den Kopf zuschneiden). Die HU-Werte werden für die
+     Anpassung auf −1000 bis 2000 begrenzt.
+3. **Normalisieren und alle Datensätze übertragen**. Angezeigt wird die Ähnlichkeit vorher → nachher.
+
+### 6.2 Alle Datensätze im Standardraum
 
 ![PET in den Standardraum übertragen](docs/images/15-mni-uebertragen.jpg)
 
-1. Karte **In Standardraum übertragen**: Datensätze anhaken, die mit dem Subjekt registriert sind (z. B. das PET).
-2. Interpolation wählen, **Übertragen**. Jeder Datensatz wird über seine Registrierung und die Normalisierung des
-   Subjekts in den Standardraum resampelt und als `… · MNI152 …` angelegt.
-3. **SPM/CAT12** (Karte aufklappen): ein in SPM/CAT12 berechnetes Verformungsfeld `y_*.nii` laden (statt selbst zu normalisieren) bzw.
+1. Nach der Normalisierung werden **alle Datensätze des Patientenraums** über ihre Koregistrierung und die
+   Normalisierung in den Standardraum resampelt und als `… · MNI` angelegt (Karte **2 · Datensätze im Standardraum**):
+   - Labelbilder (z. B. CT-Organe) mit nächstem Nachbarn und Regionsnamen,
+   - dynamische Serien Frame für Frame (Kinetik direkt im Standardraum),
+   - Schlagworte werden übernommen.
+2. Die Ansicht wechselt in den Standardraum (Vorlage als Basis, übertragenes PET darüber); die übrigen Datensätze stehen
+   unter **Ebenen**.
+3. *Erneut übertragen / Auswahl*: andere Interpolation oder einzelne Datensätze – ältere Kopien werden ersetzt.
+4. **SPM/CAT12** (Karte aufklappen): ein in SPM/CAT12 berechnetes Verformungsfeld `y_*.nii` laden (statt selbst zu normalisieren) bzw.
    die App-Normalisierung als `y_*.nii` speichern.
 
 ### 6.3 Atlas und SUVR

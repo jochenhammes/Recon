@@ -370,6 +370,10 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
                 <>
                   <p>Summenbild → T1 rigide und T1 → MNI affin (wie bei Centiloid), oder ohne MRT affin auf die SPM-PET-Vorlage; danach werden alle Frames übertragen.</p>
                   <p>
+                    Alternativ im Bereich „Standardraum“ normalisieren (Grundlage T1, PET oder CT): Die dynamische Serie wird dort mit allen
+                    anderen Datensätzen übertragen und erscheint hier oben als Serie im MNI-Raum.
+                  </p>
+                  <p>
                     Das Summenbild des Zeitfensters wird registriert; die Transformation gilt für alle Frames. Frühe Frames (z. B. 0–10 min) zeigen meist die
                     Perfusion und passen gut zur SPM-PET-Vorlage, späte Frames die Tracerbindung.
                   </p>
