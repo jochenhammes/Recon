@@ -66,15 +66,23 @@ export function motionCorrect(
   fromSec: number,
   onProgress?: (done: number, total: number) => void,
   shouldStop?: () => boolean,
+  /** Reference: sum image of the registered frames (default) or one frame (index). */
+  referenceFrame?: number,
 ): MotionResult {
   const dims: Vec3 = [grid.nx, grid.ny, grid.nz];
-  const ref = { data: referenceImage(frames, startSec, durationSec, fromSec), dims, geometry: grid.geometry };
+  const refData = referenceFrame !== undefined && frames[referenceFrame] ? frames[referenceFrame] : referenceImage(frames, startSec, durationSec, fromSec);
+  const ref = { data: refData, dims, geometry: grid.geometry };
   const center = voxelToWorld(grid.geometry, (grid.nx - 1) / 2, (grid.ny - 1) / 2, (grid.nz - 1) / 2);
   const toRegister = frames.map((_, i) => i).filter((i) => startSec[i] >= fromSec);
   const matrices: (Mat4 | null)[] = frames.map(() => null);
   let done = 0;
   for (const i of toRegister) {
     if (shouldStop?.()) throw new DOMException("Bewegungskorrektur abgebrochen.", "AbortError");
+    if (i === referenceFrame) {
+      matrices[i] = IDENTITY_MAT4;
+      done++;
+      continue;
+    }
     onProgress?.(done, toRegister.length);
     const r = coregister(ref, { data: frames[i], dims, geometry: grid.geometry }, { dof: 6, cost: "nmi", levels: [8, 4, 3], coarseSearch: false, initial: IDENTITY_MAT4, maxSamples: 60_000 }, undefined, shouldStop);
     matrices[i] = r.matrix;

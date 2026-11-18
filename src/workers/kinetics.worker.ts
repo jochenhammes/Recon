@@ -12,7 +12,7 @@ interface Grid {
 }
 
 export type KineticsJob =
-  | { type: "motion"; frames: Float32Array[]; grid: Grid; startSec: number[]; durationSec: number[]; fromSec: number }
+  | { type: "motion"; frames: Float32Array[]; grid: Grid; startSec: number[]; durationSec: number[]; fromSec: number; referenceFrame?: number }
   | { type: "toTemplate"; frames: Float32Array[]; grid: Grid; toSubject: Mat4; points: Float32Array }
   | {
       type: "maps";
@@ -38,7 +38,7 @@ self.onmessage = (event: MessageEvent<KineticsJob | { type: "stop" }>) => {
   const progress = (done: number, total: number) => post({ type: "progress", done, total });
   try {
     if (msg.type === "motion") {
-      const r = motionCorrect(msg.frames, msg.grid, msg.startSec, msg.durationSec, msg.fromSec, progress, () => stop);
+      const r = motionCorrect(msg.frames, msg.grid, msg.startSec, msg.durationSec, msg.fromSec, progress, () => stop, msg.referenceFrame);
       post({ type: "result", frames: r.frames, motion: r.motion }, r.frames.map((f) => f.buffer));
     } else if (msg.type === "toTemplate") {
       const frames = framesAtPoints(msg.frames, msg.grid, msg.toSubject, msg.points, progress);

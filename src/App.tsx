@@ -1430,10 +1430,18 @@ function App() {
    * Normalizes a dynamic dataset to MNI (mean image → T1 rigid, T1 → MNI affine; without T1 affine to the SPM PET
    * template), creates the mean in MNI space and transfers every frame along the same mapping.
    */
-  async function kineticsToMni(id: string, t1Id: string | null, status: (s: string) => void): Promise<string> {
-    const D = byId(id);
-    const dyn = D?.dataset.dynamic;
-    if (!D || !dyn) throw new Error("Dynamischer Datensatz nicht gefunden.");
+  async function kineticsToMni(id: string, t1Id: string | null, status: (s: string) => void, window: { fromMin: number; toMin: number }): Promise<string> {
+    const D0 = byId(id);
+    const dyn = D0?.dataset.dynamic;
+    if (!D0 || !dyn) throw new Error("Dynamischer Datensatz nicht gefunden.");
+    // Registration image: duration-weighted sum of the frames whose mid time lies in the chosen window.
+    const sel = dyn.frames.map((_, i) => i).filter((i) => {
+      const mid = (dyn.start[i] + dyn.duration[i] / 2) / 60;
+      return mid >= window.fromMin && mid <= window.toMin;
+    });
+    if (!sel.length) throw new Error("Im gewählten Zeitfenster liegt kein Frame.");
+    const regImage = D0.dataset.current.withData(meanOfFrames(sel.map((i) => dyn.frames[i]), sel.map((i) => dyn.duration[i])));
+    const D: Entry = { ...D0, dataset: { ...D0.dataset, current: regImage } };
     const overrides = new Map<string, Mat4>();
     let n: Normalization;
     let template: Entry;

@@ -220,12 +220,15 @@ Der Datensatz zeigt das zeitgewichtete Mittelbild; die Karte nennt die Zahl der 
 2. **1 · Dynamische Serie**: Serie wählen. Frame-Zahl, Dauer und Quelle der Zeiten prüfen.
    - Unter *Frame-Zeiten anzeigen / eingeben* stehen die Zeiten aller Frames.
    - Fehlen Zeiten (NIfTI ohne JSON), die Frame-Dauern in Sekunden eintragen.
-3. **2 · Bewegungskorrektur**: *Registrieren ab* (Standard 120 s) und **Bewegung korrigieren**.
-   - Frames ab dieser Zeit werden rigide auf ihr Mittelbild registriert; frühere Frames übernehmen die Lage des ersten
+3. **2 · Bewegungskorrektur**: *Registrieren ab* (Standard 120 s), *Referenz* wählen und **Bewegung korrigieren**.
+   - Als Referenz dient das Summenbild der registrierten Frames oder ein einzelner Frame.
+   - Frames ab der Startzeit werden rigide auf die Referenz registriert; frühere Frames übernehmen die Lage des ersten
      registrierten Frames.
    - Das Diagramm zeigt die Verschiebung je Frame. Ab 2 mm erscheint ein Hinweis.
-4. **3 · In den MNI-Raum**: **T1-MRT** wählen (empfohlen) oder *ohne MRT (SPM-PET-Vorlage)*, dann
-   **Frames in den MNI-Raum übertragen**.
+4. **3 · In den MNI-Raum**: **T1-MRT** wählen (empfohlen) oder *ohne MRT (SPM-PET-Vorlage)*.
+   - *Registrierungsbild*: das Summenbild eines Zeitfensters (Standard 0–10 min) wird auf das T1 bzw. die Vorlage
+     registriert. Frühe Frames ähneln einer Perfusionsaufnahme und passen am besten zur SPM-Vorlage.
+   - Dann **Frames in den MNI-Raum übertragen**.
    - Das Mittelbild wird rigide auf das T1 und das T1 affin auf MNI152 2009c registriert (wie bei Centiloid). Danach
      werden alle Frames übertragen.
    - Es entsteht ein dynamischer Datensatz `… · MNI152 …`.
@@ -258,8 +261,15 @@ Mit T1 erreicht die App die Werte, die nach der Glättung überhaupt erreichbar 
 | BP_ND Putamen / Caudatus / Kortex | 3,0 / 2,5 / 0,5 | 1,93 / 1,61 / 0,19 | 1,82 / 1,50 / 0,19 |
 | Ki_ref Putamen / Caudatus / Kortex (1/min) | 0,012 / 0,010 / 0,003 | 0,0091 / 0,0075 / 0,0024 | 0,0087 / 0,0073 / 0,0024 |
 
-Die Differenz zur Vorgabe ist Partialvolumeneffekt (Glättung). Ohne T1 (Normalisierung des Mittelbilds auf die
-SPM-Perfusionsvorlage) waren die Werte im Phantom deutlich ungenauer (Putamen 1,3) – wenn möglich ein T1 verwenden.
+Die Differenz zur Vorgabe ist Partialvolumeneffekt (Glättung).
+
+**Ohne MRT** wurde ein zweites Phantom geprüft: realistische Textur aus einem statischen Hirn-PET, 102 CerebrA-Regionen,
+Bewegung bis 4,5 mm, Normalisierung über das Summenbild 0–10 min auf die SPM-PET-Vorlage.
+- Korrelation mit den Sollwerten: r = 0,87 (SRTM) bzw. 0,93 (Patlak).
+- Die Referenzregion ergibt ≈ 0, und Kortex sowie weiße Substanz stimmen gut.
+- Das Striatum liegt 20–40 % zu niedrig: kleine Strukturen werden durch die PET-only-Normalisierung leicht verfehlt.
+  Benachbarte Regionen wie Nucleus accumbens erhalten Signal aus dem Putamen.
+- Für Aussagen zu kleinen Strukturen daher möglichst ein T1 verwenden.
 
 Grenzen:
 - nur Referenzregion-Modelle (kein arterieller Input);

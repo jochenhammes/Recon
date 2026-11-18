@@ -18,7 +18,7 @@ export interface KineticsApi {
   setTiming: (id: string, startSec: number[], durationSec: number[]) => void;
   applyMotion: (id: string, frames: Float32Array[], motion: FrameMotion[]) => void;
   /** Normalizes the dynamic dataset (via T1 or the SPM PET template) and creates its frames in MNI space; returns the new id. */
-  toMni: (id: string, t1Id: string | null, status: (s: string) => void) => Promise<string>;
+  toMni: (id: string, t1Id: string | null, status: (s: string) => void, window: { fromMin: number; toMin: number }) => Promise<string>;
   /** Atlas labels on the grid of a dataset. */
   labelsFor: (atlasId: string, targetId: string) => Float32Array;
   addMaps: (sourceId: string, maps: { label: string; data: Float32Array; window: [number, number]; visible?: boolean }[]) => void;
@@ -59,6 +59,9 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
   const [durText, setDurText] = useState("");
   const [fromSec, setFromSec] = useState("120");
   const [t1Id, setT1Id] = useState<string>("");
+  const [motionRef, setMotionRef] = useState<string>("sum");
+  const [regFrom, setRegFrom] = useState("0");
+  const [regTo, setRegTo] = useState("10");
   const [busy, setBusy] = useState<string | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -120,7 +123,15 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
       if (!dyn || !info) return;
       const v = dyn.dataset.current;
       const r = await runKineticsJob<{ frames: Float32Array[]; motion: FrameMotion[] }>(
-        { type: "motion", frames: info.frames, grid: { nx: v.nx, ny: v.ny, nz: v.nz, geometry: v.geometry }, startSec: info.start, durationSec: info.duration, fromSec: parseFloat(fromSec) || 0 },
+        {
+          type: "motion",
+          frames: info.frames,
+          grid: { nx: v.nx, ny: v.ny, nz: v.nz, geometry: v.geometry },
+          startSec: info.start,
+          durationSec: info.duration,
+          fromSec: parseFloat(fromSec) || 0,
+          referenceFrame: motionRef === "sum" ? undefined : Number(motionRef),
+        },
         (d, t) => setProgress(t ? d / t : null),
       ).promise;
       api.applyMotion(dyn.id, r.frames, r.motion);
@@ -129,7 +140,9 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
   const toMni = () =>
     run("Normalisierung", async () => {
       if (!dyn) return;
-      const id = await api.toMni(dyn.id, t1Id || null, (s) => setBusy(s));
+      const end = info ? (info.start.at(-1)! + info.duration.at(-1)!) / 60 : 1e9;
+      const num = (t: string, d: number) => (t.trim() === "" ? d : parseFloat(t.replace(",", ".")));
+      const id = await api.toMni(dyn.id, t1Id || null, (s) => setBusy(s), { fromMin: num(regFrom, 0), toMin: num(regTo, end) });
       setDynId(id);
     });
 
@@ -310,6 +323,17 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
               Registrieren ab (s nach Start)
               <input value={fromSec} disabled={!!busy} onChange={(e) => setFromSec(e.target.value)} />
             </label>
+            <label className="field">
+              Referenz der Bewegungskorrektur
+              <select value={motionRef} disabled={!!busy} onChange={(e) => setMotionRef(e.target.value)}>
+                <option value="sum">Summenbild der registrierten Frames</option>
+                {info.start.map((s, i) => (
+                  <option key={i} value={i}>
+                    Frame {i + 1} ({fmt(s / 60, 1)}–{fmt((s + info.duration[i]) / 60, 1)} min)
+                  </option>
+                ))}
+              </select>
+            </label>
             <button className="secondary-btn" disabled={!!busy} onClick={() => void motionCorrect()}>
               Bewegung korrigieren
             </button>
@@ -323,6 +347,20 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
           <section className="card">
             <h3>3 · In den MNI-Raum</h3>
             <p className="hint">Mittelbild → T1 rigide und T1 → MNI affin (wie bei Centiloid) oder ohne MRT affin auf die SPM-PET-Vorlage; danach werden alle Frames übertragen.</p>
+            <div className="inline-fields hist-export-fields">
+              <label className="field">
+                Registrierungsbild: Summe von (min)
+                <input value={regFrom} disabled={!!busy} onChange={(e) => setRegFrom(e.target.value)} />
+              </label>
+              <label className="field">
+                bis (min)
+                <input value={regTo} placeholder={fmt((info.start.at(-1)! + info.duration.at(-1)!) / 60, 0)} disabled={!!busy} onChange={(e) => setRegTo(e.target.value)} />
+              </label>
+            </div>
+            <p className="tool-hint">
+              Dieses Summenbild wird auf das T1 bzw. die Vorlage registriert; die Transformation gilt dann für alle Frames. Frühe Frames (z. B. 0–10 min)
+              zeigen meist die Perfusion und passen gut zur SPM-PET-Vorlage, späte Frames die Tracerbindung.
+            </p>
             {!t1Id && <p className="tool-hint">Ohne MRT ist die Normalisierung deutlich ungenauer (im Phantom Putamen-BP_ND 1,3 statt 1,8) – wenn möglich ein T1 laden und wählen.</p>}
             <label className="field">
               T1-MRT
