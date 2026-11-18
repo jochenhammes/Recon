@@ -42,6 +42,17 @@ export const CALIBRATIONS: CentiloidCalibration[] = [
     pipeline: "recon",
   },
   {
+    id: "pib-recon",
+    tracer: "PiB",
+    label: "[11C]PiB – Recon-Studio-Pipeline (GAAIN-kalibriert)",
+    reference: "WhlCbl",
+    slope: 100.68,
+    intercept: -105.61,
+    window: [50, 70],
+    source: "eigene Kalibrierung an GAAIN-PiB-Daten (n = 35): R² 0,995; Kreuzvalidierung RMSE 4,1 CL",
+    pipeline: "recon",
+  },
+  {
     id: "fbb-rowe2017",
     tracer: "FBB",
     label: "Florbetaben – SPM8-Standard (Rowe et al. 2017)",

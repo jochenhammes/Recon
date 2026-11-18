@@ -41,7 +41,11 @@ Kalibrierte Gleichungen der App (Referenz ganzes Kleinhirn):
 | Tracer | Gleichung | n | R² | Kreuzvalidierung RMSE (max.) |
 |---|---|---|---|---|
 | Florbetaben | CL = 164,06 · SUVR − 171,67 | 35 | 0,990 | 5,8 CL (16,7) |
-| PiB | Kalibrierung läuft – bis dahin Standardgleichung (Klunk 2015) | | | |
+| PiB | CL = 100,68 · SUVR − 105,61 | 35 | 0,995 | 4,1 CL (11,4) |
+
+Zum Vergleich: Die Standardgleichungen direkt auf den App-SUVR angewendet ergeben RMSE 7,0 CL (Florbetaben, Rowe 2017)
+bzw. 5,4 CL (PiB, Klunk 2015); die kalibrierten Gleichungen beseitigen die Steigungsabweichung (App-SUVR ≈ 0,92 ×
+Standard-SUVR + 0,11 bei beiden Tracern).
 
 Andere Referenzregionen (Florbetaben, nur zur Information): Kleinhirn + Hirnstamm R² 0,991 (RMSE 5,6 CL),
 Kleinhirnrinde 0,985 (7,6 CL), Pons 0,988 (6,5 CL).

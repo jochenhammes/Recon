@@ -188,7 +188,7 @@ Label-Ebenen werden ohne Interpolation (nächster Nachbar) dargestellt.
    - oder *Eigene Gleichung …* (Steigung, Achsenabschnitt, Referenzregion).
 3. **Automatisch**: PET und T1-MRT wählen → *Centiloid bestimmen*
    (PET → T1 rigide, T1 → MNI **affin**, VOI-Auswertung). An den GAAIN-Referenzdaten (35 Probanden) weicht das
-   Ergebnis im Mittel um ca. 6 CL von der Standardmethode ab (Details: `src/centiloid/README-calibration.md`).
+   Ergebnis im Mittel um ca. 4 CL (PiB) bzw. 6 CL (Florbetaben) von der Standardmethode ab (Details: `src/centiloid/README-calibration.md`).
    Ohne MRT: *ohne MRT (PET-only)* – dazu vorher eine PET-Vorlage laden; diese Variante ist nicht validiert.
 4. Oder **Vorhandenen Datensatz im MNI-Raum auswerten**: Datensatz wählen → *Auswerten*. Die GAAIN-kalibrierte
    Gleichung gilt nur für Datensätze aus der affinen Normalisierung der App.
