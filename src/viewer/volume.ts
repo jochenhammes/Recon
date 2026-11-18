@@ -114,7 +114,7 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
 }
 
-export type ColorLut = "gray" | "inverted" | "hot" | "dat" | "blue" | "rainbow" | "voi" | "labels";
+export type ColorLut = "gray" | "inverted" | "hot" | "dat" | "blue" | "diverging" | "rainbow" | "voi" | "labels";
 
 /** Color tables offered in the UI (label and VOI tables are special-purpose). */
 export const LUT_CHOICES: { value: ColorLut; label: string }[] = [
@@ -123,6 +123,7 @@ export const LUT_CHOICES: { value: ColorLut; label: string }[] = [
   { value: "hot", label: "Hot (Schwarz–Rot–Gelb–Weiß)" },
   { value: "dat", label: "DaT (Schwarz–Grün–Gelb–Hellrot)" },
   { value: "blue", label: "Blau (Schwarz–Blau–Hellblau–Weiß)" },
+  { value: "diverging", label: "Blau–Weiß–Rot (Z-Werte)" },
   { value: "rainbow", label: "Regenbogen" },
   { value: "labels", label: "Atlas-Regionen (Farbtabelle)" },
 ];
@@ -183,6 +184,8 @@ const HOT_LUT = buildStopsLut([[0, 0, 0, 0], [85, 255, 0, 0], [170, 255, 255, 0]
 // DaT (typical DaTscan display): black → dark green → green → yellow → light red.
 const DAT_LUT = buildStopsLut([[0, 0, 0, 0], [64, 0, 85, 10], [128, 20, 190, 40], [176, 170, 230, 20], [216, 255, 225, 30], [255, 255, 120, 100]]);
 // Blue shades: black → dark blue → blue → light blue → white.
+// Diverging (z-scores): dark blue → blue → white (middle) → red → dark red.
+const DIVERGING_LUT = buildStopsLut([[0, 10, 20, 110], [64, 30, 90, 230], [128, 255, 255, 255], [192, 230, 60, 40], [255, 120, 0, 10]]);
 const BLUE_LUT = buildStopsLut([[0, 0, 0, 0], [70, 0, 20, 110], [140, 20, 90, 230], [200, 110, 190, 255], [255, 235, 248, 255]]);
 const GRAY_LUT = Uint8Array.from({ length: 256 * 3 }, (_, i) => Math.floor(i / 3));
 const INVERTED_LUT = Uint8Array.from({ length: 256 * 3 }, (_, i) => 255 - Math.floor(i / 3));
@@ -205,6 +208,8 @@ export function lutTable(lut: ColorLut): Uint8Array {
       return DAT_LUT;
     case "blue":
       return BLUE_LUT;
+    case "diverging":
+      return DIVERGING_LUT;
     case "inverted":
       return INVERTED_LUT;
     case "voi":

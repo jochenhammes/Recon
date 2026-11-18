@@ -15,6 +15,7 @@ Beispieldaten (keine Patientendaten).
 9. [CT-Organsegmentierung](#9-ct-organsegmentierung)
 10. [Tumorlast (MTV)](#10-tumorlast-mtv)
 11. [Analyse und Label-Analyse](#11-analyse-und-label-analyse)
+    – [IMCALC: voxelweise Rechnung](#imcalc-voxelweise-rechnung)
 12. [Bearbeiten](#12-bearbeiten)
 13. [DICOM-Header](#13-dicom-header)
 14. [Export](#14-export)
@@ -27,7 +28,7 @@ Beispieldaten (keine Patientendaten).
 ![Startbildschirm](docs/images/01-start.jpg)
 
 - **Linke Leiste**: die Arbeitsbereiche *Daten, Ansicht, Koregistrierung, Standardraum, Centiloid & SUVR (SUVR), Kinetik,
-  Tumorlast, Analyse, Bearbeiten, Header, Export*. Ein Klick auf den aktiven Bereich klappt das Seitenpanel ein und aus
+  Tumorlast, Analyse, IMCALC, Bearbeiten, Header, Export*. Ein Klick auf den aktiven Bereich klappt das Seitenpanel ein und aus
   (ebenso das Symbol unten links). Ausgegraute Bereiche nennen im Tooltip den Grund (z. B. „Header nur für DICOM“).
   Beim Wechsel des Bereichs bleibt alles erhalten – laufende Berechnungen, Ergebnisse, aufgeklappte Karten.
 - **Seitenpanel**: Die Breite lässt sich am rechten Rand mit der Maus ziehen (Doppelklick = Standardbreite; mit
@@ -51,7 +52,7 @@ Beispieldaten (keine Patientendaten).
   - **Griff ziehen**: Fenster-Minimum bzw. -Maximum verschieben,
   - **Bereich zwischen den Griffen ziehen**: ganzes Fenster verschieben,
   - **Rechtsklick** auf den Balken: Farbtabelle wählen – Graustufen, Invertiert, Hot, DaT (Schwarz–Grün–Gelb–Hellrot, typische
-    DaTSCAN-Darstellung), Blau (Schwarz–Blau–Hellblau–Weiß), Regenbogen.
+    DaTSCAN-Darstellung), Blau (Schwarz–Blau–Hellblau–Weiß), Blau–Weiß–Rot (Z-Werte, Differenzen), Regenbogen.
   Statuszeile unten: Position in mm (Patientenkoordinaten LPS) und die Werte aller sichtbaren Ebenen unter dem
   Fadenkreuz – je Ebene mit Farbbalken ihrer Farbtabelle, Modalität und Schlagwort bzw. Dateiname; bei Labelbildern
   der Name der Region.
@@ -146,7 +147,7 @@ Karte **Projekt** im Bereich *Daten*:
 
 Bereich **Ansicht** – eine Karte je angezeigter Ebene (oben = oberste Ebene):
 
-1. **Farbtabelle**: Graustufen, invertiert, Hot, DaT, Blau, Regenbogen, Atlas-Regionen (auch per Rechtsklick auf
+1. **Farbtabelle**: Graustufen, invertiert, Hot, DaT, Blau, Blau–Weiß–Rot, Regenbogen, Atlas-Regionen (auch per Rechtsklick auf
    die Farbskala im Viewer).
 2. **Fenster**: *Min*/*Max* eintragen, *Auto*, oder Presets (PET: SUV 0–5/10/15; CT: Weichteil, Lunge, Knochen,
    Gehirn, Leber). Alternativ im Bild mit der rechten Maustaste ziehen oder die Griffe der Farbskala im Viewer
@@ -469,6 +470,31 @@ Ein Klick auf eine Zeile wirkt wie in der kleinen Tabelle (z. B. Region ins Hist
 Hinweis: Die macOS-Vorschau (Leertaste) zeigt solche CSV-Dateien unvollständig an – in Excel öffnen.
 
 ---
+
+### IMCALC: voxelweise Rechnung
+
+Bereich **IMCALC** (Leiste zwischen *Analyse* und *Bearbeiten*). Jedes Ergebnis ist ein **neuer Datensatz** im
+Bildraum der Eingaben – anzeigen, exportieren (NIfTI, mit Patient-ID), im Projekt speichern und weiterverarbeiten
+(Label-Analyse, Atlas/SUVR, erneut IMCALC).
+
+- **Raster:** Rechnungen mit mehreren Datensätzen brauchen **dasselbe Raster** (gleiche Matrix und Geometrie, z. B. alle
+  im MNI-Standardraum). Nicht passende Datensätze sind ausgegraut (Tooltip nennt das Raster). Daten verschiedener
+  Patienten vorher normalisieren ([Abschnitt 6](#6-standardraum-mni-atlas-und-suvr)). Labelbilder sind ausgenommen;
+  dynamische Serien gehen mit ihrem Mittelbild ein.
+- **Einheit:** gerechnet wird mit den angezeigten Werten (SUV, wenn eingestellt; sonst Originalwerte).
+
+| Operation | Eingabe | Ergebnis |
+|---|---|---|
+| **Linear** | 1 Datensatz, a, b | a · X + b |
+| **Zwei Datensätze** | X₁, X₂ | a · X₁ + b · X₂ (a = 1, b = −1: Differenz), X₁ · X₂ oder X₁ / X₂ (Division durch ≈ 0 → 0) |
+| **Gruppe** | ≥ 2 Datensätze | voxelweiser **Mittelwert** und **Standardabweichung** (Stichprobe, n − 1) – zwei Datensätze |
+| **Z-Transformation** | N Individuen + Mittelwert- und SD-Karte einer Vergleichskohorte | N **Z-Karten** (Individuum − Mittelwert) / SD; Voxel mit SD ≈ 0 → 0 |
+
+Ablauf Z-Karten: Kontrollen in den Standardraum bringen → *Gruppe* → Mittelwert- und SD-Karte; dann
+*Z-Transformation*: Patienten anhaken, die beiden Karten werden vorgeschlagen → **Z-Karten berechnen**. Die Z-Karten
+(Einheit „z“) erscheinen in **Blau–Weiß–Rot**, Fenster −4 … +4 (negativ = unter der Norm, z. B. Hypometabolismus);
+Differenzbilder ebenfalls mit symmetrischem Fenster. Namen werden vorgeschlagen und lassen sich ändern; die Karte
+*Ergebnisse* listet alle Ergebnisse der Sitzung (*einblenden*).
 
 ## 12. Bearbeiten
 

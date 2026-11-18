@@ -2388,3 +2388,48 @@ tr.focus-row td {
   grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
   gap: 8px;
 }
+
+/* ─── IMCALC ──────────────────────────────────────────────────────────── */
+.imcalc-modes {
+  flex-wrap: wrap;
+}
+.imcalc-modes button {
+  flex: 1 1 45%;
+}
+.imcalc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+  margin-bottom: 10px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.imcalc-list .checkbox-field.disabled {
+  opacity: 0.45;
+}
+.imcalc-coeffs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.imcalc-formula {
+  font-family: var(--mono, ui-monospace, monospace);
+}
+.imcalc-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.imcalc-results li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}

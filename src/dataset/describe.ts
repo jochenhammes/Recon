@@ -72,6 +72,7 @@ export function middleEllipsis(s: string, max = 28): string {
 export function datasetModality(d: LoadedDataset): string {
   if (d.template) return `${d.template.kind}-Vorlage`;
   if (d.atlas) return "Labels";
+  if (d.kindLabel) return d.kindLabel;
   if (d.derivedFrom) return d.derivedFrom.label ?? modalityLabel(d.derivedFrom.source);
   return modalityLabel(d.source);
 }

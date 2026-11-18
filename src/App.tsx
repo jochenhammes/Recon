@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { sanitizePatientId, setExportPatientId, umlaut, withPatientId } from "./core/exportName";
 import { Card } from "./ui/Card";
-import { Activity, BarChart3, Brain, Crosshair, Download, Eye, FileCode2, FolderOpen, Gauge, Target, Wand2 } from "lucide-react";
+import { Activity, BarChart3, Brain, Calculator, Crosshair, Download, Eye, FileCode2, FolderOpen, Gauge, Target, Wand2 } from "lucide-react";
 import { KineticsPanel, type KineticsApi } from "./kinetics/KineticsPanel";
 import { LayerToggle } from "./ui/LayerToggle";
+import { type ImcalcJob, ImcalcPanel } from "./ui/ImcalcPanel";
+import { combine, groupMeanSd, linear, product, quotient, zScore } from "./imcalc/imcalc";
 import { PROJECT_EXTENSION, ProjectError, loadProject, saveProject } from "./project/project";
 import { InfoText } from "./ui/Info";
 import { type DisplayCandidate, type DisplayDecision, decideDisplay, gridBox, gridKey } from "./dataset/autoDisplay";
@@ -320,7 +322,7 @@ function App() {
     if (!e) return { scale: 1, label: "" };
     const suv = suvById.get(e.id);
     if (unitMode === "suv" && suv?.ok) return { scale: suv.info.factor, label: "SUV" };
-    return { scale: 1, label: rawUnitLabel(unitSource(e.dataset)) };
+    return { scale: 1, label: e.dataset.valueUnit ?? rawUnitLabel(unitSource(e.dataset)) };
   };
   const activeSuv = active ? (suvById.get(active.id) ?? null) : null;
   const { scale, label: unitLabel } = unitFor(active);
@@ -1720,6 +1722,102 @@ function App() {
     setActiveId(id);
   }
 
+  // ── IMCALC: voxelwise arithmetic → new datasets on the grid of the inputs ──
+  const [imcalcBusy, setImcalcBusy] = useState<string | null>(null);
+  const [imcalcStatus, setImcalcStatus] = useState<string | null>(null);
+  const [imcalcError, setImcalcError] = useState<string | null>(null);
+  const [imcalcResults, setImcalcResults] = useState<string[]>([]);
+  const imcalcInputs = entries.filter((e) => !e.dataset.atlas);
+
+  /** Result dataset on the grid (and in the space/placement) of `input`; returns its id. */
+  function addImcalcResult(input: Entry, data: Float32Array, name: string, opts: { kind: string; unit: string; window?: [number, number]; lut?: LayerDisplay["lut"]; show: boolean }): string {
+    const vol = input.dataset.current.withData(data);
+    const d = createDataset(vol, { kind: "reconstruction" }, name);
+    const inStandard = input.dataset.derivedFrom && input.dataset.derivedFrom.space !== "nativ";
+    const dataset: LoadedDataset = {
+      ...d,
+      kindLabel: opts.kind,
+      ...(opts.unit ? { valueUnit: opts.unit } : {}),
+      ...(inStandard ? { derivedFrom: { name, source: { kind: "reconstruction" as const }, space: input.dataset.derivedFrom!.space } } : {}),
+    };
+    const auto = defaultDisplay(vol);
+    const lut = opts.lut ?? (input.display.lut === "gray" || input.display.lut === "labels" ? "hot" : input.display.lut);
+    const id = `ds${nextEntryId++}`;
+    setEntries((prev) => [...prev, { id, dataset, display: { window: opts.window ?? auto.window, lut, opacity: 0.7, visible: true }, matrix: input.matrix }]);
+    if (opts.show) {
+      addOverlay(id);
+      setActiveId(id);
+    }
+    return id;
+  }
+
+  async function runImcalc(job: ImcalcJob) {
+    if (imcalcBusy) return;
+    setImcalcError(null);
+    setImcalcStatus(null);
+    const input = (id: string) => {
+      const e = byId(id);
+      if (!e) throw new Error("Datensatz nicht gefunden.");
+      return { e, x: { data: e.dataset.current.data, scale: unitFor(e).scale }, unit: unitFor(e).label };
+    };
+    const check = (list: Entry[]) => {
+      const g = list[0].dataset.current;
+      const grid = { nx: g.nx, ny: g.ny, nz: g.nz, geometry: g.geometry };
+      const bad = list.find((e) => !sameGrid(grid, e.dataset.current));
+      if (bad) throw new Error(`„${entryLabel(bad)}“ liegt auf einem anderen Raster als „${entryLabel(list[0])}“.`);
+    };
+    const created: string[] = [];
+    try {
+      if (job.kind === "linear") {
+        setImcalcBusy("Linear");
+        const a = input(job.id);
+        const r = await linear(a.x, job.a, job.b);
+        created.push(addImcalcResult(a.e, r, job.name, { kind: "IMCALC", unit: a.unit, show: true }));
+      } else if (job.kind === "pair") {
+        setImcalcBusy("Zwei Datensätze");
+        const a = input(job.id1), b = input(job.id2);
+        check([a.e, b.e]);
+        const r = job.op === "sum" ? await combine(a.x, b.x, job.a, job.b) : job.op === "product" ? await product(a.x, b.x) : await quotient(a.x, b.x);
+        const unit = job.op === "sum" ? (a.unit === b.unit ? a.unit : "") : job.op === "quotient" ? "Verhältnis" : "";
+        // Differences (coefficients of opposite sign): diverging colors, window symmetric around 0.
+        const signed = job.op === "sum" && job.a * job.b < 0;
+        let sym = 0;
+        if (signed) {
+          const abs = Float32Array.from(r, Math.abs).filter((v) => v > 0).sort();
+          sym = abs.length ? abs[Math.floor(0.995 * (abs.length - 1))] : 1;
+        }
+        const look = job.op === "quotient" ? { window: [0, 2] as [number, number], lut: "hot" as const } : signed ? { window: [-sym, sym] as [number, number], lut: "diverging" as const } : {};
+        created.push(addImcalcResult(a.e, r, job.name, { kind: "IMCALC", unit, show: true, ...look }));
+      } else if (job.kind === "group") {
+        const xs = job.ids.map(input);
+        check(xs.map((x) => x.e));
+        setImcalcBusy(`Gruppe (n=${xs.length})`);
+        const r = await groupMeanSd(
+          xs.map((x) => x.x),
+          (f) => setImcalcStatus(`Gruppe: ${Math.round(f * 100)} %`),
+        );
+        created.push(addImcalcResult(xs[0].e, r.mean, job.nameMean, { kind: "IMCALC", unit: xs[0].unit, show: true }));
+        created.push(addImcalcResult(xs[0].e, r.sd, job.nameSd, { kind: "IMCALC", unit: xs[0].unit, lut: "hot", show: false }));
+      } else {
+        const m = input(job.meanId), sd = input(job.sdId);
+        const xs = job.ids.map(input);
+        check([m.e, sd.e, ...xs.map((x) => x.e)]);
+        for (const [i, x] of xs.entries()) {
+          setImcalcBusy(`Z-Karte ${i + 1}/${xs.length}`);
+          const r = await zScore(x.x, m.x, sd.x);
+          created.push(addImcalcResult(x.e, r, `${x.e.tag || baseName(x.e)}${job.suffix}`, { kind: "Z", unit: "z", window: [-4, 4], lut: "diverging", show: i === 0 }));
+        }
+      }
+      setImcalcResults((prev) => [...prev, ...created]);
+      setImcalcStatus(`${created.length} ${created.length === 1 ? "Datensatz" : "Datensätze"} angelegt${created.length > 1 ? " – weitere über „Ebenen“ einblenden" : ""}.`);
+    } catch (e) {
+      setImcalcError(e instanceof Error ? e.message : String(e));
+      setImcalcStatus(null);
+    } finally {
+      setImcalcBusy(null);
+    }
+  }
+
   // ── Kinetics (dynamic PET) ──
   /**
    * Normalizes a dynamic dataset to MNI (mean image → T1 rigid, T1 → MNI affine; without T1 affine to the SPM PET
@@ -1929,6 +2027,8 @@ function App() {
         const derived: LoadedDataset = {
           ...d,
           ...(e.dataset.atlas ? { atlas: e.dataset.atlas } : {}),
+          ...(e.dataset.kindLabel ? { kindLabel: e.dataset.kindLabel } : {}),
+          ...(e.dataset.valueUnit ? { valueUnit: e.dataset.valueUnit } : {}),
           ...(dynamic ? { dynamic } : {}),
           derivedFrom: { name: e.dataset.displayName, source: unitSource(e.dataset), space: n.templateName, sourceId: e.id },
         };
@@ -2576,6 +2676,42 @@ function App() {
       ),
     },
     {
+      id: "imcalc",
+      label: "IMCALC – voxelweise Rechnung",
+      shortLabel: "IMCALC",
+      icon: Calculator,
+      disabled: imcalcInputs.length === 0,
+      disabledReason: "Erst einen Datensatz laden",
+      content: (
+        <ImcalcPanel
+          datasets={imcalcInputs.map((e) => {
+            const v = e.dataset.current;
+            return {
+              id: e.id,
+              label: entryLabel(e),
+              short: (e.tag || shortName(e.dataset.derivedFrom && !e.dataset.derivedFrom.label ? e.dataset.derivedFrom.name : e.dataset.displayName)).replace(/\s+/g, "_"),
+              gridKey: gridKey(v.geometry, [v.nx, v.ny, v.nz]),
+              gridInfo: `${v.nx}×${v.ny}×${v.nz}, ${v.geometry.spacing.map((x) => x.toFixed(2)).join("×")} mm`,
+              unit: unitFor(e).label,
+              dynamic: !!e.dataset.dynamic,
+            };
+          })}
+          busy={!!imcalcBusy}
+          status={imcalcStatus}
+          error={imcalcError}
+          results={imcalcResults.flatMap((id) => {
+            const e = byId(id);
+            return e ? [{ id, label: entryLabel(e) }] : [];
+          })}
+          onRun={(job) => void runImcalc(job)}
+          onShow={(id) => {
+            makeOverlay(id);
+            setActiveId(id);
+          }}
+        />
+      ),
+    },
+    {
       id: "edit",
       label: "Bearbeiten",
       icon: Wand2,
@@ -2686,6 +2822,7 @@ function App() {
   act(fusionBusy && { id: "fusion", label: "Fusionsexport", tab: "view" });
   act(editBusy && { id: "edit", label: "Bearbeiten", tab: "edit" });
   act((templateBusy || atlasBusy) && { id: "bundled", label: templateBusy ? "Vorlage laden" : "Atlas laden", tab: templateBusy ? "normalization" : "analysis" });
+  act(imcalcBusy && { id: "imcalc", label: "IMCALC", detail: imcalcBusy, tab: "imcalc" });
   act(kineticsActivity && { id: "kinetics", label: "Kinetik", detail: kineticsActivity.label, fraction: kineticsActivity.fraction, tab: "kinetics" });
   act(ctSegError && !ctSegRunning && { id: "ctseg-error", label: "CT-Segmentierung", error: ctSegError, tab: "tumor" });
   act(normError && !normRunning && { id: "norm-error", label: "Normalisierung", error: normError, tab: "normalization" });

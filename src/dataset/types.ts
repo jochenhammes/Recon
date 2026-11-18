@@ -94,6 +94,10 @@ export interface LoadedDataset {
   };
   source: VolumeSource;
   displayName: string;
+  /** Label shown instead of the modality (e.g. "IMCALC", "Z" for computed images). */
+  kindLabel?: string;
+  /** Unit of the stored values when the source does not define one (e.g. "z" for IMCALC z-score maps). */
+  valueUnit?: string;
   /** Dynamic acquisition (frames + timing), if the data were 4D. */
   dynamic?: DynamicInfo;
 }
