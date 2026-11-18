@@ -1,35 +1,23 @@
-import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import type { LoadedDataset } from "../dataset/types";
 import { NIFTI_MODALITIES, modalityLabel, seriesDescription, shortName } from "../dataset/describe";
 
-/** Compact description of a loaded dataset (source, matrix, voxel size, geometry). */
-export interface DatasetInfoProps {
+/** Details of a loaded dataset (modality, source, matrix, voxel size, geometry); shown when a list row is expanded. */
+export interface DatasetDetailsProps {
   dataset: LoadedDataset;
-  title: ReactNode;
-  onRemove?: () => void;
-  /** Extra controls below the summary (e.g. role buttons). */
-  children?: ReactNode;
-  highlighted?: boolean;
   /** NIfTI: the user picks the modality (undefined = keep the automatic guess). */
   onModalityChange?: (modality: string | undefined) => void;
+  /** Extra controls below the summary (e.g. tag input). */
+  children?: ReactNode;
 }
 
-export function DatasetInfo({ dataset, title, onRemove, children, highlighted, onModalityChange }: DatasetInfoProps) {
+export function DatasetDetails({ dataset, onModalityChange, children }: DatasetDetailsProps) {
   const v = dataset.current;
   const [sx, sy, sz] = v.geometry.spacing;
   const src = dataset.source;
   const files = src.kind === "dicom" ? `${src.files.length} ${src.files.length === 1 ? "Datei" : "Dateien"}` : src.kind === "nifti" ? "NIfTI" : "Rekonstruktion";
   return (
-    <section className={highlighted ? "card highlighted" : "card"}>
-      <div className="layer-head">
-        <h3>{title}</h3>
-        {onRemove && (
-          <button className="icon-btn small" title="Datensatz schließen" aria-label="Datensatz schließen" onClick={onRemove}>
-            <X size={14} />
-          </button>
-        )}
-      </div>
+    <div className="dataset-details">
       <dl className="summary-list">
         <dt>Modalität</dt>
         <dd>
@@ -87,6 +75,6 @@ export function DatasetInfo({ dataset, title, onRemove, children, highlighted, o
         )}
       </dl>
       {children}
-    </section>
+    </div>
   );
 }

@@ -49,7 +49,8 @@ import { type RegistrationRun, runCoregistration } from "./registration/runner";
 import type { CoregProgress, CoregResult } from "./registration/coregister";
 import { HeaderPanel } from "./ui/HeaderPanel";
 import { AppShell, type ShellTab } from "./ui/AppShell";
-import { DatasetInfo } from "./ui/DatasetInfo";
+import { DatasetDetails } from "./ui/DatasetInfo";
+import { DatasetList } from "./ui/DatasetList";
 import { LayerSettings, type WindowPreset } from "./ui/ViewSettingsPanel";
 import { type RegRow, type RegStatusKind, RegistrationSetup } from "./ui/RegistrationSetup";
 import { RegistrationPanel } from "./ui/RegistrationPanel";
@@ -1757,14 +1758,6 @@ function App() {
     updateEntry(id, { dataset, display });
   }
 
-  const roleBadges = (e: Entry) => (
-    <span className="role-badges">
-      {e.id === reference?.id && <span className="role-badge reference">Referenz</span>}
-      {e.id === overlay?.id && <span className="role-badge overlay">Overlay</span>}
-      {e.id === active?.id && entries.length > 1 && <span className="role-badge">aktiv</span>}
-    </span>
-  );
-
   const dataTab = (
     <>
       <VolumeUploadPanel
@@ -1783,38 +1776,45 @@ function App() {
           }
         }}
         description="PET, SPECT, CT oder MRT als DICOM (Datei oder Serie) bzw. NIfTI – beliebig viele."
+        compact={entries.length > 0}
       />
-      {entries.map((e) => (
-        <DatasetInfo
-          key={e.id}
-          dataset={e.dataset}
-          highlighted={e.id === active?.id && entries.length > 1}
-          title={
-            <>
-              {e.tag ? `${e.tag} · ` : ""}
-              {datasetModality(e.dataset)}
-              {roleBadges(e)}
-            </>
-          }
-          onRemove={() => removeEntry(e.id)}
-          onModalityChange={(m) => setNiftiModality(e.id, m)}
-        >
-          <TagInput value={e.tag ?? ""} onChange={(t) => updateEntry(e.id, { tag: t || undefined })} />
-          {entries.length > 1 && (
-            <div className="chip-row">
-              <button className="chip-btn" disabled={e.id === reference?.id} onClick={() => makeReference(e.id)}>
-                Als Referenz
-              </button>
-              <button className="chip-btn" disabled={e.id === reference?.id} onClick={() => makeOverlay(e.id === overlay?.id ? null : e.id)}>
-                {e.id === overlay?.id ? "Overlay aus" : "Als Overlay"}
-              </button>
-              <button className="chip-btn" disabled={e.id === active?.id} onClick={() => switchActive(e.id)}>
-                Bearbeiten/Export
-              </button>
-            </div>
-          )}
-        </DatasetInfo>
-      ))}
+      {entries.length > 0 && (
+        <DatasetList
+          rows={entries.map((e) => {
+            const isOverlay = overlays.some((o) => o.id === e.id);
+            return {
+              id: e.id,
+              modality: datasetModality(e.dataset),
+              name: middleEllipsis(shortName(e.dataset.displayName), 40),
+              title: entryLabel(e),
+              tag: e.tag,
+              isBase: e.id === reference?.id,
+              isShown: e.id === reference?.id || (isOverlay && e.display.visible),
+              isActive: e.id === active?.id,
+              notes: [...(e.dataset.dynamic ? ["dyn."] : []), ...(e.dataset.edits.length ? ["bearb."] : [])],
+            };
+          })}
+          details={(id) => {
+            const e = byId(id);
+            return (
+              e && (
+                <DatasetDetails dataset={e.dataset} onModalityChange={(m) => setNiftiModality(e.id, m)}>
+                  <TagInput value={e.tag ?? ""} onChange={(t) => updateEntry(e.id, { tag: t || undefined })} />
+                </DatasetDetails>
+              )
+            );
+          }}
+          onToggleShown={(id) => {
+            const e = byId(id);
+            if (!e || id === reference?.id) return;
+            if (!overlays.some((o) => o.id === id)) makeOverlay(id);
+            else updateEntry(id, { display: { ...e.display, visible: !e.display.visible } });
+          }}
+          onActivate={switchActive}
+          onMakeBase={makeReference}
+          onRemove={removeEntry}
+        />
+      )}
       <details className="card collapsible">
         <summary>Standardraum-Vorlage</summary>
         <p className="hint">Vorlage für die räumliche Normalisierung (Registrierung → Standardraum).</p>

@@ -10,9 +10,11 @@ export interface VolumeUploadPanelProps {
   single?: boolean;
   /** Reports loading start/end (for the activity indicator). */
   onBusyChange?: (busy: boolean) => void;
+  /** Small drop zone without heading (once data are loaded). */
+  compact?: boolean;
 }
 
-export function VolumeUploadPanel({ onLoaded, title = "Volumen laden", description, single, onBusyChange }: VolumeUploadPanelProps) {
+export function VolumeUploadPanel({ onLoaded, title = "Volumen laden", description, single, onBusyChange, compact }: VolumeUploadPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -52,7 +54,7 @@ export function VolumeUploadPanel({ onLoaded, title = "Volumen laden", descripti
   }
 
   return (
-    <div className="upload-panel">
+    <div className={compact ? "upload-panel compact" : "upload-panel"}>
       <h3>{title}</h3>
       <p>{description ?? "PET, SPECT oder CT als DICOM (Datei oder ganze Serie) bzw. NIfTI (.nii, .nii.gz)."}</p>
       <div
@@ -64,7 +66,7 @@ export function VolumeUploadPanel({ onLoaded, title = "Volumen laden", descripti
         }}
         onClick={() => inputRef.current?.click()}
       >
-        {busy ? "Wird geladen…" : "Dateien oder Ordner hierher ziehen oder klicken"}
+        {busy ? "Wird geladen…" : compact ? "+ Weitere Dateien (hierher ziehen oder klicken)" : "Dateien oder Ordner hierher ziehen oder klicken"}
         <input
           ref={inputRef}
           type="file"
