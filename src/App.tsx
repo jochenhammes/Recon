@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Activity, BarChart3, Brain, Crosshair, Download, Eye, FileCode2, FolderOpen, Target, Wand2 } from "lucide-react";
+import { Card } from "./ui/Card";
+import { Activity, BarChart3, Brain, Crosshair, Download, Eye, FileCode2, FolderOpen, Gauge, Target, Wand2 } from "lucide-react";
 import { KineticsPanel, type KineticsApi } from "./kinetics/KineticsPanel";
 import { LayerToggle } from "./ui/LayerToggle";
 import { type DisplayCandidate, type DisplayDecision, decideDisplay, gridBox, gridKey } from "./dataset/autoDisplay";
@@ -1966,8 +1967,7 @@ function App() {
       {[...overlays].reverse().map((o, i) => layerSettings(o, true, i))}
       {reference && layerSettings(reference, false)}
       {hiddenEntries.length > 0 && (
-        <section className="card">
-          <h3>Weitere Datensätze</h3>
+        <Card title={<>Weitere Datensätze</>} status={{ text: String(hiddenEntries.length), tone: "info" }}>
           {hiddenEntries.map((e) => (
             <div key={e.id} className="hidden-dataset-row">
               <span>{entryLabel(e)}</span>
@@ -1976,7 +1976,7 @@ function App() {
               </button>
             </div>
           ))}
-        </section>
+        </Card>
       )}
       {reference && (
         <FusionExportCard
@@ -2124,6 +2124,11 @@ function App() {
         onExport={exportDeformationField}
         status={fieldStatus}
       />
+    </NormalizationPanel>
+  );
+
+  const suvrTab = (
+    <>
       <CentiloidPanel
         voisLoaded={
           centiloidVois
@@ -2165,27 +2170,46 @@ function App() {
         onCreateSuvrImage={createSuvrImage}
         error={atlasError}
       />
-    </NormalizationPanel>
+    </>
   );
 
   const tabs: ShellTab[] = [
     { id: "data", label: "Daten", icon: FolderOpen, content: dataTab, badge: entries.length > 1 ? entries.length : undefined },
-    { id: "view", label: "Ansicht", icon: Eye, disabled: layers.length === 0, content: viewTab },
-    { id: "registration", label: "Registrierung", shortLabel: "Registr.", icon: Crosshair, disabled: entries.length < 2, content: registrationTab },
-    { id: "normalization", label: "Standardraum", shortLabel: "MNI", icon: Brain, disabled: entries.filter((e) => !e.dataset.template).length === 0, content: normalizationTab },
+    { id: "view", label: "Ansicht", icon: Eye, disabled: layers.length === 0, disabledReason: "Erst einen Datensatz laden", content: viewTab },
+    { id: "registration", label: "Registrierung", shortLabel: "Regis\u00adtrierung", icon: Crosshair, disabled: entries.length < 2, disabledReason: "Registrierung ab zwei Datensätzen", content: registrationTab },
+    {
+      id: "normalization",
+      label: "Standardraum (MNI)",
+      shortLabel: "Standard\u00adraum",
+      icon: Brain,
+      disabled: entries.filter((e) => !e.dataset.template).length === 0,
+      disabledReason: "Erst einen Datensatz laden",
+      content: normalizationTab,
+    },
+    {
+      id: "suvr",
+      label: "Centiloid & SUVR",
+      shortLabel: "SUVR",
+      icon: Gauge,
+      disabled: entries.filter((e) => !e.dataset.template).length === 0,
+      disabledReason: "Erst einen Datensatz laden",
+      content: suvrTab,
+    },
     {
       id: "kinetics",
       label: "Kinetik",
       icon: Activity,
       disabled: !entries.some((e) => e.dataset.dynamic),
+      disabledReason: "Nur für dynamische Daten (4D-NIfTI oder dynamische DICOM-Serie)",
       content: <KineticsPanel api={kineticsApi} />,
     },
     {
       id: "tumor",
       label: "Tumorlast",
-      shortLabel: "Tumor",
+      shortLabel: "Tumor\u00adlast",
       icon: Target,
       disabled: tumorTargets.length === 0 && ctEntries.length === 0,
+      disabledReason: "Erst ein PET oder CT laden",
       content: (
         <>
         <CtSegCard
@@ -2200,11 +2224,10 @@ function App() {
           onCancel={() => ctSegRun.current?.cancel()}
         />
         {organEntry?.dataset.atlas && (
-          <section className="card">
-            <h3>Regionen · {entryLabel(organEntry)}</h3>
+          <Card title={<>Regionen · {entryLabel(organEntry)}</>} defaultOpen={false} persistKey="tumor-regions">
             <p className="tool-hint">Klick: Fadenkreuz in die Region · Häkchen: ein-/ausblenden.</p>
             {labelList(organEntry)}
-          </section>
+          </Card>
         )}
         <TumorPanel
           targets={tumorTargets.map((e) => ({ id: e.id, label: entryLabel(e) }))}
@@ -2249,6 +2272,7 @@ function App() {
       label: "Analyse",
       icon: BarChart3,
       disabled: !stats,
+      disabledReason: "Erst einen Datensatz laden",
       content: volume && stats && active && (
         <>
           <DatasetOverview
@@ -2269,8 +2293,7 @@ function App() {
             loadError={atlasError}
             onAssignNames={(id, src) => void assignAtlasNames(id, src)}
           />
-          <section className="card">
-            <h3>Detailanalyse: {entryLabel(active)}</h3>
+          <Card title={<>Detailanalyse: {entryLabel(active)}</>}>
             <AnalysisPanel
               volume={volume}
               stats={stats}
@@ -2281,7 +2304,7 @@ function App() {
               suv={activeSuv}
               onUnitModeChange={handleUnitModeChange}
             />
-          </section>
+          </Card>
         </>
       ),
     },
@@ -2290,6 +2313,7 @@ function App() {
       label: "Bearbeiten",
       icon: Wand2,
       disabled: !stats,
+      disabledReason: "Erst einen Datensatz laden",
       badge: dataset?.edits.length,
       content: dataset && volume && stats && (
         <>
@@ -2345,6 +2369,7 @@ function App() {
       icon: FileCode2,
       wide: true,
       disabled: dataset?.source.kind !== "dicom",
+      disabledReason: "Header-Editor nur für DICOM-Datensätze (aktiver Datensatz)",
       badge: dataset?.headerEdits.length,
       content: dataset && active && (
         <HeaderPanel key={active.id} dataset={dataset} onEditsChange={(headerEdits) => setDataset(active.id, { ...dataset, headerEdits })} />
@@ -2355,6 +2380,7 @@ function App() {
       label: "Export",
       icon: Download,
       disabled: !dataset,
+      disabledReason: "Erst einen Datensatz laden",
       content: dataset && active && <ExportPanel dataset={dataset} spaces={spaces} activeId={active.id} />,
     },
   ];
@@ -2378,7 +2404,7 @@ function App() {
   );
   act(normRunning && !centiloidRunning && { id: "norm", label: "Normalisierung", detail: normProgress?.stage, fraction: normProgress?.fraction ?? null, tab: "normalization" });
   act(transferBusy && { id: "transfer", label: "Übertragung", detail: transferStatus ?? undefined, tab: "normalization" });
-  act(centiloidRunning && { id: "centiloid", label: "Centiloid", detail: normProgress ? normProgress.stage : (centiloidStatus ?? undefined), fraction: normProgress?.fraction ?? null, tab: "normalization" });
+  act(centiloidRunning && { id: "centiloid", label: "Centiloid", detail: normProgress ? normProgress.stage : (centiloidStatus ?? undefined), fraction: normProgress?.fraction ?? null, tab: "suvr" });
   act(
     ctSegRunning && {
       id: "ctseg",
@@ -2396,7 +2422,7 @@ function App() {
   act(ctSegError && !ctSegRunning && { id: "ctseg-error", label: "CT-Segmentierung", error: ctSegError, tab: "tumor" });
   act(normError && !normRunning && { id: "norm-error", label: "Normalisierung", error: normError, tab: "normalization" });
   act(coregError && !coregRunning && { id: "coreg-error", label: "Registrierung", error: coregError, tab: "registration" });
-  act(centiloidError && !centiloidRunning && { id: "centiloid-error", label: "Centiloid", error: centiloidError, tab: "normalization" });
+  act(centiloidError && !centiloidRunning && { id: "centiloid-error", label: "Centiloid", error: centiloidError, tab: "suvr" });
   act(tumorError && !tumorBusy && { id: "tumor-error", label: "Tumorlast", error: tumorError, tab: "tumor" });
   // MIP of the topmost visible functional image (not of label images or CT/MR).
   const mipLayerId = [...overlays].reverse().concat(reference ? [reference] : []).find((e) => e.display.visible && !e.dataset.atlas && !isAnatomical(e.dataset.source))?.id ?? reference?.id;

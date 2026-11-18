@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
-import { CardTitle, InfoText } from "./Info";
+import { Card } from "./Card";
+import { InfoText } from "./Info";
 import { type AtlasInfo, type RegionStat, labelHistogramCsv, labelStatsCsv, regionValues } from "../atlas/atlas";
 import { buildZip } from "../export/zip";
 import { Histogram } from "../components/Histogram";
@@ -169,9 +170,7 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
   const fv = (v: number) => (Number.isFinite(v) ? formatValue(v) : "–");
 
   return (
-    <section className="card">
-      <CardTitle
-        info={
+    <Card title={<>Label-Analyse</>} info={
           <>
             <p>
               Statistik und Histogramm eines Datensatzes je Region einer Segmentierung oder eines Atlas (z. B. CT-Organe auf dem PET, Hirnatlas auf einem
@@ -181,10 +180,7 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
               Werte in den Einheiten des Datensatzes; Varianz in Einheit², SD und Varianz als Stichprobenwerte (n − 1).
             </p>
           </>
-        }
-      >
-        Label-Analyse
-      </CardTitle>
+        }>
       <div className="button-row">
         <button className="secondary-btn" disabled={props.cerebraLoading} onClick={props.onLoadCerebra}>
           {props.cerebraLoading ? "Wird geladen …" : "Hirnatlas CerebrA (MNI)"}
@@ -402,6 +398,6 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
           <p className="tool-hint">Werte in {current.unit || "Originaleinheiten"}.</p>
         </>
       )}
-    </section>
+    </Card>
   );
 }

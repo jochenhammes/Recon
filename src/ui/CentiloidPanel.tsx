@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
-import { CardTitle, InfoText } from "./Info";
+import { Card } from "./Card";
+import { InfoText } from "./Info";
 import { CALIBRATIONS, type CentiloidCalibration, type CentiloidResult } from "../centiloid/centiloid";
 import { VOI_LABELS, VOI_NAMES, type VoiName } from "../centiloid/vois";
 import type { Option } from "./NormalizationPanel";
@@ -66,10 +67,7 @@ export function CentiloidPanel(props: CentiloidPanelProps) {
   const o = props.outcome;
 
   return (
-    <section className="card">
-      <CardTitle info="Amyloid-Last auf der Centiloid-Skala (0 = junge Gesunde, 100 = typische Alzheimer-Demenz): SUVR der Standard-Kortex-VOI zur Referenzregion im MNI-Raum, umgerechnet mit der Kalibrierung des Tracers.">
-        Centiloid
-      </CardTitle>
+    <Card title={<>Centiloid</>} info="Amyloid-Last auf der Centiloid-Skala (0 = junge Gesunde, 100 = typische Alzheimer-Demenz): SUVR der Standard-Kortex-VOI zur Referenzregion im MNI-Raum, umgerechnet mit der Kalibrierung des Tracers." status={props.running ? { text: "läuft", tone: "run" } : o ? { text: `${Math.round(o.result.centiloid)} CL`, tone: "ok" } : null}>
 
       <input
         ref={fileInput}
@@ -252,6 +250,6 @@ export function CentiloidPanel(props: CentiloidPanelProps) {
           <p className="tool-hint">SUVR = Kortex / Referenz; markiert ist die Referenz der Kalibrierung.</p>
         </div>
       )}
-    </section>
+    </Card>
   );
 }

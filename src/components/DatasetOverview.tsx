@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Card } from "../ui/Card";
 import { type VolumeStats, computeStats } from "../analysis/stats";
 import type { Vec3, WorldToVoxel } from "../core/geometry";
 import type { Mat4 } from "../core/transform";
@@ -60,8 +61,7 @@ export function DatasetOverview({ rows, selectedId, onSelect, voi }: DatasetOver
 
   return (
     <>
-      <section className="card">
-        <h3>Alle Datensätze</h3>
+      <Card title={<>Alle Datensätze</>}>
         <div className="region-table-wrap">
           <table className="region-table overview-table">
             <thead>
@@ -102,10 +102,9 @@ export function DatasetOverview({ rows, selectedId, onSelect, voi }: DatasetOver
           </table>
         </div>
         <p className="tool-hint">Klick auf eine Zeile wählt den Datensatz für die Detailanalyse (Histogramm) aus.</p>
-      </section>
+      </Card>
       {voi && voiRows && (
-        <section className="card">
-          <h3>VOI auf allen Datensätzen</h3>
+        <Card title={<>VOI auf allen Datensätzen</>}>
           <p className="hint">{voi.label} – über die Registrierung auf jeden Datensatz übertragen.</p>
           <div className="region-table-wrap">
             <table className="region-table overview-table">
@@ -147,7 +146,7 @@ export function DatasetOverview({ rows, selectedId, onSelect, voi }: DatasetOver
             </table>
           </div>
           <p className="tool-hint">Peak: Mittel der 1-ml-Kugel um die heißesten Voxel in der VOI.</p>
-        </section>
+        </Card>
       )}
     </>
   );

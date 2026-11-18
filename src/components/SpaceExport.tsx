@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Card } from "../ui/Card";
 import { InfoText } from "../ui/Info";
 import type { Vec3, WorldToVoxel } from "../core/geometry";
 import { type Mat4, worldToVoxelThrough } from "../core/transform";
@@ -131,8 +132,7 @@ export function SpaceExport({ spaces, activeId, anonymize }: SpaceExportProps) {
   }
 
   return (
-    <section className="card">
-      <h3>In Zielraum exportieren / resampeln</h3>
+    <Card title={<>In Zielraum exportieren / resampeln</>}>
       <div className="field">
         Datensätze
         {spaces.map((s) => (
@@ -247,6 +247,6 @@ export function SpaceExport({ spaces, activeId, anonymize }: SpaceExportProps) {
       </button>
       {status && <p className="tool-hint">{status}</p>}
       {error && <div className="error-banner">{error}</div>}
-    </section>
+    </Card>
   );
 }

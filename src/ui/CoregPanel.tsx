@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { Card } from "./Card";
 import { COST_LABELS, type CostName } from "../registration/cost";
 
 export type CostChoice = CostName | "auto";
@@ -40,8 +41,7 @@ export function CoregPanel(props: CoregPanelProps) {
   const preset = LEVEL_PRESETS.findIndex((p) => p.levels.join() === settings.levels.join());
 
   return (
-    <section className="card">
-      <h3>3 · Einstellungen</h3>
+    <Card title={<>3 · Einstellungen</>} defaultOpen={false} persistKey="coreg-settings">
       <div className="segmented-control" role="group" aria-label="Freiheitsgrade">
         <button className={settings.dof === 6 ? "active" : ""} disabled={running} onClick={() => set({ dof: 6 })}>
           Rigide (6)
@@ -112,6 +112,6 @@ export function CoregPanel(props: CoregPanelProps) {
           und Scherung.
         </p>
       )}
-    </section>
+    </Card>
   );
 }

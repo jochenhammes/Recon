@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { CardTitle } from "../ui/Info";
+import { Card } from "../ui/Card";
 import type { VolumeStats } from "../analysis/stats";
 import type { Vec3 } from "../core/geometry";
 import { type EditOp, type ValueRule, type VoiAction, changesGrid, countAffected, describeEdit } from "../edit/operations";
@@ -119,8 +119,7 @@ export function ValueSection(props: ValueSectionProps) {
   }
 
   return (
-    <section className="card">
-      <h3>Werte</h3>
+    <Card title={<>Werte</>}>
       <label className="field">
         Operation
         <select value={mode} onChange={(e) => changeMode(e.target.value as ValueMode)}>
@@ -167,7 +166,7 @@ export function ValueSection(props: ValueSectionProps) {
       >
         Anwenden
       </button>
-    </section>
+    </Card>
   );
 }
 
@@ -217,8 +216,7 @@ export function VoiSection(props: VoiSectionProps) {
   const affected = useMemo(() => (hasVoi && action ? countFor(region, action) : null), [hasVoi, region, action, countFor]);
 
   return (
-    <section className="card">
-      <h3>VOI (Volume of Interest)</h3>
+    <Card title={<>VOI (Volume of Interest)</>}>
       <div className="segmented-control" role="group" aria-label="VOI-Werkzeug">
         {(
           [
@@ -344,7 +342,7 @@ export function VoiSection(props: VoiSectionProps) {
         </>
       )}
       {props.hasVoi && !stats && <p className="tool-hint">VOI ist leer.</p>}
-    </section>
+    </Card>
   );
 }
 
@@ -354,13 +352,12 @@ export function FilterSection({ busy, onApply }: { busy: boolean; onApply: (op: 
   const [fwhm, setFwhm] = useState("6");
   const v = parseInput(fwhm);
   return (
-    <section className="card">
-      <h3>Filter</h3>
+    <Card title={<>Filter</>} defaultOpen={false} persistKey="edit-filter">
       <TextInput label="Gauß-Glättung, FWHM (mm)" value={fwhm} onChange={setFwhm} />
       <button className="primary-btn" disabled={!(v > 0) || busy} onClick={() => onApply({ type: "gaussian", fwhmMm: v })}>
         Glätten
       </button>
-    </section>
+    </Card>
   );
 }
 
@@ -371,8 +368,7 @@ export function GeometrySection({ volume, busy, onApply }: { volume: Volume3D; b
   const unchanged = parsed.every((s, a) => Math.abs(s - volume.geometry.spacing[a]) < 1e-3);
   const dims = valid ? [volume.nx, volume.ny, volume.nz].map((n, a) => Math.max(1, Math.round((n * volume.geometry.spacing[a]) / parsed[a]))) : null;
   return (
-    <section className="card">
-      <CardTitle info="Spiegeln und Drehen verändern die Bildlage im Patientenkoordinatensystem.">Geometrie</CardTitle>
+    <Card title={<>Geometrie</>} info="Spiegeln und Drehen verändern die Bildlage im Patientenkoordinatensystem." defaultOpen={false} persistKey="edit-geometry">
       <div className="chip-row">
         <button className="chip-btn" disabled={busy} onClick={() => onApply({ type: "flip", axis: 0 })}>
           Spiegeln R↔L
@@ -413,7 +409,7 @@ export function GeometrySection({ volume, busy, onApply }: { volume: Volume3D; b
       <button className="primary-btn" disabled={!valid || unchanged || busy} onClick={() => onApply({ type: "resample", spacing: parsed })}>
         Resampling
       </button>
-    </section>
+    </Card>
   );
 }
 
@@ -423,8 +419,7 @@ export function HistorySection(props: Units & { edits: EditOp[]; busy: boolean; 
   const { edits, busy } = props;
   const gridChanged = edits.some(changesGrid);
   return (
-    <section className="card">
-      <h3>Verlauf</h3>
+    <Card title={<>Verlauf</>} status={edits.length ? { text: `${edits.length} Schritt${edits.length === 1 ? "" : "e"}`, tone: "info" } : null}>
       {busy && <p className="tool-hint">Berechnung läuft …</p>}
       {edits.length === 0 ? (
         <p className="tool-hint">Noch keine Bearbeitung.</p>
@@ -444,6 +439,6 @@ export function HistorySection(props: Units & { edits: EditOp[]; busy: boolean; 
           Original
         </button>
       </div>
-    </section>
+    </Card>
   );
 }

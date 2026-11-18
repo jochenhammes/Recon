@@ -29,7 +29,7 @@ export function InfoText({ children, details }: { children?: ReactNode; details:
   );
 }
 
-function InfoButton({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+export function InfoButton({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   return (
     <button type="button" className={open ? "info-btn open" : "info-btn"} aria-expanded={open} aria-label="Erläuterung" title={open ? "Erläuterung ausblenden" : "Erläuterung anzeigen"} onClick={onToggle}>
       <Info size={14} />

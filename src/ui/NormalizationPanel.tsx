@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CardTitle } from "./Info";
+import { Card } from "./Card";
 import { INTERPOLATION_LABELS, type Interpolation } from "../resample/resample";
 import type { Normalization } from "../normalization/model";
 
@@ -57,10 +57,7 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
 
   return (
     <>
-      <section className="card">
-        <CardTitle info="T1-MRT → MNI-T1-Vorlage; Hirn-PET ohne MRT → SPM-PET-Vorlage; Perfusions-SPECT → SPM-SPECT-Vorlage. Eigene Vorlagen (z. B. Amyloid) im Panel „Daten“ unter „Standardraum-Vorlage“.">
-          Vorlage
-        </CardTitle>
+      <Card title={<>Vorlage</>} info="T1-MRT → MNI-T1-Vorlage; Hirn-PET ohne MRT → SPM-PET-Vorlage; Perfusions-SPECT → SPM-SPECT-Vorlage. Eigene Vorlagen (z. B. Amyloid) im Panel „Daten“ unter „Standardraum-Vorlage“." done={!!normalization} status={props.templateId ? { text: props.templates.find((t) => t.id === props.templateId)?.label ?? "", tone: "info" } : { text: "keine Vorlage", tone: "warn" }}>
         {props.templates.length === 0 ? (
           <p className="hint">Noch keine Vorlage geladen.</p>
         ) : (
@@ -84,15 +81,12 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
               </button>
             ))}
         </div>
-      </section>
+      </Card>
 
       {props.templates.length === 0 && props.error && <div className="error-banner">{props.error}</div>}
 
       {props.templates.length > 0 && (
-        <section className="card">
-          <CardTitle info={`Kostenfunktion: ${props.costLabel}. Startpunkt per Schwerpunkt und Rotationsraster (die Scanner-Koordinaten liegen meist weit vom MNI-Ursprung). Nichtlinear nur bei gleichem Kontrast von Subjekt und Vorlage (T1↔T1 bzw. PET↔PET-Vorlage).`}>
-            Normalisierung schätzen
-          </CardTitle>
+        <Card title={<>Normalisierung schätzen</>} info={`Kostenfunktion: ${props.costLabel}. Startpunkt per Schwerpunkt und Rotationsraster (die Scanner-Koordinaten liegen meist weit vom MNI-Ursprung). Nichtlinear nur bei gleichem Kontrast von Subjekt und Vorlage (T1↔T1 bzw. PET↔PET-Vorlage).`} done={!!normalization && !running} status={running ? { text: "läuft", tone: "run" } : normalization ? { text: normalization.kind === "affine" ? "✓ affin" : "✓ nichtlinear", tone: "ok" } : null}>
           <label className="field">
             Subjekt (meist das T1-MRT; ohne MRT das PET)
             <select value={props.subjectId ?? ""} disabled={running} onChange={(e) => props.onSubjectChange(e.target.value)}>
@@ -168,14 +162,11 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
             </div>
           )}
           {props.error && <div className="error-banner">{props.error}</div>}
-        </section>
+        </Card>
       )}
 
       {normalization && (
-        <section className="card">
-          <CardTitle info="Datensätze, die mit dem Subjekt coregistriert sind (z. B. das PET zum T1), werden über die Verformung des Subjekts in den Standardraum resampelt und als neue Datensätze angelegt (Vorlage wird Referenz).">
-            In Standardraum übertragen
-          </CardTitle>
+        <Card title={<>In Standardraum übertragen</>} info="Datensätze, die mit dem Subjekt coregistriert sind (z. B. das PET zum T1), werden über die Verformung des Subjekts in den Standardraum resampelt und als neue Datensätze angelegt (Vorlage wird Referenz).">
           {props.transferCandidates.map((c) => (
             <label key={c.id} className="checkbox-field">
               <input
@@ -201,7 +192,7 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
             {props.transferBusy ? "Wird übertragen …" : "Übertragen"}
           </button>
           {props.transferStatus && <p className="tool-hint">{props.transferStatus}</p>}
-        </section>
+        </Card>
       )}
       {props.children}
     </>

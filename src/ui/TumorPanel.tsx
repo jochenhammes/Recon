@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Card } from "./Card";
 import { formatValue } from "../components/format";
 import type { TumorBurden } from "../tumor/metrics";
 import { EXCLUSION_PRESETS } from "../tumor/organs";
@@ -100,8 +101,7 @@ export function TumorPanel(props: TumorPanelProps) {
 
   return (
     <>
-      <section className="card">
-        <h3>Tumorlast (metabolisches Tumorvolumen)</h3>
+      <Card title={<>Tumorlast (metabolisches Tumorvolumen)</>}>
         <div className="segmented-control" role="group" aria-label="Indikation">
           <button className={indication === "lymphoma" ? "active" : ""} onClick={() => props.onIndicationChange("lymphoma")}>
             Lymphom (FDG)
@@ -194,11 +194,10 @@ export function TumorPanel(props: TumorPanelProps) {
           {props.busy ? "Wird segmentiert …" : "Läsionen segmentieren"}
         </button>
         {props.error && <div className="error-banner">{props.error}</div>}
-      </section>
+      </Card>
 
       {b && (
-        <section className="card">
-          <h3>Ergebnis</h3>
+        <Card title={<>Ergebnis</>}>
           <p className="tool-hint">{props.description}</p>
           <dl className="summary-list">
             <dt>Läsionen</dt>
@@ -304,7 +303,7 @@ export function TumorPanel(props: TumorPanelProps) {
               </tbody>
             </table>
           </div>
-        </section>
+        </Card>
       )}
     </>
   );

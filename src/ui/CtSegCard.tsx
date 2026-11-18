@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CardTitle } from "./Info";
+import { Card } from "./Card";
 import { tileTimeLimitSec } from "../segmentation/ctSegment";
 import { type SegmentProgress, inferenceEstimate } from "../segmentation/infer";
 import type { CtSegBackend } from "../workers/ctseg.worker";
@@ -59,9 +59,7 @@ export function CtSegCard(props: CtSegCardProps) {
   const slow = inference && p && inference.avg && inference.since > 3 * inference.avg;
   const autoText = props.webgpu ? (firefox ? "Automatisch (Firefox: CPU)" : "Automatisch (WebGPU)") : "Automatisch (CPU)";
   return (
-    <section className="card">
-      <CardTitle
-        info={
+    <Card title={<>CT-Organsegmentierung</>} info={
           <>
             <p>
               117 Strukturen (Organe, Knochen, Gefäße, Muskeln) mit TotalSegmentator „total“ (3 mm) direkt im Browser – die Daten verlassen den Rechner
@@ -73,10 +71,7 @@ export function CtSegCard(props: CtSegCardProps) {
               Zwecke zertifiziert.
             </p>
           </>
-        }
-      >
-        CT-Organsegmentierung
-      </CardTitle>
+        } status={props.running ? { text: "läuft", tone: "run" } : null}>
       <p className="tool-hint">117 Strukturen per TotalSegmentator, lokal im Browser.</p>
       {props.cts.length === 0 ? (
         <p className="tool-hint">Kein CT geladen.</p>
@@ -143,6 +138,6 @@ export function CtSegCard(props: CtSegCardProps) {
       )}
       {props.status && <p className="tool-hint">{props.status}</p>}
       {props.error && <div className="error-banner">{props.error}</div>}
-    </section>
+    </Card>
   );
 }

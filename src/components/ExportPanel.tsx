@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Card } from "../ui/Card";
 import type { LoadedDataset } from "../dataset/types";
 import { modalityLabel } from "../dataset/describe";
 import type { ReconParams } from "../recon/volume";
@@ -149,8 +150,7 @@ export function ExportPanel({ dataset, spaces, activeId }: ExportPanelProps) {
 
   return (
     <div className="export-panel">
-      <section className="card">
-        <h3>Datensatz · {modalityLabel(source)} (eigener Raum)</h3>
+      <Card title={<>Datensatz · {modalityLabel(source)} (eigener Raum)</>}>
         <button className="secondary-btn" disabled={working} onClick={exportDicom}>
           {dicomLabel}
         </button>
@@ -176,7 +176,7 @@ export function ExportPanel({ dataset, spaces, activeId }: ExportPanelProps) {
               : "Alle Header-Daten des Originals werden unverändert übernommen. Neu vergeben werden SOP- und Series-Instance-UID; ImageType wird DERIVED, Fenster und Pixelwert-Grenzen werden angepasst."
             : "DICOM-Export ohne Original-Header: anonymisiertes Secondary-Capture-Bild mit Voxelgeometrie."}
         </p>
-      </section>
+      </Card>
 
       <SpaceExport key={activeId} spaces={spaces} activeId={activeId} anonymize={anonOptions} />
 

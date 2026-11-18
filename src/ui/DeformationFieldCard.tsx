@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { CardTitle } from "./Info";
+import { Card } from "./Card";
 
 export interface DeformationFieldCardProps {
   subjectLabel: string | null;
@@ -14,18 +14,13 @@ export interface DeformationFieldCardProps {
 export function DeformationFieldCard(props: DeformationFieldCardProps) {
   const input = useRef<HTMLInputElement>(null);
   return (
-    <section className="card">
-      <CardTitle
-        info={
+    <Card title={<>SPM / CAT12-Verformungsfeld</>} info={
           <>
             Ein in SPM (Segment/Normalise) oder CAT12 berechnetes Feld <code>y_*.nii</code> des Subjekts übernehmen – anschließend lassen sich das T1 und
             alle dazu coregistrierten Datensätze (z. B. das PET) darüber in den Standardraum übertragen. Das Subjekt muss das Bild sein, auf dem SPM/CAT12
             gerechnet hat (gleiche Orientierung im Header).
           </>
-        }
-      >
-        SPM / CAT12-Verformungsfeld
-      </CardTitle>
+        } defaultOpen={false} persistKey="spm-field">
       <p className="tool-hint">
         Feld <code>y_*.nii</code> aus SPM/CAT12 übernehmen.
       </p>
@@ -49,6 +44,6 @@ export function DeformationFieldCard(props: DeformationFieldCardProps) {
         </button>
       </div>
       {props.status && <p className="tool-hint">{props.status}</p>}
-    </section>
+    </Card>
   );
 }

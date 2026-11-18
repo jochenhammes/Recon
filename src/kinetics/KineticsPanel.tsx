@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+import { Card } from "../ui/Card";
 import { type AtlasInfo, REFERENCE_PRESETS, presetIndices } from "../atlas/atlas";
 import { formatValue } from "../components/format";
 import { csvText, csvWithInfo } from "../core/csv";
 import type { LoadedDataset } from "../dataset/types";
 import type { Option } from "../ui/NormalizationPanel";
-import { CardTitle } from "../ui/Info";
 import { Chart, type ChartSeries } from "./Chart";
 import type { FrameMotion } from "./motion";
 import { type PatlakFit, patlakFit, patlakSetup } from "./patlak";
@@ -268,17 +268,12 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
 
   return (
     <>
-      <section className="card">
-        <CardTitle
-          info={
+      <Card title={<>1 · Dynamische Serie</>} info={
             <>
               Kinetische Modellierung mit Referenzregion (ohne Blutentnahme): Patlak für irreversibel bindende Tracer (z. B. FDOPA, FDG) und SRTM für
               reversibel bindende Tracer (Rezeptorliganden, Amyloid). Nach dem MATLAB-Paket der Arbeitsgruppe (github.com/ghaefner/kinetic-modeling).
             </>
-          }
-        >
-          1 · Dynamische Serie
-        </CardTitle>
+          } done={!!dyn?.inMni} status={info ? { text: `${info.frames.length} Frames${dyn?.inMni ? " · MNI" : ""}`, tone: dyn?.inMni ? "ok" : "info" } : { text: "keine Daten", tone: "warn" }}>
         {api.dynamics.length === 0 ? (
           <p className="tool-hint">Keine dynamischen Daten – im Bereich „Daten“ eine dynamische DICOM-Serie oder ein 4D-NIfTI (+ BIDS-JSON) laden.</p>
         ) : (
@@ -340,14 +335,11 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
             )}
           </>
         )}
-      </section>
+      </Card>
 
       {dyn && info && !dyn.inMni && (
         <>
-          <section className="card">
-            <CardTitle info="Frames ab der Startzeit werden rigide auf die gewählte Referenz registriert; frühere Frames (wenig Signal) übernehmen die Lage des ersten registrierten Frames.">
-              2 · Bewegungskorrektur
-            </CardTitle>
+          <Card title={<>2 · Bewegungskorrektur</>} info="Frames ab der Startzeit werden rigide auf die gewählte Referenz registriert; frühere Frames (wenig Signal) übernehmen die Lage des ersten registrierten Frames." done={!!info.motion} status={info.motion ? { text: "✓ korrigiert", tone: "ok" } : null}>
             <label className="field">
               Registrieren ab (s nach Start)
               <input value={fromSec} disabled={!!busy} onChange={(e) => setFromSec(e.target.value)} />
@@ -372,10 +364,8 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
                 {maxShift! > 2 && <p className="warning-banner">Bewegung bis {fmt(maxShift!, 1)} mm – korrigiert; Ergebnis bitte im Viewer prüfen.</p>}
               </>
             )}
-          </section>
-          <section className="card">
-            <CardTitle
-              info={
+          </Card>
+          <Card title={<>3 · In den MNI-Raum</>} info={
                 <>
                   <p>Summenbild → T1 rigide und T1 → MNI affin (wie bei Centiloid), oder ohne MRT affin auf die SPM-PET-Vorlage; danach werden alle Frames übertragen.</p>
                   <p>
@@ -383,10 +373,7 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
                     Perfusion und passen gut zur SPM-PET-Vorlage, späte Frames die Tracerbindung.
                   </p>
                 </>
-              }
-            >
-              3 · In den MNI-Raum
-            </CardTitle>
+              }>
             <div className="inline-fields hist-export-fields">
               <label className="field">
                 Registrierungsbild: Summe von (min)
@@ -412,13 +399,12 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
             <button className="primary-btn" disabled={!!busy} onClick={() => void toMni()}>
               Frames in den MNI-Raum übertragen
             </button>
-          </section>
+          </Card>
         </>
       )}
 
       {dyn && info && dyn.inMni && (
-        <section className="card">
-          <h3>4 · Referenzregion und Modell</h3>
+        <Card title={<>4 · Referenzregion und Modell</>} status={result ? { text: `✓ ${result.model === "patlak" ? "Patlak" : "SRTM"}`, tone: "ok" } : null}>
           <div className="button-row">
             <button className="secondary-btn" disabled={api.atlasBusy} onClick={api.loadCerebra}>
               {api.atlasBusy ? "Wird geladen …" : "CerebrA-Atlas laden"}
@@ -472,7 +458,7 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
               </button>
             </>
           )}
-        </section>
+        </Card>
       )}
 
       {busy && (
@@ -488,8 +474,7 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
       {error && <div className="error-banner">{error}</div>}
 
       {tacSeries.length > 0 && (
-        <section className="card">
-          <h3>{current ? `Ergebnis · ${current.model === "patlak" ? "Patlak" : "SRTM"} · Referenz ${current.refLabel}` : "Zeit-Aktivitäts-Kurve"}</h3>
+        <Card title={<>{current ? `Ergebnis · ${current.model === "patlak" ? "Patlak" : "SRTM"} · Referenz ${current.refLabel}` : "Zeit-Aktivitäts-Kurve"}</>}>
           <Chart xLabel="Zeit (min)" yLabel="Aktivität" series={tacSeries} />
           {patlakSeries.length > 0 && <Chart xLabel="∫C_ref / C_ref (min)" yLabel="C / C_ref" series={patlakSeries} />}
           {current && (
@@ -557,7 +542,7 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
               </div>
             </>
           )}
-        </section>
+        </Card>
       )}
     </>
   );

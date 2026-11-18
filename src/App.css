@@ -121,7 +121,7 @@
   cursor: pointer;
 }
 
-.nav-item:hover:not(:disabled) {
+.nav-item:hover:not(.disabled) {
   background: var(--surface-2);
   color: var(--text-h);
 }
@@ -142,7 +142,7 @@
   background: var(--accent);
 }
 
-.nav-item:disabled {
+.nav-item.disabled {
   opacity: 0.35;
   cursor: default;
 }
@@ -2025,4 +2025,90 @@ tr.excluded-row td {
 .upload-panel.compact .dropzone {
   padding: 10px;
   min-height: 0;
+}
+
+/* ─── Collapsible cards ───────────────────────────────────────────────── */
+.fold-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.fold-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.card button.fold-toggle {
+  white-space: normal;
+}
+.fold-toggle h3 {
+  margin: 0;
+  min-width: 0;
+}
+.fold-toggle .chevron {
+  flex-shrink: 0;
+  color: var(--text-dim);
+  transition: transform 0.15s;
+}
+.fold-card.open .fold-toggle .chevron {
+  transform: rotate(90deg);
+}
+.fold-card .fold-head .info-btn {
+  margin-top: 0;
+}
+.fold-card.open .fold-head {
+  margin-bottom: 10px;
+}
+.fold-card .info-text {
+  margin-top: 8px;
+}
+.fold-status {
+  flex-shrink: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+}
+.fold-status.tone-ok {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 50%, transparent);
+}
+.fold-status.tone-run {
+  color: var(--accent-strong);
+  border-color: var(--accent-border);
+}
+.fold-status.tone-warn {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 50%, transparent);
+}
+.fold-body > :last-child {
+  margin-bottom: 0;
+}
+
+.nav-item > span {
+  max-width: 64px;
+  text-align: center;
+  line-height: 1.15;
+  hyphens: manual;
+  overflow-wrap: normal;
+}
+.card .fold-toggle h3 {
+  overflow-wrap: normal;
+  hyphens: auto;
 }

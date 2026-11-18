@@ -10,6 +10,8 @@ export interface ShellTab {
   icon: LucideIcon;
   content: ReactNode;
   disabled?: boolean;
+  /** Shown as tooltip when disabled. */
+  disabledReason?: string;
   /** Small badge on the nav item (e.g. number of edits). */
   badge?: string | number;
   /** Use a wider side panel (e.g. header table). */
@@ -63,11 +65,12 @@ export function AppShell(props: AppShellProps) {
             return (
               <button
                 key={t.id}
-                className={selected ? "nav-item selected" : "nav-item"}
-                disabled={t.disabled}
+                className={`nav-item${selected ? " selected" : ""}${t.disabled ? " disabled" : ""}`}
+                aria-disabled={t.disabled}
                 aria-pressed={selected}
-                title={t.label}
+                title={t.disabled && t.disabledReason ? `${t.label} – ${t.disabledReason}` : t.label}
                 onClick={() => {
+                  if (t.disabled) return;
                   if (t.id === current.id) onPanelOpenChange(!panelOpen);
                   else {
                     onTabChange(t.id);

@@ -1,5 +1,5 @@
 import type { CostName } from "../registration/cost";
-import { CardTitle } from "./Info";
+import { Card } from "./Card";
 
 export type RegStatusKind = "scanner" | "registered" | "manual" | "pending" | "running" | "queued";
 
@@ -53,10 +53,7 @@ export function RegistrationSetup(props: RegistrationSetupProps) {
 
   return (
     <>
-      <section className="card">
-        <CardTitle info="Der Basis-Datensatz definiert den Raum – alle anderen werden darauf ausgerichtet und darin angezeigt. Export „im Raum eines anderen Datensatzes“ und Fusionen nutzen dieses Raster.">
-          1 · Zielraum (Basis)
-        </CardTitle>
+      <Card title={<>1 · Zielraum (Basis)</>} info="Der Basis-Datensatz definiert den Raum – alle anderen werden darauf ausgerichtet und darin angezeigt. Export „im Raum eines anderen Datensatzes“ und Fusionen nutzen dieses Raster.">
         <label className="field">
           Basis-Datensatz
           <select value={props.referenceId} disabled={props.running} onChange={(e) => props.onReferenceChange(e.target.value)}>
@@ -68,10 +65,9 @@ export function RegistrationSetup(props: RegistrationSetupProps) {
           </select>
         </label>
         {base && <p className="tool-hint">{base.info}</p>}
-      </section>
+      </Card>
 
-      <section className="card">
-        <h3>2 · Auf die Basis registrieren</h3>
+      <Card title={<>2 · Auf die Basis registrieren</>}>
         <div className="reg-list">
           {props.rows.map((r) => (
             <div key={r.id} className={`reg-row${r.id === props.focusId ? " focused" : ""}`} onClick={() => props.onFocus(r.id)}>
@@ -138,7 +134,7 @@ export function RegistrationSetup(props: RegistrationSetupProps) {
           </>
         )}
         {props.error && <div className="error-banner">{props.error}</div>}
-      </section>
+      </Card>
     </>
   );
 }
