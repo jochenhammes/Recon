@@ -332,6 +332,9 @@ Bereich **Export** (aktiver Datensatz):
 
 ## 14. Tipps und Fehlerbehebung
 
+- **Erster Aufruf**: Die Seite lädt sich einmal selbst neu (ein Service Worker aktiviert die „Cross-Origin-Isolation“);
+  danach rechnet die CT-Segmentierung auf der CPU mit mehreren Threads (ca. 2–3× schneller). In privaten Fenstern
+  ohne Service Worker läuft sie mit einem Thread.
 - **Browser**: Chrome oder Edge mit aktueller Grafikkarte für die CT-Segmentierung (WebGPU). Safari/Firefox rechnen die
   Segmentierung ggf. auf der CPU (langsamer). Bei sehr großen Datensätzen kann der Browser-Speicher knapp werden –
   andere Tabs schließen.

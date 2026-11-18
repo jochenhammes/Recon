@@ -62,6 +62,8 @@ die CT-Segmentierung läuft dort ggf. auf der CPU.
 - `public/atlases/`: CerebrA (Manera et al. 2020, Sci Data 7:237), CC0 1.0, auf das 2-mm-Raster der Vorlage übertragen.
 - `public/models/totalseg-total-3mm/`: TotalSegmentator „total“ 3 mm (Wasserthal et al., Radiology: AI 2023; nnU-Net),
   Apache 2.0, nach ONNX exportiert (`tools/totalseg-onnx/export.py`), siehe `NOTICE.txt`.
+- `public/coi-serviceworker.js`: coi-serviceworker 0.1.7 (G. Zuidhof), MIT (`LICENSE-coi-serviceworker.txt`), angepasst –
+  aktiviert Cross-Origin-Isolation für mehrere CPU-Threads auf GitHub Pages.
 - Nicht mitgeliefert: GAAIN-Centiloid-VOIs und -Daten (nur persönliche, nicht-kommerzielle Nutzung), AAL3 (Download von
   [gin.cnrs.fr](https://www.gin.cnrs.fr/en/tools/aal/)).
 - Screenshots im Handbuch: synthetische Phantome, öffentliches Beispiel-CT von TotalSegmentator und aus der MNI-Vorlage

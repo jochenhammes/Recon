@@ -1,5 +1,8 @@
 import * as ort from "onnxruntime-web";
 import wasmUrl from "onnxruntime-web/ort-wasm-simd-threaded.jsep.wasm?url";
+// The Emscripten loader as a separate file: multi-threaded WebAssembly starts its threads from it
+// (with cross-origin isolation); bundled into this worker, the threads would start the worker itself.
+import mjsUrl from "onnxruntime-web/ort-wasm-simd-threaded.jsep.mjs?url";
 import type { Vec3 } from "../core/geometry";
 import { slidingWindow } from "../segmentation/infer";
 
@@ -36,7 +39,7 @@ self.onmessage = async (event: MessageEvent<CtSegJob | { type: "stop" }>) => {
     return;
   }
   try {
-    ort.env.wasm.wasmPaths = { wasm: wasmUrl };
+    ort.env.wasm.wasmPaths = { wasm: wasmUrl, mjs: mjsUrl };
     ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(8, navigator.hardwareConcurrency || 4) : 1;
     // Only touch the GPU when it may be used: after a GPU crash, even requestAdapter() can hang.
     const hasGpu =

@@ -5,6 +5,9 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Recon Studio</title>
+    <!-- Cross-origin isolation (COOP/COEP) via service worker: enables multi-threaded WebAssembly
+         (CT segmentation on the CPU) on hosts like GitHub Pages that cannot set these headers. -->
+    <script src="/coi-serviceworker.js"></script>
   </head>
   <body>
     <div id="root"></div>
