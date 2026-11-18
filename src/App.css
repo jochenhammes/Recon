@@ -1476,3 +1476,21 @@ tr.excluded-row td {
   width: 100%;
   accent-color: var(--accent);
 }
+
+/* "Weitere Datensätze" in the view tab: long names wrap, the button stays intact */
+.hidden-dataset-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+}
+.hidden-dataset-row > span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.hidden-dataset-row > button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}

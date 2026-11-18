@@ -1891,7 +1891,7 @@ function App() {
         <section className="card">
           <h3>Weitere Datensätze</h3>
           {hiddenEntries.map((e) => (
-            <div key={e.id} className="layer-head">
+            <div key={e.id} className="hidden-dataset-row">
               <span>{entryLabel(e)}</span>
               <button className="chip-btn" onClick={() => makeOverlay(e.id)}>
                 als Overlay einblenden
