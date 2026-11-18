@@ -7,7 +7,7 @@ import { compositeLayers } from "./composite";
 import { type GpuDraw, ImageCanvas } from "./ImageCanvas";
 import { GlRenderer } from "./gl/renderer";
 import { mipSource, orientedMip } from "./mip";
-import { Volume3D, lutGradient } from "./volume";
+import { Volume3D, lutGradient, lutTable } from "./volume";
 import {
   type DisplayGrid,
   type PlaneKind,
@@ -48,6 +48,76 @@ export interface ViewerProps {
 
 const EMPTY_RGBA = new Uint8ClampedArray(0);
 const LAYERS_KEY = "recon-studio-layer-panel";
+const LEGEND_KEY = "recon-studio-legend";
+
+interface LegendItem {
+  id: string;
+  label: string;
+  /** Color scale: gradient with min/max; label images: color and name of the region under the cursor. */
+  lut: ViewerLayer["display"]["lut"];
+  min?: string;
+  max?: string;
+  unit?: string;
+  region?: { name: string; color: string };
+}
+
+/** Legend entries: every visible colored layer (window in display units) and label images (region under the cursor). */
+function legendItems(layers: ViewerLayer[], point: Vec3): LegendItem[] {
+  const out: LegendItem[] = [];
+  for (const l of layers) {
+    if (!l.display.visible || l.hideInStatus) continue;
+    if (l.display.lut === "labels") {
+      const v = Math.round(valueAt(l.volume, l.w2v, point));
+      const t = lutTable("labels");
+      // Same mapping as the renderer: label images use the window [0, 255].
+      const w = l.display.window;
+      const idx = Math.max(0, Math.min(255, Math.round(((v - w[0]) / (w[1] - w[0] || 1)) * 255)));
+      const region = Number.isFinite(v) && v > 0 ? { name: l.labelNames?.get(v) ?? `Label ${v}`, color: `rgb(${t[idx * 3]}, ${t[idx * 3 + 1]}, ${t[idx * 3 + 2]})` } : undefined;
+      out.push({ id: l.id, label: l.label, lut: "labels", region });
+      continue;
+    }
+    if (l.display.lut === "gray" || l.display.lut === "inverted" || l.display.lut === "voi") continue;
+    const sc = l.unit?.scale ?? 1;
+    out.push({ id: l.id, label: l.label, lut: l.display.lut, min: formatValue(l.display.window[0] * sc), max: formatValue(l.display.window[1] * sc), unit: l.unit?.label });
+  }
+  return out;
+}
+
+/** Draws the legend into a screenshot (bottom left, scaled by dpr). */
+function drawLegend(ctx: CanvasRenderingContext2D, items: LegendItem[], height: number, dpr: number) {
+  if (!items.length) return;
+  const pad = 8 * dpr, row = 30 * dpr, w = 190 * dpr;
+  const h = pad * 2 + row * items.length;
+  let y = height - h - 8 * dpr;
+  const x = 8 * dpr;
+  ctx.save();
+  ctx.fillStyle = "rgba(16, 17, 22, 0.85)";
+  ctx.fillRect(x, y, w, h);
+  ctx.font = `${11 * dpr}px system-ui, sans-serif`;
+  ctx.textBaseline = "top";
+  y += pad;
+  for (const it of items) {
+    ctx.fillStyle = "#d8dbe4";
+    ctx.fillText(it.region ? `${it.label}: ${it.region.name}` : it.label, x + pad, y);
+    if (!it.region && it.lut !== "labels") {
+      const t = lutTable(it.lut);
+      const gx = x + pad, gy = y + 14 * dpr, gw = w - 2 * pad, gh = 6 * dpr;
+      for (let i = 0; i < gw; i++) {
+        const k = Math.round((i / (gw - 1)) * 255);
+        ctx.fillStyle = `rgb(${t[k * 3]}, ${t[k * 3 + 1]}, ${t[k * 3 + 2]})`;
+        ctx.fillRect(gx + i, gy, 1, gh);
+      }
+      ctx.fillStyle = "#a3a7b6";
+      ctx.font = `${10 * dpr}px system-ui, sans-serif`;
+      ctx.fillText(`${it.min}`, gx, gy + gh + 1 * dpr);
+      const right = `${it.max}${it.unit ? ` ${it.unit}` : ""}`;
+      ctx.fillText(right, gx + gw - ctx.measureText(right).width, gy + gh + 1 * dpr);
+      ctx.font = `${11 * dpr}px system-ui, sans-serif`;
+    }
+    y += row;
+  }
+  ctx.restore();
+}
 
 const VIEW_TITLES: Record<ViewKind, string> = { axial: "Axial", coronal: "Koronar", sagittal: "Sagittal", mip: "MIP" };
 const GRID_ORDER: ViewKind[] = ["axial", "sagittal", "coronal", "mip"];
@@ -85,6 +155,22 @@ export function Viewer(props: ViewerProps) {
     });
   };
   const [helpOpen, setHelpOpen] = useState(false);
+  const [legendOn, setLegendOn] = useState(() => {
+    try {
+      return localStorage.getItem(LEGEND_KEY) !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const toggleLegend = () =>
+    setLegendOn((o) => {
+      try {
+        localStorage.setItem(LEGEND_KEY, o ? "0" : "1");
+      } catch {
+        /* storage unavailable */
+      }
+      return !o;
+    });
   const active = layers.find((l) => l.id === activeLayerId) ?? layers[layers.length - 1];
   const mipLayer = visible.find((l) => l.id === (props.mipLayerId ?? activeLayerId)) ?? visible[visible.length - 1];
   const mipVolume = mipLayer?.volume;
@@ -161,6 +247,7 @@ export function Viewer(props: ViewerProps) {
       const r = c.getBoundingClientRect();
       ctx.drawImage(c, Math.round((r.left - rootRect.left) * dpr), Math.round((r.top - rootRect.top) * dpr), Math.round(r.width * dpr), Math.round(r.height * dpr));
     });
+    if (legendOn) drawLegend(ctx, legendItems(layers, cursor), out.height, dpr);
     out.toBlob((blob) => {
       if (!blob) return;
       const url = URL.createObjectURL(blob);
@@ -206,6 +293,9 @@ export function Viewer(props: ViewerProps) {
         </button>
         {props.toolbar}
         <span className="viewer-toolbar-right">
+          <button className={legendOn ? "active" : ""} aria-pressed={legendOn} title="Farbskala ein-/ausblenden (wird auch im Screenshot gezeigt)" onClick={toggleLegend}>
+            Skala
+          </button>
           {props.layerPanel && (
             <button className={layersOpen ? "active" : ""} aria-pressed={layersOpen} title="Ebenen ein-/ausblenden" onClick={toggleLayers}>
               <Layers size={13} /> Ebenen
@@ -236,6 +326,7 @@ export function Viewer(props: ViewerProps) {
       </div>
       <div ref={layoutRef} className={`viewer-layout layout-${layout}`}>
         {props.layerPanel && layersOpen && <div className="viewer-layer-panel">{props.layerPanel}</div>}
+        {legendOn && <Legend items={legendItems(layers, statusPoint)} />}
         {layout === "grid" && GRID_ORDER.map(renderView)}
         {layout === "single" && renderView(focusView)}
         {layout === "focus" && (
@@ -510,5 +601,42 @@ function MipView({ layer, transform, onTransformChange, onWindowDrag, onDoubleCl
       onWindowDrag={onWindowDrag}
       onDoubleClick={onDoubleClick}
     />
+  );
+}
+
+function Legend({ items }: { items: LegendItem[] }) {
+  if (!items.length) return null;
+  return (
+    <div className="viewer-legend" aria-label="Farbskala">
+      {items.map((it) =>
+        it.lut === "labels" ? (
+          <div key={it.id} className="legend-row">
+            <span className="legend-name">{it.label}</span>
+            <span className="legend-region">
+              {it.region ? (
+                <>
+                  <i style={{ background: it.region.color }} />
+                  {it.region.name}
+                </>
+              ) : (
+                "–"
+              )}
+            </span>
+          </div>
+        ) : (
+          <div key={it.id} className="legend-row">
+            <span className="legend-name">{it.label}</span>
+            <span className="legend-bar" style={{ background: lutGradient(it.lut) }} />
+            <span className="legend-scale">
+              <span>{it.min}</span>
+              <span>
+                {it.max}
+                {it.unit ? ` ${it.unit}` : ""}
+              </span>
+            </span>
+          </div>
+        ),
+      )}
+    </div>
   );
 }
