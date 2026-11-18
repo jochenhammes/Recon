@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { BigTable } from "./BigTable";
 import { Card } from "./Card";
 import { InfoText } from "./Info";
 import { CALIBRATIONS, type CentiloidCalibration, type CentiloidResult } from "../centiloid/centiloid";
@@ -227,7 +228,7 @@ export function CentiloidPanel(props: CentiloidPanelProps) {
               {w}
             </div>
           ))}
-          <table className="region-table">
+          <BigTable title={`Centiloid – ${o.datasetLabel}`}><table className="region-table">
             <thead>
               <tr>
                 <th>VOI</th>
@@ -246,7 +247,7 @@ export function CentiloidPanel(props: CentiloidPanelProps) {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></BigTable>
           <p className="tool-hint">SUVR = Kortex / Referenz; markiert ist die Referenz der Kalibrierung.</p>
         </div>
       )}

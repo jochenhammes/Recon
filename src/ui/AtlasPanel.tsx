@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { BigTable } from "./BigTable";
 import { Card } from "./Card";
 import { type AtlasInfo, REFERENCE_PRESETS, type RegionStat, pooledMean, presetIndices, regionCsv } from "../atlas/atlas";
 import type { Option } from "./NormalizationPanel";
@@ -198,7 +199,7 @@ export function AtlasPanel(props: AtlasPanelProps) {
               </button>
             ))}
           </div>
-          <div className="region-table-wrap">
+          <BigTable title={`Atlas & SUVR – ${current.datasetLabel}`} onCsv={downloadCsv}>
             <table className="region-table">
               <thead>
                 <tr>
@@ -219,7 +220,7 @@ export function AtlasPanel(props: AtlasPanelProps) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </BigTable>
         </>
       )}
     </Card>

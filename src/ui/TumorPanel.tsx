@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { BigTable } from "./BigTable";
 import { Card } from "./Card";
 import { formatValue } from "../components/format";
 import type { TumorBurden } from "../tumor/metrics";
@@ -271,7 +272,7 @@ export function TumorPanel(props: TumorPanelProps) {
               Verwerfen
             </button>
           </div>
-          <div className="region-table-wrap">
+          <BigTable title="Tumorlast – Läsionen" onCsv={props.onExportCsv}>
             <table className="region-table">
               <thead>
                 <tr>
@@ -302,7 +303,7 @@ export function TumorPanel(props: TumorPanelProps) {
                   ))}
               </tbody>
             </table>
-          </div>
+          </BigTable>
         </Card>
       )}
     </>

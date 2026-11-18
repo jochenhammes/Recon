@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { BigTable } from "./BigTable";
 import { Card } from "./Card";
 import { InfoText } from "./Info";
 import { type AtlasInfo, type RegionStat, labelHistogramCsv, labelStatsCsv, regionValues } from "../atlas/atlas";
@@ -359,7 +360,7 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
             ))}
           </div>
           <p className="tool-hint">Zeile anklicken = Region ins Histogramm (Mehrfachauswahl möglich).</p>
-          <div className="region-table-wrap">
+          <BigTable title={`Label-Analyse – ${labelSet.label} auf ${current.datasetLabel}`} onCsv={downloadCsv}>
             <table className="region-table label-stats-table">
               <thead>
                 <tr>
@@ -394,7 +395,7 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
                 })}
               </tbody>
             </table>
-          </div>
+          </BigTable>
           <p className="tool-hint">Werte in {current.unit || "Originaleinheiten"}.</p>
         </>
       )}

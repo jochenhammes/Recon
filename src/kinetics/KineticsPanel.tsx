@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { BigTable } from "../ui/BigTable";
 import { Card } from "../ui/Card";
 import { type AtlasInfo, REFERENCE_PRESETS, presetIndices } from "../atlas/atlas";
 import { formatValue } from "../components/format";
@@ -500,7 +501,7 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
                 </>
               )}
               <p className="tool-hint">Zeile anklicken = Kurve und Fit der Region anzeigen.</p>
-              <div className="region-table-wrap">
+              <BigTable title={`Kinetik – ${current.model === "patlak" ? "Patlak" : "SRTM"} · Referenz ${current.refLabel}`} onCsv={downloadCsv}>
                 <table className="region-table label-stats-table">
                   <thead>
                     <tr>
@@ -539,7 +540,7 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </BigTable>
             </>
           )}
         </Card>
