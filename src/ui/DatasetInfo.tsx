@@ -53,6 +53,14 @@ export function DatasetInfo({ dataset, title, onRemove, children, highlighted }:
         </dd>
         <dt>Patientenkoordinaten</dt>
         <dd>{v.hasPatientGeometry ? "vorhanden" : "nicht bekannt"}</dd>
+        {dataset.dynamic && (
+          <>
+            <dt>Dynamisch</dt>
+            <dd>
+              {dataset.dynamic.frames.length} Frames · {Math.round((dataset.dynamic.start.at(-1)! + dataset.dynamic.duration.at(-1)!) / 60)} min (angezeigt: Mittelbild)
+            </dd>
+          </>
+        )}
         {dataset.edits.length > 0 && (
           <>
             <dt>Bearbeitungen</dt>

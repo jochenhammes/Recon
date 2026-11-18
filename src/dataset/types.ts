@@ -45,6 +45,19 @@ export type VolumeSource =
   | { kind: "nifti"; fileName: string; nifti: NiftiSourceInfo }
   | { kind: "dicom"; layout: "multiframe" | "series"; files: DicomSourceFile[] };
 
+/** Frames of a dynamic (4D) acquisition; the dataset's volume is their time-weighted mean. */
+export interface DynamicInfo {
+  /** One array per frame, on the dataset's grid. */
+  frames: Float32Array[];
+  /** Frame start times and durations in seconds (start relative to injection if known, else to the first frame). */
+  start: number[];
+  duration: number[];
+  /** Where the timing comes from. */
+  timeSource: "dicom" | "bids" | "nifti" | "manuell";
+  /** e.g. "Start relativ zum ersten Frame (Injektionszeit fehlt)". */
+  note?: string;
+}
+
 /** A volume loaded or reconstructed in the app, together with its provenance and edit history. */
 export interface LoadedDataset {
   /** Volume as originally loaded/reconstructed; used for "reset". */
@@ -63,6 +76,8 @@ export interface LoadedDataset {
   derivedFrom?: { name: string; source: VolumeSource; space: string; /** Overrides the modality label (e.g. "SUVR"). */ label?: string };
   source: VolumeSource;
   displayName: string;
+  /** Dynamic acquisition (frames + timing), if the data were 4D. */
+  dynamic?: DynamicInfo;
 }
 
 export function createDataset(volume: Volume3D, source: VolumeSource, displayName: string): LoadedDataset {

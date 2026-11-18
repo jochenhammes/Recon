@@ -1,6 +1,7 @@
 import * as dicomParser from "dicom-parser";
 import { Volume3D } from "./volume";
-import type { DicomPixelEncoding, DicomSourceFile, NiftiSourceInfo, VolumeSource } from "../dataset/types";
+import type { DicomPixelEncoding, DicomSourceFile, DynamicInfo, NiftiSourceInfo, VolumeSource } from "../dataset/types";
+import { parseDicomDateTime } from "../analysis/suv";
 import { PixelDecodeError, decodePixelFrames, describeParseError } from "../dicom/pixelDecode";
 import {
   type Vec3,
@@ -30,11 +31,38 @@ export interface LoadedVolume {
   source: VolumeSource;
   /** Set for label images (atlas, segmentation) recognized from the NIfTI header, a label table or the file name. */
   atlas?: AtlasInfo;
+  /** Set for dynamic (4D) data: frames and timing; `volume` is the time-weighted mean. */
+  dynamic?: DynamicInfo;
+}
+
+/** Time-weighted mean of the frames (equal weights if durations are unknown). */
+export function meanOfFrames(frames: Float32Array[], duration?: number[]): Float32Array {
+  const out = new Float32Array(frames[0].length);
+  const w = frames.map((_, i) => (duration && duration[i] > 0 ? duration[i] : 1));
+  const total = w.reduce((a, b) => a + b, 0);
+  frames.forEach((f, i) => {
+    const k = w[i] / total;
+    for (let v = 0; v < out.length; v++) out[v] += k * f[v];
+  });
+  return out;
+}
+
+/** BIDS PET sidecar: FrameTimesStart / FrameDuration (seconds). */
+export function parseBidsTiming(json: string, frames: number): { start: number[]; duration: number[] } | null {
+  try {
+    const j = JSON.parse(json) as { FrameTimesStart?: number[]; FrameDuration?: number[] };
+    if (Array.isArray(j.FrameTimesStart) && Array.isArray(j.FrameDuration) && j.FrameTimesStart.length === frames && j.FrameDuration.length === frames)
+      return { start: j.FrameTimesStart.map(Number), duration: j.FrameDuration.map(Number) };
+  } catch {
+    /* not a BIDS sidecar */
+  }
+  return null;
 }
 
 const NIFTI_NAME = /\.nii(\.gz)?$/i;
 /** Label tables that may accompany a label image (FSL/FreeSurfer LUT, ITK-SNAP, TSV/CSV, Caret XML). */
 const TABLE_NAME = /\.(txt|tsv|csv|lut|label|xml)$/i;
+const JSON_NAME = /\.json$/i;
 const baseName = (n: string) => n.replace(NIFTI_NAME, "").replace(/\.(nii\.)?(txt|tsv|csv|lut|label|xml)$/i, "").toLowerCase();
 
 /**
@@ -85,15 +113,17 @@ export async function loadVolumesFromFiles(input: File[]): Promise<MultiLoadResu
   const skipped: string[] = [];
   const niftis = files.filter((x) => NIFTI_NAME.test(x.name));
   const tables = niftis.length ? files.filter((x) => TABLE_NAME.test(x.name)) : [];
+  const jsons = files.filter((x) => JSON_NAME.test(x.name));
   for (const f of niftis) {
     try {
       const t = tableFor(f, niftis, tables);
-      items.push({ loaded: await loadNiftiFile(f, t ? await readTable(t) : undefined), name: f.name });
+      const sidecar = jsons.find((j) => j.name.replace(JSON_NAME, "").toLowerCase() === baseName(f.name)) ?? (niftis.length === 1 && jsons.length === 1 ? jsons[0] : undefined);
+      items.push({ loaded: await loadNiftiFile(f, t ? await readTable(t) : undefined, sidecar ? await sidecar.text() : undefined), name: f.name });
     } catch {
       skipped.push(f.name);
     }
   }
-  const dicomFiles = files.filter((x) => !NIFTI_NAME.test(x.name) && !tables.includes(x));
+  const dicomFiles = files.filter((x) => !NIFTI_NAME.test(x.name) && !tables.includes(x) && !jsons.includes(x));
   const results = await Promise.allSettled(dicomFiles.map(parseDicomFile));
   const ok: ParsedDicomFile[] = [];
   results.forEach((r, i) => (r.status === "fulfilled" ? ok.push(r.value) : skipped.push(dicomFiles[i].name)));
@@ -110,7 +140,7 @@ export async function loadVolumesFromFiles(input: File[]): Promise<MultiLoadResu
   const series: (LoadedItem & { number: number })[] = [];
   for (const g of groups.values()) {
     try {
-      const loaded = buildDicomVolume(g);
+      const loaded = buildDicomDynamic(g) ?? buildDicomVolume(g);
       const ds = g[0].file.dataSet;
       const desc = ds.string("x0008103e")?.trim();
       const number = parseInt(ds.string("x00200011") ?? "", 10);
@@ -143,11 +173,45 @@ export async function loadVolumeFromFiles(files: File[]): Promise<LoadedVolume> 
 
 // ─── NIfTI ───────────────────────────────────────────────────────────────────
 
-async function loadNiftiFile(file: File, table?: Map<number, string>): Promise<LoadedVolume> {
+async function loadNiftiFile(file: File, table?: Map<number, string>, sidecarJson?: string): Promise<LoadedVolume> {
   let buffer = await file.arrayBuffer();
   if (/\.gz$/i.test(file.name)) buffer = await decompressGzip(buffer);
   const { volume, nifti } = parseNifti1(buffer);
+  const dynamic = niftiDynamic(buffer, volume, sidecarJson);
+  if (dynamic) {
+    // The dataset shows the time-weighted mean; the frames are kept for kinetic modelling.
+    const mean = volume.withData(meanOfFrames(dynamic.frames, dynamic.duration));
+    return { volume: mean, source: { kind: "nifti", fileName: file.name, nifti }, dynamic };
+  }
   return { volume, source: { kind: "nifti", fileName: file.name, nifti }, atlas: detectAtlas(volume, nifti, file.name, table) };
+}
+
+/** All frames of a 4D NIfTI (dim[4] > 1) with timing from a BIDS sidecar or pixdim[4]; null for 3D files. */
+function niftiDynamic(buffer: ArrayBuffer, volume: Volume3D, sidecarJson?: string): DynamicInfo | null {
+  const view = new DataView(buffer);
+  const le = view.getInt32(0, true) === 348;
+  if (!le || view.getInt16(40, true) < 4) return null;
+  const nt = view.getInt16(48, true);
+  if (nt <= 1) return null;
+  const n = volume.nx * volume.ny * volume.nz;
+  const voxOffset = Math.max(352, Math.round(view.getFloat32(108, true)));
+  const all = readNiftiValues(buffer, true, view.getInt16(70, true), voxOffset, n * nt);
+  const slope = view.getFloat32(112, true), inter = view.getFloat32(116, true);
+  if (slope !== 0 && Number.isFinite(slope)) for (let i = 0; i < all.length; i++) all[i] = all[i] * slope + inter;
+  const frames = Array.from({ length: nt }, (_, t) => all.slice(t * n, (t + 1) * n));
+  const bids = sidecarJson ? parseBidsTiming(sidecarJson, nt) : null;
+  if (bids) return { frames, ...bids, timeSource: "bids" };
+  // pixdim[4] with xyzt_units (time bits 0x38: 8 = s, 16 = ms, 24 = µs); minutes are not a NIfTI unit.
+  const tr = view.getFloat32(92, true);
+  const unit = view.getUint8(123) & 0x38;
+  const step = tr > 0 ? (unit === 16 ? tr / 1000 : unit === 24 ? tr / 1e6 : tr) : 60;
+  return {
+    frames,
+    start: frames.map((_, i) => i * step),
+    duration: frames.map(() => step),
+    timeSource: "nifti",
+    note: tr > 0 ? "Frame-Zeiten aus pixdim[4] (gleich lange Frames) – bitte prüfen oder Tabelle anpassen." : "Keine Frame-Zeiten im NIfTI – bitte Tabelle eingeben (oder BIDS-JSON mitladen).",
+  };
 }
 
 export async function decompressGzip(buffer: ArrayBuffer): Promise<ArrayBuffer> {
@@ -345,6 +409,71 @@ async function loadDicomVolume(input: File[]): Promise<LoadedVolume> {
 }
 
 /** Builds one volume from the parsed files of a single series (sorted along the slice normal). */
+/**
+ * Dynamic PET series: the same slice positions repeat once per time frame. Splits the files into frames (k-th file
+ * at each position, ordered by acquisition time / frame reference time / instance number), builds one volume per
+ * frame and reads the frame timing. Null if the group is an ordinary 3D series.
+ */
+function buildDicomDynamic(parsed: ParsedDicomFile[]): LoadedVolume | null {
+  const iop = parsed[0].iop;
+  if (parsed.length < 4 || !iop || !parsed.every((p) => p.frames.length === 1 && p.positions?.length === 1)) return null;
+  const normal = cross([iop[0], iop[1], iop[2]], [iop[3], iop[4], iop[5]]);
+  const byPos = new Map<string, ParsedDicomFile[]>();
+  for (const p of parsed) {
+    const k = dot(p.positions![0], normal).toFixed(2);
+    const g = byPos.get(k);
+    if (g) g.push(p);
+    else byPos.set(k, [p]);
+  }
+  const nt = parsed.length / byPos.size;
+  if (byPos.size === parsed.length || !Number.isInteger(nt) || [...byPos.values()].some((g) => g.length !== nt)) return null;
+  const ds = (p: ParsedDicomFile) => p.file.dataSet;
+  const str = (p: ParsedDicomFile, tag: string) => ds(p).string(tag)?.trim();
+  const acq = (p: ParsedDicomFile) => parseDicomDateTime(str(p, "x00080022") ?? str(p, "x00080021") ?? str(p, "x00080020"), str(p, "x00080032"));
+  const order = (p: ParsedDicomFile) => [acq(p) ?? 0, parseFloat(str(p, "x00541300") ?? "0") || 0, p.instanceNumber];
+  for (const g of byPos.values())
+    g.sort((a, b) => {
+      const x = order(a), y = order(b);
+      return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+    });
+  const groups = [...byPos.values()];
+  const frameFiles = Array.from({ length: nt }, (_, t) => groups.map((g) => g[t]));
+  const vols = frameFiles.map((f) => buildDicomVolume(f));
+  const frames = vols.map((v) => v.volume.data);
+  // Timing: acquisition time of each frame relative to injection (or the first frame); duration from (0018,1242).
+  const first = frameFiles[0][0];
+  const rp = ds(first).elements["x00540016"]?.items?.[0]?.dataSet;
+  const rpStr = (tag: string) => rp?.string(tag)?.trim();
+  const dt = rpStr("x00181078");
+  const injection = dt && dt.length >= 10 ? parseDicomDateTime(dt.slice(0, 8), dt.slice(8).replace(/[+-]\d{4}$/, "")) : parseDicomDateTime(str(first, "x00080021") ?? str(first, "x00080020"), rpStr("x00181072"));
+  const starts = frameFiles.map((f) => Math.min(...f.map((p) => acq(p) ?? Infinity)));
+  const duration = frameFiles.map((f) => (parseFloat(str(f[0], "x00181242") ?? "") || 0) / 1000);
+  let start: number[];
+  let note: string | undefined;
+  const distinct = new Set(starts.filter(Number.isFinite)).size === nt;
+  if (distinct) {
+    const t0 = injection !== undefined && injection <= starts[0] ? injection : starts[0];
+    start = starts.map((s) => (s - t0) / 1000);
+    if (t0 === starts[0]) note = "Start relativ zum ersten Frame (Injektionszeit fehlt im Header).";
+  } else {
+    // Some systems write the series start into every frame: use the frame durations cumulatively.
+    start = [];
+    let acc = 0;
+    for (const d of duration) {
+      start.push(acc);
+      acc += d;
+    }
+    note = "Frame-Startzeiten aus den Frame-Dauern aufsummiert (Aufnahmezeiten im Header identisch).";
+  }
+  if (duration.some((d) => !(d > 0))) {
+    for (let i = 0; i < nt; i++) if (!(duration[i] > 0)) duration[i] = i + 1 < nt ? start[i + 1] - start[i] : duration[i - 1] ?? 60;
+    note = (note ? note + " " : "") + "Frame-Dauer (0018,1242) fehlt teilweise – aus den Startzeiten abgeleitet.";
+  }
+  if (str(first, "x00541102") === "NONE") note = (note ? note + " " : "") + "Achtung: Daten sind laut Header nicht zerfallskorrigiert.";
+  const mean = vols[0].volume.withData(meanOfFrames(frames, duration));
+  return { volume: mean, source: vols[0].source, dynamic: { frames, start, duration, timeSource: "dicom", note } };
+}
+
 function buildDicomVolume(parsed: ParsedDicomFile[]): LoadedVolume {
   // Sort by position along the slice normal when patient coordinates are known, else by
   // InstanceNumber / SliceLocation.

@@ -525,7 +525,8 @@ function App() {
 
   function handleVolumeLoaded(loaded: LoadedVolume, fileName: string) {
     if (!isAnatomical(loaded.source)) setProjectionSet(null);
-    const d = createDataset(loaded.volume, loaded.source, fileName);
+    const d0 = createDataset(loaded.volume, loaded.source, fileName);
+    const d = loaded.dynamic ? { ...d0, dynamic: loaded.dynamic } : d0;
     if (loaded.atlas) {
       // Label images (atlas, segmentation) come back as atlases: label colors, region list, region statistics.
       const hadReference = live.current.entries.some((e) => e.id === live.current.referenceId);
