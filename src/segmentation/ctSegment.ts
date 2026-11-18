@@ -2,7 +2,7 @@ import { worldToVoxelTransform } from "../core/geometry";
 import type { TargetGrid } from "../resample/resample";
 import { runResample } from "../resample/runner";
 import type { Volume3D } from "../viewer/volume";
-import type { CtSegJob } from "../workers/ctseg.worker";
+import type { CtSegBackend, CtSegJob } from "../workers/ctseg.worker";
 import type { SegmentProgress } from "./infer";
 import { type ModelMeta, rasGrid } from "./preprocess";
 
@@ -75,11 +75,23 @@ export interface CtSegRun {
   cancel: () => void;
 }
 
+/** Watchdog limit for one WebGPU tile: the first includes shader compilation, later ones are ~uniform. */
+export function tileTimeLimitSec(done: number, elapsedSec: number): number {
+  if (done === 0) return 15 * 60;
+  return Math.max(180, 6 * (elapsedSec / done));
+}
+
 /** Full pipeline: model download/cache → RAS 3 mm resampling → normalization → sliding window in a worker. */
-export function runCtSegmentation(ct: Volume3D, backend: "auto" | "wasm", onProgress: (p: SegmentProgress) => void): CtSegRun {
+export function runCtSegmentation(ct: Volume3D, backend: CtSegBackend, onProgress: (p: SegmentProgress) => void): CtSegRun {
   let worker: Worker | null = null;
+  let watchdog: ReturnType<typeof setInterval> | null = null;
   let cancelled = false;
   let rejectFn: (e: unknown) => void = () => {};
+  const stopAll = () => {
+    if (watchdog) clearInterval(watchdog);
+    watchdog = null;
+    worker?.terminate();
+  };
   const promise = new Promise<CtSegResult>((resolve, reject) => {
     rejectFn = reject;
     (async () => {
@@ -96,41 +108,68 @@ export function runCtSegmentation(ct: Volume3D, backend: "auto" | "wasm", onProg
         data[i] = ((x < lo ? lo : x > hi ? hi : x) - mean) / std;
       }
       if (cancelled) return;
-      worker = new Worker(new URL("../workers/ctseg.worker.ts", import.meta.url), { type: "module" });
-      worker.onmessage = (e: MessageEvent<{ type: string; progress?: SegmentProgress; labels?: Uint8Array; backend?: string; note?: string; error?: string; abort?: boolean }>) => {
-        const m = e.data;
-        if (m.type === "progress" && m.progress) onProgress(m.progress);
-        else if (m.type === "result" && m.labels) {
-          worker?.terminate();
-          resolve({ labels: m.labels, grid, backend: m.backend ?? "", note: m.note || undefined, meta });
-        } else if (m.type === "error") {
-          worker?.terminate();
-          reject(m.abort ? new DOMException("Segmentierung abgebrochen.", "AbortError") : new Error(m.error));
-        }
+
+      // Model and data are copied (not transferred) to the worker, so it can be restarted on the CPU.
+      const start = (b: CtSegBackend, note?: string) => {
+        stopAll();
+        let last: SegmentProgress | null = null;
+        let lastAt = Date.now();
+        worker = new Worker(new URL("../workers/ctseg.worker.ts", import.meta.url), { type: "module" });
+        worker.onmessage = (e: MessageEvent<{ type: string; progress?: SegmentProgress; labels?: Uint8Array; backend?: string; note?: string; error?: string; abort?: boolean }>) => {
+          const m = e.data;
+          if (m.type === "progress" && m.progress) {
+            lastAt = Date.now();
+            last = m.progress;
+            onProgress({ ...m.progress, receivedAt: lastAt });
+          } else if (m.type === "result" && m.labels) {
+            stopAll();
+            resolve({ labels: m.labels, grid, backend: m.backend ?? "", note: m.note || undefined, meta });
+          } else if (m.type === "error") {
+            stopAll();
+            reject(m.abort ? new DOMException("Segmentierung abgebrochen.", "AbortError") : new Error(m.error));
+          }
+        };
+        worker.onerror = (e) => {
+          stopAll();
+          reject(new Error(e.message || "Segmentierung fehlgeschlagen."));
+        };
+        // A WebGPU tile that never finishes (driver/browser problem without an error): restart on the CPU.
+        watchdog = setInterval(() => {
+          const p = last as SegmentProgress | null;
+          if (!p || p.backend !== "webgpu") return;
+          const isInference = p.stage.startsWith("Inferenz");
+          const limit = isInference ? tileTimeLimitSec(p.done, p.elapsed ?? 0) : 15 * 60;
+          if ((Date.now() - lastAt) / 1000 > limit) {
+            const where = isInference ? `bei Kachel ${Math.min(p.done + 1, p.total)}/${p.total}` : "bei der Initialisierung";
+            const note = `WebGPU reagierte nicht mehr (${where}) – neu gestartet auf der CPU`;
+            onProgress({ done: 0, total: 1, stage: "Neustart auf der CPU", backend: "wasm", note, receivedAt: Date.now() });
+            start("wasm", note);
+          }
+        }, 5000);
+        const job: CtSegJob = {
+          model,
+          data,
+          dims: [grid.nx, grid.ny, grid.nz],
+          patch: meta.patchSize,
+          classes: Object.keys(meta.labels).length,
+          bodyThreshold: (-500 - mean) / std,
+          topkOutput: meta.output?.kind === "topk" ? meta.output.k : undefined,
+          backend: b,
+          note,
+        };
+        worker.postMessage(job);
       };
-      worker.onerror = (e) => {
-        worker?.terminate();
-        reject(new Error(e.message || "Segmentierung fehlgeschlagen."));
-      };
-      const job: CtSegJob = {
-        model,
-        data,
-        dims: [grid.nx, grid.ny, grid.nz],
-        patch: meta.patchSize,
-        classes: Object.keys(meta.labels).length,
-        bodyThreshold: (-500 - mean) / std,
-        topkOutput: meta.output?.kind === "topk" ? meta.output.k : undefined,
-        backend,
-      };
-      worker.postMessage(job, [model, data.buffer]);
+      start(backend);
     })().catch(reject);
   });
   return {
     promise,
     cancel: () => {
       cancelled = true;
+      if (watchdog) clearInterval(watchdog);
       worker?.postMessage({ type: "stop" });
-      setTimeout(() => worker?.terminate(), 2000);
+      const w = worker;
+      setTimeout(() => w?.terminate(), 2000);
       rejectFn(new DOMException("Segmentierung abgebrochen.", "AbortError"));
     },
   };

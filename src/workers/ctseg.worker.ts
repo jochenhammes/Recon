@@ -3,6 +3,9 @@ import wasmUrl from "onnxruntime-web/ort-wasm-simd-threaded.jsep.wasm?url";
 import type { Vec3 } from "../core/geometry";
 import { slidingWindow } from "../segmentation/infer";
 
+/** "auto": WebGPU if available (except Firefox, where WebGPU with ONNX Runtime is not yet reliable), else CPU. */
+export type CtSegBackend = "auto" | "webgpu" | "wasm";
+
 export interface CtSegJob {
   model: ArrayBuffer;
   data: Float32Array;
@@ -12,8 +15,15 @@ export interface CtSegJob {
   bodyThreshold: number;
   /** Model output: top-k classes with probabilities instead of logits. */
   topkOutput?: number;
-  /** "webgpu" | "wasm" | "auto" */
-  backend: string;
+  backend: CtSegBackend;
+  /** Shown with the progress (e.g. why the CPU is used). */
+  note?: string;
+}
+
+/** Minimal view of the WebGPU device (no WebGPU type package needed). */
+interface GpuDeviceLike {
+  addEventListener(type: "uncapturederror", cb: (e: { error?: { message?: string } }) => void): void;
+  lost: Promise<{ message?: string; reason?: string }>;
 }
 
 let stop = false;
@@ -28,49 +38,101 @@ self.onmessage = async (event: MessageEvent<CtSegJob | { type: "stop" }>) => {
   try {
     ort.env.wasm.wasmPaths = { wasm: wasmUrl };
     ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(8, navigator.hardwareConcurrency || 4) : 1;
-    const hasGpu = "gpu" in navigator && !!(await (navigator as unknown as { gpu: { requestAdapter: () => Promise<unknown> } }).gpu.requestAdapter().catch(() => null));
+    // Only touch the GPU when it may be used: after a GPU crash, even requestAdapter() can hang.
+    const hasGpu =
+      msg.backend !== "wasm" &&
+      "gpu" in navigator &&
+      !!(await Promise.race([
+        (navigator as unknown as { gpu: { requestAdapter: () => Promise<unknown> } }).gpu.requestAdapter().catch(() => null),
+        new Promise((r) => setTimeout(() => r(null), 10000)),
+      ]));
+    const firefox = /firefox/i.test(navigator.userAgent);
     const [pz, py, px] = msg.patch;
+    let note = msg.note ?? "";
+
     const run = async (backend: "webgpu" | "wasm") => {
-      const label = backend === "webgpu" ? "WebGPU" : "CPU";
-      post({ type: "progress", progress: { done: 0, total: 1, stage: `Modell wird initialisiert (${label})` } });
+      const label = backend === "webgpu" ? "WebGPU" : `CPU${ort.env.wasm.numThreads === 1 ? ", 1 Thread" : `, ${ort.env.wasm.numThreads} Threads`}`;
+      post({ type: "progress", progress: { done: 0, total: 1, stage: `Modell wird initialisiert (${label})`, backend, note } });
       const session = await ort.InferenceSession.create(new Uint8Array(msg.model), {
         executionProviders: backend === "webgpu" ? ["webgpu", "wasm"] : ["wasm"],
         graphOptimizationLevel: "all",
       });
+      // WebGPU errors (e.g. "Mapping WebGPU buffer failed", device lost) can leave a run pending forever:
+      // watch the device and abort the tile as soon as one occurs.
+      let gpuError: string | null = null;
+      if (backend === "webgpu") {
+        try {
+          const dev = (await ort.env.webgpu.device) as unknown as GpuDeviceLike;
+          dev.addEventListener("uncapturederror", (e) => (gpuError ??= e.error?.message || "WebGPU-Fehler"));
+          void dev.lost.then((i) => (gpuError ??= `WebGPU-Gerät verloren${i.message ? ` (${i.message})` : ""}`));
+        } catch {
+          /* device not accessible: the main-thread watchdog still catches hangs */
+        }
+      }
+      const guard = <T,>(p: Promise<T>): Promise<T> =>
+        backend !== "webgpu"
+          ? p
+          : new Promise<T>((resolve, reject) => {
+              const t = setInterval(() => {
+                if (gpuError) {
+                  clearInterval(t);
+                  reject(new Error(gpuError));
+                }
+              }, 200);
+              p.then(
+                (v) => (clearInterval(t), resolve(v)),
+                (e) => (clearInterval(t), reject(e)),
+              );
+            });
+      let ok = false;
       try {
-        return await slidingWindow(
+        const labels = await slidingWindow(
           msg.data,
           msg.dims,
           msg.patch,
           msg.classes,
           async (input) => {
-            const out = await session.run({ [session.inputNames[0]]: new ort.Tensor("float32", input, [1, 1, pz, py, px]) });
+            const out = await guard(session.run({ [session.inputNames[0]]: new ort.Tensor("float32", input, [1, 1, pz, py, px]) }));
             const t = out[session.outputNames[0]];
-            const data = (await t.getData()) as Float32Array;
+            const data = (await guard(t.getData())) as Float32Array;
             t.dispose?.();
+            if (gpuError) throw new Error(gpuError);
             return data;
           },
-          { bodyThreshold: msg.bodyThreshold, topkOutput: msg.topkOutput, onProgress: (p) => post({ type: "progress", progress: { ...p, stage: `Inferenz (${label})` } }), shouldStop: () => stop },
+          {
+            bodyThreshold: msg.bodyThreshold,
+            topkOutput: msg.topkOutput,
+            onProgress: (p) => post({ type: "progress", progress: { ...p, stage: `Inferenz (${label})`, backend, note } }),
+            shouldStop: () => stop,
+          },
         );
+        ok = true;
+        return labels;
       } finally {
-        await session.release().catch(() => undefined);
+        // After a WebGPU failure, releasing may itself hang: do not wait for it.
+        const rel = session.release().catch(() => undefined);
+        if (ok) await rel;
       }
     };
-    let backend: "webgpu" | "wasm" = msg.backend === "wasm" || !hasGpu ? "wasm" : "webgpu";
+
+    let backend: "webgpu" | "wasm";
+    if (msg.backend === "wasm") backend = "wasm";
+    else if (!hasGpu) {
+      backend = "wasm";
+      if (msg.backend === "webgpu") note = "WebGPU in diesem Browser nicht verfügbar – CPU verwendet";
+    } else backend = msg.backend === "auto" && firefox ? "wasm" : "webgpu";
+
     let labels: Uint8Array;
-    let note = "";
     try {
       labels = await run(backend);
     } catch (e) {
       if (backend !== "webgpu" || (e instanceof DOMException && e.name === "AbortError")) throw e;
-      // A WebGPU kernel limitation must not end the segmentation: continue on the CPU.
-      note = `WebGPU nicht nutzbar (${e instanceof Error ? e.message.slice(0, 120) : String(e)}) – CPU verwendet`;
-      post({ type: "progress", progress: { done: 0, total: 1, stage: note } });
+      // A WebGPU problem must not end the segmentation: continue on the CPU.
+      note = `WebGPU-Fehler (${e instanceof Error ? e.message.slice(0, 120) : String(e)}) – weiter auf der CPU`;
       backend = "wasm";
       labels = await run(backend);
     }
-    const providers = [backend];
-    post({ type: "result", labels, backend: providers[0], note }, [labels.buffer]);
+    post({ type: "result", labels, backend, note }, [labels.buffer]);
   } catch (e) {
     post({ type: "error", error: e instanceof Error ? e.message : String(e), abort: e instanceof DOMException && e.name === "AbortError" });
   }

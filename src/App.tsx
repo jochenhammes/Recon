@@ -13,6 +13,7 @@ import { TumorPanel, type TumorIndication, type TumorMode } from "./ui/TumorPane
 import { CtSegCard } from "./ui/CtSegCard";
 import type { SegmentProgress } from "./segmentation/infer";
 import { type CtSegRun, loadModelMeta, runCtSegmentation } from "./segmentation/ctSegment";
+import type { CtSegBackend } from "./workers/ctseg.worker";
 import { type Lesion, type ThresholdMethod, lesionStats } from "./tumor/segment";
 import { burdenCsv, splitBurden, tumorBurden } from "./tumor/metrics";
 import { EXCLUSION_PRESETS, annotateLesions, autoLiverCenter, organsOnGrid } from "./tumor/organs";
@@ -1108,7 +1109,7 @@ function App() {
   }
 
   // ── CT organ segmentation (browser, ONNX) ──
-  function startCtSegmentation(ctId: string, backend: "auto" | "wasm") {
+  function startCtSegmentation(ctId: string, backend: CtSegBackend) {
     const ct = byId(ctId);
     if (!ct || ctSegRunning) return;
     setCtSegRunning(true);

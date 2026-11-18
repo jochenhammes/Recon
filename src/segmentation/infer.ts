@@ -8,6 +8,12 @@ export interface SegmentProgress {
   /** Seconds since the inference started and estimated remaining seconds (after the first tile). */
   elapsed?: number;
   remaining?: number;
+  /** Compute backend of the inference. */
+  backend?: "webgpu" | "wasm";
+  /** Time (Date.now()) the main thread received this progress, for interpolating within a tile. */
+  receivedAt?: number;
+  /** e.g. "WebGPU hing – weiter auf der CPU". */
+  note?: string;
 }
 
 /**
@@ -61,4 +67,17 @@ export async function slidingWindow(
         opts.onProgress?.({ done, total, stage: "Inferenz", elapsed: seconds(), remaining: (seconds() / done) * (total - done) });
       }
   return topKLabels(topk, data.length);
+}
+
+/**
+ * Progress of the inference including the running tile: its share is estimated from the average tile time so far
+ * (the first tile, with shader compilation, approaches its share asymptotically).
+ */
+export function inferenceEstimate(p: SegmentProgress, now: number) {
+  const since = p.receivedAt !== undefined ? Math.max(0, (now - p.receivedAt) / 1000) : 0;
+  const avg = p.done > 0 && p.elapsed ? p.elapsed / p.done : null;
+  const frac = avg ? Math.min(0.95, since / avg) : 0.9 * (1 - Math.exp(-since / 60));
+  const fraction = Math.min(1, (p.done + (p.done < p.total ? frac : 0)) / Math.max(1, p.total));
+  const remaining = avg ? Math.max(0, avg * (p.total - p.done) - since) : undefined;
+  return { fraction, since, avg, elapsed: (p.elapsed ?? 0) + since, remaining };
 }
