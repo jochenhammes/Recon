@@ -11,13 +11,14 @@ Beispieldaten (keine Patientendaten).
 5. [Registrierung (Coregistrierung)](#5-registrierung-coregistrierung)
 6. [Standardraum (MNI), Atlas und SUVR](#6-standardraum-mni-atlas-und-suvr)
 7. [Centiloid](#7-centiloid)
-8. [CT-Organsegmentierung](#8-ct-organsegmentierung)
-9. [Tumorlast (MTV)](#9-tumorlast-mtv)
-10. [Analyse und Label-Analyse](#10-analyse-und-label-analyse)
-11. [Bearbeiten](#11-bearbeiten)
-12. [DICOM-Header](#12-dicom-header)
-13. [Export](#13-export)
-14. [Tipps und Fehlerbehebung](#14-tipps-und-fehlerbehebung)
+8. [Kinetik (dynamisches PET)](#8-kinetik-dynamisches-pet)
+9. [CT-Organsegmentierung](#9-ct-organsegmentierung)
+10. [Tumorlast (MTV)](#10-tumorlast-mtv)
+11. [Analyse und Label-Analyse](#11-analyse-und-label-analyse)
+12. [Bearbeiten](#12-bearbeiten)
+13. [DICOM-Header](#13-dicom-header)
+14. [Export](#14-export)
+15. [Tipps und Fehlerbehebung](#15-tipps-und-fehlerbehebung)
 
 ---
 
@@ -196,7 +197,80 @@ Label-Ebenen werden ohne Interpolation (nächster Nachbar) dargestellt.
 
 ---
 
-## 8. CT-Organsegmentierung
+## 8. Kinetik (dynamisches PET)
+
+Referenzregion-Modelle für dynamische Hirn-PET-Daten, ohne Blutentnahme. Nachbau ausgewählter Teile des MATLAB-Pakets der
+Arbeitsgruppe ([ghaefner/kinetic-modeling](https://github.com/ghaefner/kinetic-modeling)):
+
+- **Patlak (Referenz)** für irreversibel bindende Tracer (z. B. FDOPA): Ki_ref in 1/min aus der Steigung von
+  C/C_ref gegen ∫C_ref/C_ref ab einer Startzeit t*.
+- **SRTM** (vereinfachtes Referenzgewebemodell) für reversibel bindende Tracer (Rezeptorliganden): BP_ND, R1, k2.
+  Gelöst mit Basisfunktionen (Gunn et al. 1997), gewichtet nach Frame-Dauer.
+
+**Daten laden** (Bereich *Daten*):
+- eine dynamische DICOM-Serie; die Frames erkennt die App an wiederholten Schichtpositionen, die Zeiten liest sie aus
+  dem Header;
+- oder ein 4D-NIfTI, am besten zusammen mit der BIDS-Datei `*.json` (`FrameTimesStart`, `FrameDuration`).
+
+Der Datensatz zeigt das zeitgewichtete Mittelbild; die Karte nennt die Zahl der Frames.
+
+![Bewegungskorrektur](docs/images/60-kinetik-bewegung.jpg)
+
+1. Bereich **Kinetik** öffnen.
+2. **1 · Dynamische Serie**: Serie wählen. Frame-Zahl, Dauer und Quelle der Zeiten prüfen.
+   - Unter *Frame-Zeiten anzeigen / eingeben* stehen die Zeiten aller Frames.
+   - Fehlen Zeiten (NIfTI ohne JSON), die Frame-Dauern in Sekunden eintragen.
+3. **2 · Bewegungskorrektur**: *Registrieren ab* (Standard 120 s) und **Bewegung korrigieren**.
+   - Frames ab dieser Zeit werden rigide auf ihr Mittelbild registriert; frühere Frames übernehmen die Lage des ersten
+     registrierten Frames.
+   - Das Diagramm zeigt die Verschiebung je Frame. Ab 2 mm erscheint ein Hinweis.
+4. **3 · In den MNI-Raum**: **T1-MRT** wählen (empfohlen) oder *ohne MRT (SPM-PET-Vorlage)*, dann
+   **Frames in den MNI-Raum übertragen**.
+   - Das Mittelbild wird rigide auf das T1 und das T1 affin auf MNI152 2009c registriert (wie bei Centiloid). Danach
+     werden alle Frames übertragen.
+   - Es entsteht ein dynamischer Datensatz `… · MNI152 …`.
+5. **4 · Referenzregion und Modell**:
+   1. Atlas laden bzw. wählen (*CerebrA-Atlas laden*; AAL3 über den Bereich *Analyse*).
+   2. **Referenzregion** wählen: Kleinhirnrinde (Standard), Kleinhirn gesamt oder Pons.
+   3. Modell wählen: **SRTM** oder **Patlak** (dazu t* in Minuten, Standard 15).
+   4. Optional *Parameterkarten anlegen*, dann **Berechnen**.
+
+![Ergebnis SRTM](docs/images/61-kinetik-srtm.jpg)
+
+6. **Ergebnis**:
+   - Tabelle je Atlasregion: BP_ND, R1 und R² bzw. Ki_ref und R².
+   - Ein Klick auf eine Region zeigt ihre Zeit-Aktivitäts-Kurve mit der Referenz und bei SRTM den Modell-Fit; bei
+     Patlak zusätzlich den Patlak-Plot mit Fitgerade.
+   - *Tabelle + TACs als CSV* speichert die Parameter und alle Regionskurven.
+   - Die **Parameterkarten** (BP_ND, R1 ausgeblendet, bzw. Ki_ref) sind neue Datensätze im MNI-Raum. Sie lassen sich
+     anzeigen und exportieren und in der Label-Analyse auswerten.
+
+![Ergebnis Patlak](docs/images/62-kinetik-patlak.jpg)
+
+**Validierung** (synthetisches dynamisches Hirnphantom aus CerebrA-Regionen mit bekannten Parametern):
+- 25 Frames über 60 min, 6 mm Glättung, 3 % Rauschen;
+- Lage im Scanner verschoben und gedreht, Bewegung bis 7 mm zwischen den Frames.
+
+Mit T1 erreicht die App die Werte, die nach der Glättung überhaupt erreichbar sind:
+
+| | Vorgabe | nach Glättung erreichbar | App |
+|---|---|---|---|
+| BP_ND Putamen / Caudatus / Kortex | 3,0 / 2,5 / 0,5 | 1,93 / 1,61 / 0,19 | 1,82 / 1,50 / 0,19 |
+| Ki_ref Putamen / Caudatus / Kortex (1/min) | 0,012 / 0,010 / 0,003 | 0,0091 / 0,0075 / 0,0024 | 0,0087 / 0,0073 / 0,0024 |
+
+Die Differenz zur Vorgabe ist Partialvolumeneffekt (Glättung). Ohne T1 (Normalisierung des Mittelbilds auf die
+SPM-Perfusionsvorlage) waren die Werte im Phantom deutlich ungenauer (Putamen 1,3) – wenn möglich ein T1 verwenden.
+
+Grenzen:
+- nur Referenzregion-Modelle (kein arterieller Input);
+- keine Partialvolumenkorrektur;
+- Logan und MRTM aus dem MATLAB-Paket sind noch nicht übernommen.
+
+Die Frames sollten zerfallskorrigiert sein; bei nicht korrigierten DICOM-Daten warnt die App.
+
+---
+
+## 9. CT-Organsegmentierung
 
 ![Segmentierung läuft](docs/images/20-ct-segmentierung-laeuft.jpg)
 
@@ -216,7 +290,7 @@ Label-Ebenen werden ohne Interpolation (nächster Nachbar) dargestellt.
 
 ---
 
-## 9. Tumorlast (MTV)
+## 10. Tumorlast (MTV)
 
 ![Einstellungen Tumorlast](docs/images/22-tumorlast-einstellungen.jpg)
 
@@ -243,7 +317,7 @@ Label-Ebenen werden ohne Interpolation (nächster Nachbar) dargestellt.
 
 ---
 
-## 10. Analyse und Label-Analyse
+## 11. Analyse und Label-Analyse
 
 Bereich **Analyse**.
 
@@ -281,7 +355,7 @@ Hinweis: Die macOS-Vorschau (Leertaste) zeigt solche CSV-Dateien unvollständig 
 
 ---
 
-## 11. Bearbeiten
+## 12. Bearbeiten
 
 ![VOI-Kugel am Fadenkreuz](docs/images/40-bearbeiten-voi.jpg)
 
@@ -300,7 +374,7 @@ Bereich **Bearbeiten** (wirkt auf den aktiven Datensatz):
 
 ---
 
-## 12. DICOM-Header
+## 13. DICOM-Header
 
 ![Header-Editor](docs/images/45-dicom-header.jpg)
 
@@ -313,7 +387,7 @@ Bereich **Bearbeiten** (wirkt auf den aktiven Datensatz):
 
 ---
 
-## 13. Export
+## 14. Export
 
 ![Export](docs/images/50-export.jpg)
 
@@ -335,7 +409,7 @@ Bereich **Export** (aktiver Datensatz):
 
 ---
 
-## 14. Tipps und Fehlerbehebung
+## 15. Tipps und Fehlerbehebung
 
 - **Erster Aufruf**: Die Seite lädt sich einmal selbst neu (ein Service Worker aktiviert die „Cross-Origin-Isolation“);
   danach rechnet die CT-Segmentierung auf der CPU mit mehreren Threads (ca. 2–3× schneller). In privaten Fenstern

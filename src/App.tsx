@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, Brain, Crosshair, Download, Eye, FileCode2, FolderOpen, Target, Wand2 } from "lucide-react";
+import { Activity, BarChart3, Brain, Crosshair, Download, Eye, FileCode2, FolderOpen, Target, Wand2 } from "lucide-react";
+import { KineticsPanel, type KineticsApi } from "./kinetics/KineticsPanel";
+import { runKineticsJob } from "./kinetics/runner";
+import type { FrameMotion } from "./kinetics/motion";
+import { meanOfFrames } from "./viewer/volumeLoader";
 import { NormalizationPanel, type NormMethod, type Regularization } from "./ui/NormalizationPanel";
 import { type Normalization, REGULARIZATION_WEIGHT, sameGrid, describeCoregProgress, describeWarpProgress, fieldFromAffine, pullbackPositions } from "./normalization/model";
 import { DEFAULT_WARP } from "./normalization/warp";
@@ -1421,6 +1425,92 @@ function App() {
     setActiveId(id);
   }
 
+  // ── Kinetics (dynamic PET) ──
+  /**
+   * Normalizes a dynamic dataset to MNI (mean image → T1 rigid, T1 → MNI affine; without T1 affine to the SPM PET
+   * template), creates the mean in MNI space and transfers every frame along the same mapping.
+   */
+  async function kineticsToMni(id: string, t1Id: string | null, status: (s: string) => void): Promise<string> {
+    const D = byId(id);
+    const dyn = D?.dataset.dynamic;
+    if (!D || !dyn) throw new Error("Dynamischer Datensatz nicht gefunden.");
+    const overrides = new Map<string, Mat4>();
+    let n: Normalization;
+    let template: Entry;
+    let subject: Entry = D;
+    if (t1Id) {
+      const t1 = byId(t1Id);
+      if (!t1) throw new Error("T1 nicht gefunden.");
+      subject = t1;
+      template = templateEntries.find((e) => e.dataset.template?.kind === "T1") ?? (status("MNI-Vorlage wird geladen"), addDataset(await loadBundledMni()));
+      status("Mittelbild → T1 (rigide)");
+      const run = runCoregistration(t1.dataset.current, D.dataset.current, { dof: 6, cost: "nmi", levels: [8, 4, 2], coarseSearch: true, initial: multiply4(invert4(t1.matrix), D.matrix) });
+      normRun.current = run;
+      const reg = await run.promise;
+      const m = multiply4(t1.matrix, reg.matrix);
+      updateEntry(D.id, { matrix: m });
+      overrides.set(D.id, m);
+      status("T1 → MNI (affin)");
+      n = await estimateNormalization(template, t1, { nonlinear: false, cost: "ncc", mask: template.dataset.template?.mask ?? undefined, regularization: normRegularization });
+    } else {
+      const spm = BUNDLED_PET_TEMPLATES[0];
+      template = templateEntries.find((e) => e.dataset.template?.name === spm.name) ?? (status("PET-Vorlage wird geladen"), addDataset(await loadBundledPetTemplate(spm.id)));
+      status("Mittelbild → SPM-PET-Vorlage (affin)");
+      n = await estimateNormalization(template, D, { nonlinear: false, cost: "ncc", mask: template.dataset.template?.mask ?? undefined, regularization: normRegularization });
+    }
+    status("Mittelbild in den MNI-Raum");
+    const created = await transferToStandardSpace(n, [D.id], "linear", template, overrides);
+    const target = created[0];
+    if (!target) throw new Error("Übertragung in den MNI-Raum fehlgeschlagen.");
+    status(`${dyn.frames.length} Frames werden übertragen`);
+    const points = pullbackPositions(n, overrides.get(subject.id) ?? subject.matrix);
+    const v = D.dataset.current;
+    const r = await runKineticsJob<{ frames: Float32Array[] }>(
+      { type: "toTemplate", frames: dyn.frames, grid: { nx: v.nx, ny: v.ny, nz: v.nz, geometry: v.geometry }, toSubject: overrides.get(D.id) ?? D.matrix, points },
+      (d, t) => status(`Frames werden übertragen (${d}/${t})`),
+    ).promise;
+    const mean = target.dataset.current.withData(meanOfFrames(r.frames, dyn.duration));
+    const dataset: LoadedDataset = { ...target.dataset, original: mean, current: mean, dynamic: { ...dyn, frames: r.frames } };
+    updateEntry(target.id, { dataset });
+    return target.id;
+  }
+
+  const kineticsApi: KineticsApi = {
+    dynamics: entries.filter((e) => e.dataset.dynamic).map((e) => ({ id: e.id, label: entryLabel(e), dataset: e.dataset, inMni: !!e.dataset.derivedFrom })),
+    t1s: subjectCandidates.filter((e) => !e.dataset.dynamic).sort((a, b) => Number(isAnatomical(unitSource(b.dataset))) - Number(isAnatomical(unitSource(a.dataset)))).map((e) => ({ id: e.id, label: entryLabel(e) })),
+    atlases: entries.filter((e) => e.dataset.atlas).map((e) => ({ id: e.id, label: entryLabel(e), atlas: e.dataset.atlas! })),
+    setTiming: (id, start, duration) => {
+      const e = byId(id);
+      if (e?.dataset.dynamic) setDataset(id, { ...e.dataset, dynamic: { ...e.dataset.dynamic, start, duration, timeSource: "manuell", note: undefined } });
+    },
+    applyMotion: (id, frames, motion: FrameMotion[]) => {
+      const e = byId(id);
+      if (!e?.dataset.dynamic) return;
+      const mean = e.dataset.current.withData(meanOfFrames(frames, e.dataset.dynamic.duration));
+      setDataset(id, { ...e.dataset, original: mean, current: mean, edits: [], dynamic: { ...e.dataset.dynamic, frames, motion: motion.map(({ t, r, maxShiftMm, registered }) => ({ t, r, maxShiftMm, registered })) } });
+    },
+    toMni: kineticsToMni,
+    labelsFor: (atlasId, targetId) => {
+      const A = byId(atlasId), T = byId(targetId);
+      if (!A || !T) throw new Error("Atlas oder Datensatz nicht gefunden.");
+      return atlasLabelsFor(A, T);
+    },
+    addMaps: (sourceId, maps) => {
+      const E = byId(sourceId);
+      if (!E) return;
+      const v = E.dataset.current;
+      for (const m of maps) {
+        const d = createDataset(v.withData(m.data), { kind: "reconstruction" }, `${E.dataset.displayName} · ${m.label}`);
+        const derived: LoadedDataset = { ...d, derivedFrom: { name: `${E.dataset.displayName} (${m.label})`, source: { kind: "reconstruction" }, space: E.dataset.derivedFrom?.space ?? "nativ", label: m.label.split(" ")[0] } };
+        const id = `ds${nextEntryId++}`;
+        setEntries((prev) => [...prev, { id, dataset: derived, display: { window: m.window, lut: "kidney", opacity: 0.6, visible: m.visible !== false }, matrix: E.matrix }]);
+        if (m.visible !== false) addOverlay(id);
+      }
+    },
+    loadCerebra: () => void addBundledAtlas(),
+    atlasBusy,
+  };
+
   /** Imports an SPM / CAT12 y_*.nii as the normalization of the selected subject. */
   async function importDeformationField(file: File) {
     const S = normSubject;
@@ -1956,6 +2046,13 @@ function App() {
     { id: "view", label: "Ansicht", icon: Eye, disabled: layers.length === 0, content: viewTab },
     { id: "registration", label: "Registrierung", shortLabel: "Registr.", icon: Crosshair, disabled: entries.length < 2, content: registrationTab },
     { id: "normalization", label: "Standardraum", shortLabel: "MNI", icon: Brain, disabled: entries.filter((e) => !e.dataset.template).length === 0, content: normalizationTab },
+    {
+      id: "kinetics",
+      label: "Kinetik",
+      icon: Activity,
+      disabled: !entries.some((e) => e.dataset.dynamic),
+      content: <KineticsPanel api={kineticsApi} />,
+    },
     {
       id: "tumor",
       label: "Tumorlast",

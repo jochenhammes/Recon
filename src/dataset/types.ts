@@ -56,6 +56,8 @@ export interface DynamicInfo {
   timeSource: "dicom" | "bids" | "nifti" | "manuell";
   /** e.g. "Start relativ zum ersten Frame (Injektionszeit fehlt)". */
   note?: string;
+  /** Result of the frame motion correction (already applied to `frames`). */
+  motion?: { t: [number, number, number]; r: [number, number, number]; maxShiftMm: number; registered: boolean }[];
 }
 
 /** A volume loaded or reconstructed in the app, together with its provenance and edit history. */

@@ -23,6 +23,7 @@ Alles läuft im Browser; es gibt keinen Server, **die Daten verlassen den Rechne
 | **Standardraum (MNI)** | MNI152-2009c-T1-, SPM-PET- und SPM-SPECT-Vorlage; affine und nichtlineare Normalisierung (SPM-artig); Übertragung coregistrierter Datensätze (z. B. PET über das T1); SPM/CAT12-`y_*.nii` importieren/exportieren |
 | **Atlas & SUVR** | CerebrA (mitgeliefert), AAL3 (ZIP-Download) oder eigener Atlas; regionale Statistik, Referenzregion, SUVR-Tabelle und SUVR-Bild |
 | **Centiloid** | Amyloid-PET mit GAAIN-Standard-VOIs (vom Nutzer geladen); MRT-Pipeline (affin) an den GAAIN-Referenzdaten kalibriert (Florbetaben und PiB, Kreuzvalidierung RMSE 4–6 CL), Standardgleichungen für extern normalisierte Daten, eigene Gleichung; PET-only (nicht validiert) |
+| **Kinetik (dynamisches PET)** | Dynamische DICOM-Serien und 4D-NIfTI (BIDS-JSON); Bewegungskorrektur der Frames; Übertragung in den MNI-Raum (über T1); Referenzregion aus Atlas; **Patlak (Ki_ref)** und **SRTM (BP_ND, R1)** regional und als Parameterkarten, Kurven, CSV – nach dem MATLAB-Paket der Arbeitsgruppe ([ghaefner/kinetic-modeling](https://github.com/ghaefner/kinetic-modeling)) |
 | **CT-Organsegmentierung** | TotalSegmentator „total“ (117 Strukturen, 3 mm) direkt im Browser (WebGPU oder CPU); Regionsliste mit Suche, Ein-/Ausblenden und Sprung zur Region |
 | **Tumorlast** | Läsionen auf dem PET in SUV: SUV-Schwelle (z. B. 4,0 / 2,5 / PSMA 3), 41 % SUVmax, leberbasiert (PERCIST); TMTV/PSMA-TV, TLG/TL-PSMA, SUVmax/peak/mean, Dmax; automatischer Ausschluss physiologischer Anreicherung über CT-Organe; Knochen/Weichteil; Korrektur per Klick und Pinsel; CSV und Maske |
 | **Analyse** | Übersicht aller Datensätze (Min, Mittel, Median, Max, SD, Varianz); Histogramm; SUV aus dem DICOM-Header; VOI auf allen Datensätzen; **Label-Analyse** (Statistik und Histogramm je Region einer Segmentierung oder eines Atlas) mit CSV-Export von Tabellen und Histogrammen je Label |
@@ -51,7 +52,7 @@ die CT-Segmentierung läuft dort ggf. auf der CPU.
 `src/core` Geometrie und Transformationen · `src/dicom`, `src/viewer/volumeLoader.ts` Laden · `src/recon` SPECT-Rekonstruktion ·
 `src/viewer` Viewer und WebGL2 · `src/registration` Coregistrierung · `src/normalization` Standardraum ·
 `src/atlas` Atlanten, Labelbilder, Regionalstatistik · `src/segmentation` CT-Segmentierung (ONNX Runtime Web) ·
-`src/tumor` Läsionen und Tumorlast · `src/centiloid` Centiloid · `src/analysis` Statistik, SUV · `src/edit` Bearbeitung ·
+`src/tumor` Läsionen und Tumorlast · `src/kinetics` Kinetikmodelle (Patlak, SRTM), Bewegungskorrektur · `src/centiloid` Centiloid · `src/analysis` Statistik, SUV · `src/edit` Bearbeitung ·
 `src/header` DICOM-Header · `src/export` DICOM/NIfTI/ZIP · `src/workers` Web Worker · `src/ui`, `src/components` Oberfläche ·
 `tools/totalseg-onnx` Export des Segmentierungsmodells nach ONNX.
 

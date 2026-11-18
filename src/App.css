@@ -1416,3 +1416,43 @@ tr.excluded-row td {
 .hist-export-fields {
   grid-template-columns: 1fr 1fr;
 }
+
+/* Kinetics charts */
+.kin-chart svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin-top: 6px;
+}
+.kin-axis {
+  stroke: var(--text-dim);
+  stroke-width: 1;
+}
+.kin-tick {
+  fill: var(--text-dim);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+.kin-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin: 2px 0 8px;
+}
+.kin-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 3px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.kin-ylabel {
+  font-style: italic;
+}
+.kin-frames summary {
+  cursor: pointer;
+  font-size: 12px;
+  margin: 6px 0;
+}
