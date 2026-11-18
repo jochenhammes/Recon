@@ -26,7 +26,7 @@ Beispieldaten (keine Patientendaten).
 
 ![Startbildschirm](docs/images/01-start.jpg)
 
-- **Linke Leiste**: die Arbeitsbereiche *Daten, Ansicht, Registrierung, Standardraum, Centiloid & SUVR (SUVR), Kinetik,
+- **Linke Leiste**: die Arbeitsbereiche *Daten, Ansicht, Koregistrierung, Standardraum, Centiloid & SUVR (SUVR), Kinetik,
   Tumorlast, Analyse, Bearbeiten, Header, Export*. Ein Klick auf den aktiven Bereich klappt das Seitenpanel ein und aus
   (ebenso das Symbol unten links). Ausgegraute Bereiche nennen im Tooltip den Grund (z. B. „Header nur für DICOM“).
   Beim Wechsel des Bereichs bleibt alles erhalten – laufende Berechnungen, Ergebnisse, aufgeklappte Karten.
@@ -36,7 +36,7 @@ Beispieldaten (keine Patientendaten).
   **Karten** lassen sich per Klick auf die Überschrift auf- und zuklappen; rechts steht ihr Status (z. B.
   *✓ korrigiert*, *läuft*, *25 Frames*). Erledigte Schritte (z. B. Bewegungskorrektur, Normalisierung) klappen von
   selbst zu.
-- **Kopfzeile**: die **Aktivitätsanzeige** – laufende Berechnungen (Laden, Registrierung, Normalisierung,
+- **Kopfzeile**: die **Aktivitätsanzeige** – laufende Berechnungen (Laden, Koregistrierung, Normalisierung,
   CT-Segmentierung, Kinetik, Centiloid, Export …) mit Fortschritt, kurz *fertig* nach Abschluss, Fehler mit ⚠.
   Ein Klick öffnet den zuständigen Bereich (dort lässt sich abbrechen). Ohne laufende Aufgabe steht dort die Zahl der
   geladenen Datensätze. Rechts oben: helles/dunkles Design.
@@ -149,10 +149,11 @@ Bereich **Ansicht** – eine Karte je angezeigter Ebene (oben = oberste Ebene):
 1. **Farbtabelle**: Graustufen, invertiert, Hot, DaT, Blau, Regenbogen, Atlas-Regionen (auch per Rechtsklick auf
    die Farbskala im Viewer).
 2. **Fenster**: *Min*/*Max* eintragen, *Auto*, oder Presets (PET: SUV 0–5/10/15; CT: Weichteil, Lunge, Knochen,
-   Gehirn, Leber). Alternativ im Bild mit der rechten Maustaste ziehen.
+   Gehirn, Leber). Alternativ im Bild mit der rechten Maustaste ziehen oder die Griffe der Farbskala im Viewer
+   verschieben ([Abschnitt 1](#1-oberfläche)).
 3. **Deckkraft** (Overlays) und **anzeigen** (Häkchen = Ebene ein/aus).
 4. *↑ nach oben* / *↓ nach unten*: Reihenfolge; *als Basis*: Ebene wird Referenz; *aus Ansicht entfernen*.
-5. **Fusion exportieren** (unten): die sichtbaren Ebenen so, wie sie angezeigt werden, als RGB-Datensatz –
+5. **Fusion exportieren** (Karte unten, aufklappen): die sichtbaren Ebenen so, wie sie angezeigt werden, als RGB-Datensatz –
    DICOM Secondary Capture (ZIP) oder NIfTI RGB, im Raster der Basis oder axial.
 
 Label-Ebenen werden ohne Interpolation (nächster Nachbar) dargestellt.
@@ -315,7 +316,10 @@ Ebenenkarte eines dynamischen Datensatzes den Regler **Zeit**:
    - Dann **Frames in den MNI-Raum übertragen**.
    - Das Mittelbild wird rigide auf das T1 und das T1 affin auf MNI152 2009c registriert (wie bei Centiloid). Danach
      werden alle Frames übertragen.
-   - Es entsteht ein dynamischer Datensatz `… · MNI152 …`.
+   - Es entsteht ein dynamischer Datensatz `… · MNI`.
+   - **Alternative:** im Bereich **Standardraum** normalisieren (Grundlage T1, PET oder CT, [Abschnitt 6](#6-standardraum-mni-atlas-und-suvr)).
+     Dort wird die dynamische Serie mit allen anderen Datensätzen Frame für Frame übertragen; Schritt 3 entfällt dann,
+     und die Serie im MNI-Raum ist unter *1 · Dynamische Serie* direkt wählbar.
 5. **4 · Referenzregion und Modell**:
    1. Atlas laden bzw. wählen (*CerebrA-Atlas laden*; AAL3 über den Bereich *Analyse*).
    2. **Referenzregion** wählen: Kleinhirnrinde (Standard), Kleinhirn gesamt oder Pons.
@@ -379,7 +383,7 @@ Die Frames sollten zerfallskorrigiert sein; bei nicht korrigierten DICOM-Daten w
 
 ![Organe und Regionsliste](docs/images/21-ct-organe.jpg)
 
-4. **Regionsliste**: Suche, Häkchen blenden Regionen ein/aus (*alle* / *keine* / *nur Treffer*), Klick auf eine Region
+4. **Regionsliste** (Karte *Regionen* unter dem Tumorlast-Ergebnis bzw. in der Ebenenkarte im Bereich *Ansicht*): Suche, Häkchen blenden Regionen ein/aus (*alle* / *keine* / *nur Treffer*), Klick auf eine Region
    setzt das Fadenkreuz hinein; Volumen je Region in ml.
 5. Die Organe stehen danach in Tumorlast und Label-Analyse zur Verfügung und lassen sich als NIfTI exportieren
    (Regionsnamen bleiben beim Wiederladen erhalten).
@@ -508,6 +512,7 @@ Bereich **Export** (aktiver Datensatz):
    - *Als DICOM speichern* – bei DICOM-Quellen mit Original-Header (alle Elemente byte-genau, neue UIDs, ImageType
      DERIVED); nach Crop/Drehung/Resampling als neue Serie aus Vorlage; Serien als ZIP.
    - *Als NIfTI speichern* – mit Orientierung (sform/qform); Labelbilder mit Regionsnamen im Header.
+   - Ist im Bereich *Daten* eine **Patient-ID** eingetragen, beginnen alle NIfTI- und CSV-Dateien mit `<ID>_`.
    - **Anonymisierung** (optional): Patienten-, Geräte- und Freitextangaben entfernen, UIDs ersetzen; Zeiten und
      optional Gewicht/Größe bleiben für die SUV-Berechnung erhalten.
 2. **In Zielraum exportieren / resampeln**:
@@ -533,7 +538,10 @@ Bereich **Export** (aktiver Datensatz):
   (Werte dann in Bq/ml bzw. Originaleinheiten).
 - **Labels werden nicht erkannt** oder heißen *Region n*: in der Label-Analyse Namen zuweisen oder Tabelle laden;
   Dateien aus aktuellen Versionen von Recon Studio speichern die Namen selbst.
-- **Registrierung weit daneben** (Daten aus verschiedenen Untersuchungen): *Grobsuche* aktivieren, ggf. *Affin* wählen.
+- **Koregistrierung weit daneben** (Daten aus verschiedenen Untersuchungen): *Grobsuche* aktivieren, ggf. *Affin* wählen.
+- **Normalisierung mit CT schlägt fehl**: nur ein Kopf-CT verwenden (Ganzkörper-CT vorher auf den Kopf zuschneiden);
+  bei Hirn-PET/CT ist meist das T1 oder das PET die bessere Grundlage.
+- **Seite neu geladen – alles weg?** Sitzungen regelmäßig als Projekt speichern (*Daten* → *Projekt speichern*).
 - **Hirnatlas liefert keine Regionen**: Der Datensatz muss im MNI-Raum liegen (Abschnitt 6).
 - **Lange Dateinamen** im Panel: Schlagworte vergeben – sie ersetzen die Namen in Auswahllisten weitgehend.
 - **Datensatz nach dem Laden nicht sichtbar**: Er wurde absichtlich nicht eingeblendet (andere Region, zweites PET …) –

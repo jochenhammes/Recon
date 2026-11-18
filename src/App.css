@@ -2382,3 +2382,9 @@ tr.focus-row td {
   background: var(--accent-bg);
   outline: none;
 }
+
+.norm-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 8px;
+}

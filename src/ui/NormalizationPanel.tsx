@@ -92,7 +92,7 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
             ))}
           </select>
         </label>
-        <div className="inline-fields">
+        <div className="norm-fields">
           <label className="field">
             Kontrast
             <select value={props.subjectKind} disabled={running} onChange={(e) => props.onSubjectKindChange(e.target.value as TemplateKind)}>
