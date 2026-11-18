@@ -10,7 +10,7 @@ import { type CentiloidVois, voiMeans } from "./vois";
 
 /**
  * Synchronous Centiloid pipeline (same steps as the app, without workers) for scripts and tests:
- * PET → T1 rigid (NMI), T1 → template affine (NCC, brain mask) + nonlinear, PET resampled through both
+ * PET → T1 rigid (NMI), T1 → template affine (NCC, brain mask) [+ nonlinear only if `warp` is given], PET resampled through both
  * into the template grid, VOI means → SUVR → CL. Without T1 the PET is normalized directly to a PET template.
  */
 export interface PipelineInput {
@@ -72,7 +72,7 @@ export function runCentiloidPipeline(input: PipelineInput): PipelineOutput {
   const grid = { nx: template.nx, ny: template.ny, nz: template.nz, geometry: template.geometry };
   let componentWeights: number[] = [];
   let n: Normalization = { subjectId: "subject", templateName: "template", grid, affine: aff.matrix, field: fieldFromAffine(grid, aff.matrix), kind: "affine" };
-  if (input.warp !== false) {
+  if (input.warp) {
     input.onStage?.("nichtlinear");
     const w = estimateWarp(
       { template: img(template), subject: img(subject), affine: aff.matrix, weights: input.templateMask, components: input.templateComponents },

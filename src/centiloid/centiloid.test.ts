@@ -44,3 +44,15 @@ describe("Centiloid", () => {
     expect("reason" in acquisitionWindow(ds({}, {}))).toBe(true);
   });
 });
+
+describe("pipeline calibrations", () => {
+  it("defaults to the GAAIN-calibrated equation of the app pipeline", async () => {
+    const { CALIBRATIONS, computeCentiloid } = await import("./centiloid");
+    const fbb = CALIBRATIONS[0];
+    expect(fbb.id).toBe("fbb-recon");
+    expect(fbb.pipeline).toBe("recon");
+    // GAAIN subject 2032: app SUVR (whole cerebellum) 1.4197, standard-method CL 58.3
+    expect(Math.abs(computeCentiloid(1.4197, fbb) - 58.3)).toBeLessThan(5);
+    expect(CALIBRATIONS.filter((c) => c.pipeline === "standard").map((c) => c.id)).toEqual(["fbb-rowe2017", "pib-klunk2015"]);
+  });
+});

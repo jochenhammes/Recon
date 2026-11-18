@@ -1200,7 +1200,14 @@ function App() {
     if (!e) return;
     setCentiloidError(null);
     try {
-      setCentiloidOutcome(evaluateCentiloid(e, calibration, "vorhandener Datensatz im MNI-Raum"));
+      setCentiloidOutcome(
+        evaluateCentiloid(
+          e,
+          calibration,
+          "vorhandener Datensatz im MNI-Raum",
+          calibration.pipeline === "recon" ? ["GAAIN-kalibrierte Gleichung: gilt nur, wenn der Datensatz mit der affinen Recon-Studio-Normalisierung (T1 → MNI) erstellt wurde – sonst die Standardgleichung wählen."] : [],
+        ),
+      );
     } catch (err) {
       setCentiloidError(err instanceof Error ? err.message : String(err));
     }
@@ -1241,9 +1248,13 @@ function App() {
         const petMatrix = multiply4(t1.matrix, reg.matrix);
         updateEntry(pet.id, { matrix: petMatrix });
         overrides.set(pet.id, petMatrix);
-        setCentiloidStatus("2/4 T1 → MNI (affin + nichtlinear) …");
-        n = await estimateNormalization(template, t1, { nonlinear: true, cost: "ncc", mask: template.dataset.template?.mask ?? undefined, regularization: normRegularization });
-        pipeline = `MRT-Pipeline (${n.kind === "nonlinear" ? "nichtlinear" : "affin"})`;
+        // Affine only: against the GAAIN reference data the affine normalization agrees far better with the
+        // Centiloid standard method (R² 0.990, slope 0.93) than with the additional nonlinear warp (R² 0.92, slope 0.78).
+        setCentiloidStatus("2/4 T1 → MNI (affin) …");
+        n = await estimateNormalization(template, t1, { nonlinear: false, cost: "ncc", mask: template.dataset.template?.mask ?? undefined, regularization: normRegularization });
+        pipeline = "MRT-Pipeline (affin)";
+        if (calibration.pipeline === "standard")
+          warnings.push("Die gewählte Standardgleichung gilt für die SPM8-Standardmethode – für diese Pipeline die GAAIN-kalibrierte Gleichung wählen.");
       } else {
         const tpl = templateEntries.find((e) => e.dataset.template?.kind === "PET");
         if (!tpl) throw new Error("Für PET-only wird eine PET-Vorlage benötigt.");
@@ -1251,7 +1262,7 @@ function App() {
         setCentiloidStatus("1/3 PET → PET-Vorlage (affin + nichtlinear) …");
         n = await estimateNormalization(template, pet, { nonlinear: true, cost: "ncc", mask: template.dataset.template?.mask ?? undefined, regularization: normRegularization });
         pipeline = "PET-only";
-        warnings.push("PET-only: bei ausgeprägter Atrophie oder vaskulären Läsionen Normalisierung besonders prüfen.");
+        warnings.push("PET-only ist nicht an den GAAIN-Daten validiert – Werte nur orientierend; bei Atrophie oder vaskulären Läsionen Normalisierung besonders prüfen.");
       }
       if (centiloidCancelled.current) return;
       if (n.warp && n.warp.foldedFraction > 0) warnings.push(`Verformung faltet sich in ${(100 * n.warp.foldedFraction).toFixed(2)} % der Hirnvoxel.`);

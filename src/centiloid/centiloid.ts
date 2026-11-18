@@ -16,29 +16,53 @@ export interface CentiloidCalibration {
   /** Uptake window (minutes p.i.) the calibration was derived for. */
   window: [number, number];
   source: string;
+  /**
+   * Which normalization the equation applies to: "recon" = this app's automatic pipeline (calibrated against the
+   * GAAIN reference data), "standard" = the SPM8 standard method (for data normalized elsewhere).
+   */
+  pipeline?: "recon" | "standard";
 }
 
+/**
+ * Level-2 calibration of the app's MRI pipeline (PET → T1 rigid, T1 → MNI152 2009c affine, GAAIN standard VOIs)
+ * against the GAAIN Florbetaben project (Rowe et al. 2017; 35 subjects, 90–110 min FBB, 50–70 min PiB):
+ * ordinary least squares of the published standard-method Centiloid on the app's SUVR (whole cerebellum).
+ * Scripts: src/centiloid/README-calibration.md.
+ */
 export const CALIBRATIONS: CentiloidCalibration[] = [
+  {
+    id: "fbb-recon",
+    tracer: "FBB",
+    label: "Florbetaben – Recon-Studio-Pipeline (GAAIN-kalibriert)",
+    reference: "WhlCbl",
+    slope: 164.06,
+    intercept: -171.67,
+    window: [90, 110],
+    source: "eigene Kalibrierung an GAAIN-FBB-Daten (n = 35): R² 0,990; Kreuzvalidierung RMSE 5,8 CL",
+    pipeline: "recon",
+  },
   {
     id: "fbb-rowe2017",
     tracer: "FBB",
-    label: "Florbetaben (Rowe et al. 2017)",
+    label: "Florbetaben – SPM8-Standard (Rowe et al. 2017)",
     reference: "WhlCbl",
     slope: 153.4,
     intercept: -154.9,
     window: [90, 110],
-    source: "Rowe CC et al., Eur J Nucl Med Mol Imaging 2017;44:2053–2059 (SPM8-Standardmethode, ganzes Kleinhirn)",
+    source: "Rowe CC et al., Eur J Nucl Med Mol Imaging 2017;44:2053–2059 (SPM8-Standardmethode, ganzes Kleinhirn) – für extern normalisierte Daten",
+    pipeline: "standard",
   },
   {
     id: "pib-klunk2015",
     tracer: "PiB",
-    label: "[11C]PiB (Klunk et al. 2015)",
+    label: "[11C]PiB – Standard (Klunk et al. 2015)",
     reference: "WhlCbl",
     // CL = 100 (SUVR − 1.009) / 1.067
     slope: 100 / 1.067,
     intercept: (-100 * 1.009) / 1.067,
     window: [50, 70],
-    source: "Klunk WE et al., Alzheimers Dement 2015;11:1–15 (Standardmethode, ganzes Kleinhirn)",
+    source: "Klunk WE et al., Alzheimers Dement 2015;11:1–15 (Standardmethode, ganzes Kleinhirn) – für extern normalisierte Daten",
+    pipeline: "standard",
   },
 ];
 

@@ -174,9 +174,9 @@ export function CentiloidPanel(props: CentiloidPanelProps) {
       </label>
       <p className="tool-hint">
         {t1
-          ? "PET → T1 rigide (NMI), T1 → MNI affin + nichtlinear, PET über beide Schritte in den MNI-Raum, dann VOI-Auswertung."
+          ? "PET → T1 rigide (NMI), T1 → MNI affin, PET über beide Schritte in den MNI-Raum, dann VOI-Auswertung – an GAAIN-Referenzdaten kalibriert."
           : props.petTemplateLabel
-            ? "PET direkt affin + nichtlinear auf die PET-Vorlage, dann VOI-Auswertung."
+            ? "PET direkt affin + nichtlinear auf die PET-Vorlage, dann VOI-Auswertung (nicht an GAAIN validiert)."
             : "Für PET-only zuerst eine Florbetaben-Vorlage laden (Panel „Daten“ → Standardraum-Vorlage, Kontrast PET)."}
       </p>
       {!props.running ? (

@@ -181,12 +181,17 @@ Label-Ebenen werden ohne Interpolation (nächster Nachbar) dargestellt.
 1. **Centiloid-VOIs laden …**: `Centiloid_Std_VOI.zip` von GAAIN herunterladen (Link in der Karte) und die ZIP-Datei
    direkt auswählen. Die VOIs werden wegen der GAAIN-Nutzungsbedingungen nicht mitgeliefert.
    *VOIs anzeigen* blendet sie als Labels ein.
-2. **Kalibrierung** wählen: Florbetaben (Rowe et al. 2017), PiB (Klunk et al. 2015) oder *Eigene Gleichung …*
-   (Steigung, Achsenabschnitt, Referenzregion).
+2. **Kalibrierung** wählen:
+   - *Florbetaben – Recon-Studio-Pipeline (GAAIN-kalibriert)* bzw. *PiB – Recon-Studio-Pipeline* für die automatische
+     MRT-Pipeline der App (Standard),
+   - *… Standard (Rowe 2017 / Klunk 2015)* für Daten, die extern mit der SPM8-Standardmethode normalisiert wurden,
+   - oder *Eigene Gleichung …* (Steigung, Achsenabschnitt, Referenzregion).
 3. **Automatisch**: PET und T1-MRT wählen → *Centiloid bestimmen*
-   (PET → T1 rigide, T1 → MNI affin + nichtlinear, VOI-Auswertung).
-   Ohne MRT: *ohne MRT (PET-only)* – dazu vorher eine PET-Vorlage laden.
-4. Oder **Vorhandenen Datensatz im MNI-Raum auswerten**: Datensatz wählen → *Auswerten*.
+   (PET → T1 rigide, T1 → MNI **affin**, VOI-Auswertung). An den GAAIN-Referenzdaten (35 Probanden) weicht das
+   Ergebnis im Mittel um ca. 6 CL von der Standardmethode ab (Details: `src/centiloid/README-calibration.md`).
+   Ohne MRT: *ohne MRT (PET-only)* – dazu vorher eine PET-Vorlage laden; diese Variante ist nicht validiert.
+4. Oder **Vorhandenen Datensatz im MNI-Raum auswerten**: Datensatz wählen → *Auswerten*. Die GAAIN-kalibrierte
+   Gleichung gilt nur für Datensätze aus der affinen Normalisierung der App.
 5. Ergebnis: Centiloid-Wert, VOI-Tabelle (Volumen, Mittel, SUVR), Warnungen (z. B. Aufnahmezeitfenster, Tracer).
 
 ---
