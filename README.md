@@ -16,20 +16,24 @@ Alles läuft im Browser; es gibt keinen Server, **die Daten verlassen den Rechne
 
 | Bereich | Was die App kann |
 |---|---|
-| **Daten** | DICOM (Datei, Serie, Multi-Frame, JPEG Lossless; auch ohne Dateiendung) und NIfTI (`.nii`, `.nii.gz`); mehrere Serien in einem Upload werden getrennt geladen, unlesbare Dateien übersprungen; beliebig viele Datensätze mit Schlagwort; Labelbilder werden als Atlas erkannt |
+| **Daten** | DICOM (Datei, Serie, Multi-Frame, JPEG Lossless; auch ohne Dateiendung) und NIfTI (`.nii`, `.nii.gz`); mehrere Serien in einem Upload werden getrennt geladen, unlesbare Dateien übersprungen; beliebig viele Datensätze mit Schlagwort in einer kompakten Liste; Modalität von NIfTI wird erkannt (änderbar); zurückhaltendes Einblenden (nur was räumlich zusammenpasst); Labelbilder werden als Atlas erkannt |
+| **Projekt** | Ganze Sitzung als `.recon`-Datei speichern und wieder öffnen (Datensätze inkl. DICOM-Header, Registrierungen, Anzeige, Normalisierung, Ergebnisse) |
 | **SPECT-Rekonstruktion** | Projektionen (NM Multi-Frame, 1–2 Köpfe) mit FBP (Rampe, Shepp-Logan, Kosinus, Hamming, Hann, Butterworth) oder OSEM (Subsets, Iterationen) |
-| **Ansicht** | Axial, sagittal, koronar und rotierende MIP in Patientenorientierung; beliebig viele Overlays mit eigener Farbtabelle, eigenem Fenster und eigener Deckkraft; Ebenen an/aus; WebGL2-Darstellung; Screenshot; Fusion als DICOM/NIfTI exportieren |
+| **Ansicht** | Axial, sagittal, koronar und rotierende MIP in Patientenorientierung; beliebig viele Overlays mit eigener Farbtabelle, eigenem Fenster und eigener Deckkraft; Ebenen-Schnellwahl über den Bildern (in jedem Bereich); Farbskala mit Fenster in SUV/HU/…; Region unter dem Cursor; WebGL2-Darstellung; Screenshot mit Farbskala; Fusion als DICOM/NIfTI exportieren |
 | **Registrierung** | Basis-Datensatz definiert den Raum; beliebige Datensätze darauf registrieren (rigide/affin; NMI, MI, Correlation Ratio, Kreuzkorrelation; Mehrstufen, Grobsuche); Ergebnis prüfen, übernehmen oder verwerfen; manuelle Feinkorrektur; Matrix als JSON |
 | **Standardraum (MNI)** | MNI152-2009c-T1-, SPM-PET- und SPM-SPECT-Vorlage; affine und nichtlineare Normalisierung (SPM-artig); Übertragung coregistrierter Datensätze (z. B. PET über das T1); SPM/CAT12-`y_*.nii` importieren/exportieren |
-| **Atlas & SUVR** | CerebrA (mitgeliefert), AAL3 (ZIP-Download) oder eigener Atlas; regionale Statistik, Referenzregion, SUVR-Tabelle und SUVR-Bild |
-| **Centiloid** | Amyloid-PET mit GAAIN-Standard-VOIs (vom Nutzer geladen); MRT-Pipeline (affin) an den GAAIN-Referenzdaten kalibriert (Florbetaben und PiB, Kreuzvalidierung RMSE 4–6 CL), Standardgleichungen für extern normalisierte Daten, eigene Gleichung; PET-only (nicht validiert) |
+| **Centiloid & SUVR: Atlas** | CerebrA (mitgeliefert), AAL3 (ZIP-Download) oder eigener Atlas; regionale Statistik, Referenzregion, SUVR-Tabelle und SUVR-Bild |
+| **Centiloid & SUVR: Centiloid** | Amyloid-PET mit GAAIN-Standard-VOIs (vom Nutzer geladen); MRT-Pipeline (affin) an den GAAIN-Referenzdaten kalibriert (Florbetaben und PiB, Kreuzvalidierung RMSE 4–6 CL), Standardgleichungen für extern normalisierte Daten, eigene Gleichung; PET-only (nicht validiert) |
 | **Kinetik (dynamisches PET)** | Dynamische DICOM-Serien und 4D-NIfTI (BIDS-JSON); Bewegungskorrektur der Frames; Übertragung in den MNI-Raum (über T1); Referenzregion aus Atlas; **Patlak (Ki_ref)** und **SRTM (BP_ND, R1)** regional und als Parameterkarten, Kurven, CSV – nach dem MATLAB-Paket der Arbeitsgruppe ([ghaefner/kinetic-modeling](https://github.com/ghaefner/kinetic-modeling)) |
 | **CT-Organsegmentierung** | TotalSegmentator „total“ (117 Strukturen, 3 mm) direkt im Browser (WebGPU oder CPU); Regionsliste mit Suche, Ein-/Ausblenden und Sprung zur Region |
 | **Tumorlast** | Läsionen auf dem PET in SUV: SUV-Schwelle (z. B. 4,0 / 2,5 / PSMA 3), 41 % SUVmax, leberbasiert (PERCIST); TMTV/PSMA-TV, TLG/TL-PSMA, SUVmax/peak/mean, Dmax; automatischer Ausschluss physiologischer Anreicherung über CT-Organe; Knochen/Weichteil; Korrektur per Klick und Pinsel; CSV und Maske |
-| **Analyse** | Übersicht aller Datensätze (Min, Mittel, Median, Max, SD, Varianz); Histogramm; SUV aus dem DICOM-Header; VOI auf allen Datensätzen; **Label-Analyse** (Statistik und Histogramm je Region einer Segmentierung oder eines Atlas) mit CSV-Export von Tabellen und Histogrammen je Label |
+| **Analyse** | Übersicht aller Datensätze (Min, Mittel, Median, Max, SD, Varianz); Histogramm; SUV aus dem DICOM-Header; VOI auf allen Datensätzen; **Label-Analyse** (Statistik und Histogramm je Region einer Segmentierung oder eines Atlas) mit CSV-Export von Tabellen und Histogrammen je Label; alle Ergebnistabellen groß über dem Viewer mit Suche, Sortierung und CSV |
 | **Bearbeiten** | Werteoperationen (Schwelle, Bereich, Begrenzen, linear), VOI (Kugel, Quader, Pinsel), Gauß-Glättung, Spiegeln, Drehen, Resampling; rückgängig |
 | **DICOM-Header** | Alle Elemente durchsuchen, ändern, löschen, hinzufügen (mit VR-Prüfung) |
 | **Export** | DICOM mit Original-Header (byte-genau erhalten) oder als neue Serie aus Vorlage, NIfTI mit Orientierung (Labelbilder mit Regionsnamen), Export in den Raum eines anderen Datensatzes, optionale Anonymisierung |
+
+Bedienung: einklappbare Karten mit Status, Erläuterungen hinter ⓘ, verbreiterbares Seitenpanel, Aktivitätsanzeige für
+laufende Berechnungen in der Kopfzeile – Details im [Handbuch](MANUAL.md).
 
 ## Schnellstart
 

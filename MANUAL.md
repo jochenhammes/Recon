@@ -26,18 +26,25 @@ Beispieldaten (keine Patientendaten).
 
 ![Startbildschirm](docs/images/01-start.jpg)
 
-- **Linke Leiste**: die Arbeitsbereiche *Daten, Ansicht, Registrierung, MNI (Standardraum), Tumor, Analyse,
-  Bearbeiten, Header, Export*. Ein Klick auf den aktiven Bereich klappt das Seitenpanel ein und aus (ebenso das
-  Symbol unten links).
+- **Linke Leiste**: die Arbeitsbereiche *Daten, Ansicht, Registrierung, Standardraum, Centiloid & SUVR (SUVR), Kinetik,
+  Tumorlast, Analyse, Bearbeiten, Header, Export*. Ein Klick auf den aktiven Bereich klappt das Seitenpanel ein und aus
+  (ebenso das Symbol unten links). Ausgegraute Bereiche nennen im Tooltip den Grund (z. B. „Header nur für DICOM“).
+  Beim Wechsel des Bereichs bleibt alles erhalten – laufende Berechnungen, Ergebnisse, aufgeklappte Karten.
 - **Seitenpanel**: Die Breite lässt sich am rechten Rand mit der Maus ziehen (Doppelklick = Standardbreite; mit
   Tastaturfokus ←/→). Die Breite bleibt im Browser gespeichert – praktisch für breite Ergebnistabellen.
   Längere Erläuterungen (Methodik, Literatur, Formate) stecken hinter dem **ⓘ** neben der Kartenüberschrift.
-- **Kopfzeile**: ein Chip je geladenem Datensatz (Modalität, Schlagwort, Dateiname; *Ref* = Referenz/Basis).
-  Ein Klick auf einen Chip macht den Datensatz **aktiv** – darauf beziehen sich Analyse, Bearbeiten, Header und Export.
-  Rechts oben: helles/dunkles Design.
+  **Karten** lassen sich per Klick auf die Überschrift auf- und zuklappen; rechts steht ihr Status (z. B.
+  *✓ korrigiert*, *läuft*, *25 Frames*). Erledigte Schritte (z. B. Bewegungskorrektur, Normalisierung) klappen von
+  selbst zu.
+- **Kopfzeile**: die **Aktivitätsanzeige** – laufende Berechnungen (Laden, Registrierung, Normalisierung,
+  CT-Segmentierung, Kinetik, Centiloid, Export …) mit Fortschritt, kurz *fertig* nach Abschluss, Fehler mit ⚠.
+  Ein Klick öffnet den zuständigen Bereich (dort lässt sich abbrechen). Ohne laufende Aufgabe steht dort die Zahl der
+  geladenen Datensätze. Rechts oben: helles/dunkles Design.
 - **Viewer** (rechts): Layout 2×2, 1+3 oder Einzelbild, *Zoom zurücksetzen*, *Screenshot* (PNG).
-  Rechts in der Viewer-Leiste: **Ebenen** (siehe [Abschnitt 4](#4-ansicht-ebenen-und-fusion)) und **?** (Maus- und
-  Tastenbedienung).
+  Rechts in der Viewer-Leiste: **Skala** (Farbskala ein/aus), **Ebenen** (siehe
+  [Abschnitt 4](#4-ansicht-ebenen-und-fusion)) und **?** (Maus- und Tastenbedienung).
+  Die **Farbskala** unten links zeigt für jede farbige Ebene Farbtabelle und Fenster (Min/Max in SUV, HU, BP_ND …) und
+  bei Labelbildern die Region unter dem Cursor; sie erscheint auch im Screenshot.
   Statuszeile unten: Position in mm (Patientenkoordinaten LPS) und die Werte aller sichtbaren Ebenen unter dem
   Fadenkreuz – je Ebene mit Farbbalken ihrer Farbtabelle, Modalität und Schlagwort bzw. Dateiname; bei Labelbildern
   der Name der Region.
@@ -66,25 +73,43 @@ Alles wird lokal im Browser berechnet; Daten werden nirgendwohin hochgeladen.
    - DICOM: Einzeldatei, Serie oder Multi-Frame, auch Dateien ohne Endung (macOS-Exporte).
    - NIfTI: `.nii` oder `.nii.gz`.
    - Mehrere Serien in einem Upload werden **getrennt** geladen; nicht lesbare Dateien werden übersprungen und gemeldet.
-3. Jeder Datensatz erscheint als Karte (Modalität, Matrix, Voxelgröße, Patientenkoordinaten).
+3. **Was eingeblendet wird**: Der erste Datensatz ist die Basis der Ansicht; ein CT/MRT derselben Körperregion wird
+   Basis, ein PET/SPECT derselben Region (oder mit gleichem Frame of Reference) wird darüber eingeblendet, ebenso
+   Labelbilder auf dem Raster eines angezeigten Datensatzes. Alles andere – z. B. ein zweites PET, ein T1 neben einem
+   Ganzkörper-CT, Daten einer anderen Region – wird geladen, aber **nicht eingeblendet**; ein Hinweis unten rechts nennt
+   diese Datensätze. Einblenden über **Ebenen** im Viewer oder das Auge in der Datensatzliste.
+4. **Datensatzliste**: eine Zeile je Datensatz mit Modalität (farbig), Schlagwort, Name und *Basis*-Markierung.
+   - Klick auf die Zeile: Details (Modalität, Quelle, Matrix, Voxelgröße, Koordinaten, Dynamik) und Schlagwort.
+   - 👁 ein-/ausblenden · ✎ **aktiv** setzen – darauf beziehen sich Analyse, Bearbeiten, Header und Export.
+   - ⋯: *Als Basis der Ansicht*, *Datensatz entfernen*.
    - **Modalität bei NIfTI**: NIfTI-Dateien enthalten keine Modalität. Recon Studio erkennt sie aus einer
      BIDS-JSON-Datei, dem Dateinamen (`_pet`, `_T1w`, `ct`, `spect` …), dynamischen Daten (→ PET) oder dem
      Wertebereich (Luft und Knochen → CT). Die Auswahl *Modalität* in der Karte korrigiert eine falsche Erkennung;
      davon hängen u. a. Anzeige-Basis, CT-Fensterpresets und die Vorauswahl in Registrierung, Centiloid und Tumorlast ab.
-   - **Schlagwort** eintragen (z. B. *Baseline*, *Follow-up*, *CT nativ*) – es erscheint überall in Auswahllisten und
-     in der Kopfzeile.
-   - *Als Referenz*: Datensatz definiert den Anzeigeraum (Basis). CT/MRT wird automatisch Basis.
-   - *Als Overlay* / *Overlay aus*: über der Basis einblenden.
-   - *Bearbeiten/Export*: Datensatz aktiv machen.
-   - *×*: Datensatz entfernen.
-4. **Labelbilder** (Atlas, CT-Organe, Läsionsmasken) werden beim Laden automatisch erkannt und als farbiges
+   - **Schlagwort** eintragen (z. B. *Baseline*, *Follow-up*, *CT nativ*) – es erscheint überall in Auswahllisten,
+     Statuszeile und Ebenen.
+5. **Labelbilder** (Atlas, CT-Organe, Läsionsmasken) werden beim Laden automatisch erkannt und als farbiges
    Label-Overlay mit Regionsnamen angelegt, wenn
    - die Datei aus Recon Studio exportiert wurde (Regionsnamen stehen im NIfTI-Header),
    - es eine TotalSegmentator-Ausgabe ist,
    - eine Tabelle mit gleichem Namen mitgeladen wird (z. B. `AAL3v1.nii` + `AAL3v1.nii.txt`), oder
    - der Dateiname auf ein Labelbild hindeutet (`…_seg`, `…_dseg`, `labels`, `aseg` …).
-5. Unter **Standardraum-Vorlage** (aufklappen) lassen sich MNI- und SPM-Vorlagen oder eigene Vorlagen laden
+6. Unter **Standardraum-Vorlage** (aufklappen) lassen sich MNI- und SPM-Vorlagen oder eigene Vorlagen laden
    (siehe [Abschnitt 6](#6-standardraum-mni-atlas-und-suvr)).
+
+### Projekt speichern und öffnen
+
+Karte **Projekt** im Bereich *Daten*:
+
+- **Projekt speichern** legt die ganze Sitzung als eine Datei `Recon-Projekt_….recon` ab. Sie enthält:
+  - alle Datensätze (DICOM-Originaldateien mit Header, NIfTI-Volumen, Bearbeitungen, dynamische Frames,
+    Labelbilder mit Regionsnamen, Vorlagen);
+  - Registrierungen, Schlagworte, Anzeige (Basis, Ebenen, Fenster, Farbtabellen) und die Normalisierung;
+  - Centiloid- und Tumorlast-Ergebnisse.
+- Kinetik-Tabellen und Label-Analysen werden nach dem Öffnen per Klick neu berechnet.
+- **Projekt öffnen …** (auch auf der Startseite oder per Ziehen der `.recon`-Datei ins Ladefeld) ersetzt die
+  aktuelle Sitzung nach Rückfrage.
+- Die Datei enthält die Patientendaten der geladenen Bilder – vertraulich behandeln.
 
 ---
 
@@ -160,7 +185,7 @@ schaltet die Liste wieder aus; der Zustand bleibt gespeichert.
 ![Vorlage und Normalisierung](docs/images/14-mni-einstellungen.jpg)
 
 1. Subjekt-Datensätze laden (z. B. T1-MRT + PET) und das PET zuerst auf das T1 registrieren ([Abschnitt 5](#5-registrierung-coregistrierung)).
-2. Bereich **MNI** öffnen, unter *Vorlage* den Standardraum wählen bzw. laden:
+2. Bereich **Standardraum** öffnen, unter *Vorlage* den Standardraum wählen bzw. laden:
    - *MNI152 2009c (T1, 2 mm)* für T1-MRT,
    - *SPM12 PET* (Perfusion) für Hirn-PET ohne MRT, *SPM12 SPECT* für Perfusions-SPECT,
    - eigene Vorlagen im Bereich *Daten* → *Standardraum-Vorlage* (z. B. Amyloid-PET-Vorlage, auch 4D/adaptiv).
@@ -177,25 +202,28 @@ schaltet die Liste wieder aus; der Zustand bleibt gespeichert.
 1. Karte **In Standardraum übertragen**: Datensätze anhaken, die mit dem Subjekt registriert sind (z. B. das PET).
 2. Interpolation wählen, **Übertragen**. Jeder Datensatz wird über seine Registrierung und die Normalisierung des
    Subjekts in den Standardraum resampelt und als `… · MNI152 …` angelegt.
-3. **SPM/CAT12**: ein in SPM/CAT12 berechnetes Verformungsfeld `y_*.nii` laden (statt selbst zu normalisieren) bzw.
+3. **SPM/CAT12** (Karte aufklappen): ein in SPM/CAT12 berechnetes Verformungsfeld `y_*.nii` laden (statt selbst zu normalisieren) bzw.
    die App-Normalisierung als `y_*.nii` speichern.
 
 ### 6.3 Atlas und SUVR
 
 ![Regionale SUVR mit CerebrA](docs/images/16-atlas-suvr.png)
 
-1. Karte **Atlas & SUVR**: *CerebrA-Atlas laden* (102 Regionen, mitgeliefert) oder *Eigener Atlas …*
+1. Bereich **Centiloid & SUVR** (Leiste: *SUVR*), Karte **Atlas & SUVR**: *CerebrA-Atlas laden* (102 Regionen, mitgeliefert) oder *Eigener Atlas …*
    (Labelbild + Tabelle, oder direkt die AAL3-ZIP-Datei von [gin.cnrs.fr](https://www.gin.cnrs.fr/en/tools/aal/)).
 2. **Datensatz** im Standardraum wählen (z. B. das übertragene PET).
 3. **Referenzregion**: Kleinhirnrinde, Kleinhirn gesamt, Pons/Hirnstamm, ganzes Gehirn oder *Eigene Auswahl …*.
 4. **Regionen auswerten** – Tabelle mit Volumen, Mittelwert und SUVR; sortierbar nach Name, Index oder SUVR.
 5. *Tabelle als CSV* exportieren oder *SUVR-Bild anlegen* (neuer Datensatz = Bild / Referenzmittel).
+   Mit **⤢** über der Tabelle öffnet sie sich groß über dem Viewer.
 
 ---
 
 ## 7. Centiloid
 
 ![Centiloid-Karte](docs/images/17-centiloid.png)
+
+Bereich **Centiloid & SUVR** (Leiste: *SUVR*), Karte **Centiloid**.
 
 1. **Centiloid-VOIs laden …**: `Centiloid_Std_VOI.zip` von GAAIN herunterladen (Link in der Karte) und die ZIP-Datei
    direkt auswählen. Die VOIs werden wegen der GAAIN-Nutzungsbedingungen nicht mitgeliefert.
@@ -307,7 +335,7 @@ Die Frames sollten zerfallskorrigiert sein; bei nicht korrigierten DICOM-Daten w
 
 ![Segmentierung läuft](docs/images/20-ct-segmentierung-laeuft.jpg)
 
-1. CT laden, Bereich **Tumor** öffnen.
+1. CT laden, Bereich **Tumorlast** öffnen.
 2. Karte **CT-Organsegmentierung**: CT wählen → **Organe segmentieren**.
    - Beim ersten Mal wird das Modell (≈ 66 MB) geladen und im Browser gespeichert.
    - Mit WebGPU (Chrome/Edge) läuft es auf der Grafikkarte, sonst auf der CPU (Hinweis in Gelb).
@@ -327,7 +355,7 @@ Die Frames sollten zerfallskorrigiert sein; bei nicht korrigierten DICOM-Daten w
 
 ![Einstellungen Tumorlast](docs/images/22-tumorlast-einstellungen.jpg)
 
-1. PET (und optional CT mit Organsegmentierung) laden; Bereich **Tumor**.
+1. PET (und optional CT mit Organsegmentierung) laden; Bereich **Tumorlast**.
 2. Indikation wählen: **Lymphom (FDG)** oder **PSMA** – setzt passende Methoden und Ausschlussorgane.
 3. **PET** wählen. Bei DICOM mit Dosis/Gewicht wird in SUV gerechnet; sonst erscheint ein Hinweis
    (Werte werden direkt als SUV interpretiert).
@@ -354,7 +382,11 @@ Die Frames sollten zerfallskorrigiert sein; bei nicht korrigierten DICOM-Daten w
 
 Bereich **Analyse**.
 
-### 10.1 Alle Datensätze und Detailanalyse
+**Große Tabellen**: Der Knopf **⤢** über jeder Ergebnistabelle (hier, in Atlas & SUVR, Centiloid, Kinetik und
+Tumorlast) öffnet sie groß über dem Viewer – mit Suche, Sortierung per Klick auf den Spaltenkopf und **CSV**-Export.
+Ein Klick auf eine Zeile wirkt wie in der kleinen Tabelle (z. B. Region ins Histogramm). Schließen mit ✕ oder Esc.
+
+### 11.1 Alle Datensätze und Detailanalyse
 
 ![Übersicht aller Datensätze](docs/images/30-analyse-alle-datensaetze.png)
 
@@ -365,7 +397,7 @@ Bereich **Analyse**.
 3. **Detailanalyse**: Einheit (Originalwerte oder **SUV** aus dem DICOM-Header), Statistik und **Histogramm**
    (Bins, log. Skala, *ohne unterste Bin*).
 
-### 10.2 Label-Analyse
+### 11.2 Label-Analyse
 
 ![Label-Analyse](docs/images/31-label-analyse-karte.png)
 
@@ -438,7 +470,8 @@ Bereich **Export** (aktiver Datensatz):
    3. Interpolation (nächster Nachbar, trilinear, B-Spline; Labelbilder immer nächster Nachbar).
    4. Format *DICOM* (Header der Quelle, Geometrie und Frame of Reference des Ziels) oder *NIfTI* → *Exportieren*.
 3. Fusionen: Bereich **Ansicht** → *Fusion exportieren* ([Abschnitt 4](#4-ansicht-ebenen-und-fusion)).
-   Analyse-Tabellen: CSV-Knöpfe in den jeweiligen Karten.
+   Analyse-Tabellen: CSV-Knöpfe in den jeweiligen Karten oder **⤢** → *CSV*.
+4. Ganze Sitzung: **Projekt speichern** im Bereich *Daten* ([Abschnitt 2](#projekt-speichern-und-öffnen)).
 
 ---
 
@@ -457,3 +490,5 @@ Bereich **Export** (aktiver Datensatz):
 - **Registrierung weit daneben** (Daten aus verschiedenen Untersuchungen): *Grobsuche* aktivieren, ggf. *Affin* wählen.
 - **Hirnatlas liefert keine Regionen**: Der Datensatz muss im MNI-Raum liegen (Abschnitt 6).
 - **Lange Dateinamen** im Panel: Schlagworte vergeben – sie ersetzen die Namen in Auswahllisten weitgehend.
+- **Datensatz nach dem Laden nicht sichtbar**: Er wurde absichtlich nicht eingeblendet (andere Region, zweites PET …) –
+  über **Ebenen** oder das Auge in der Datensatzliste einblenden.

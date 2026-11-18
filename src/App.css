@@ -2212,3 +2212,13 @@ tr.excluded-row td {
 .welcome-actions .secondary-btn {
   width: auto;
 }
+.inline-select {
+  max-width: 100%;
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-h);
+  font: inherit;
+  font-size: 12px;
+}
