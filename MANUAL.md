@@ -161,7 +161,8 @@ Label-Ebenen werden ohne Interpolation (nächster Nachbar) dargestellt.
 
 **Ebenen-Schnellwahl im Viewer:** Der Knopf **Ebenen** oben rechts im Viewer blendet eine kleine Liste über den
 Schnittbildern ein – in jedem Bereich, z. B. während Kinetik, Tumorlast oder Analyse. Häkchen = Ebene sichtbar,
-Regler = Deckkraft. Datensätze unter *nicht eingeblendet* werden per Häkchen als Overlay hinzugefügt. Der Knopf
+Regler = Deckkraft. Datensätze unter *nicht eingeblendet* werden per Häkchen als Overlay hinzugefügt. Der **Papierkorb**
+am Zeilenende entfernt einen Datensatz: erster Klick → *Löschen?*, zweiter Klick innerhalb von 3 s bestätigt. Der Knopf
 schaltet die Liste wieder aus; der Zustand bleibt gespeichert.
 
 ![Ebenen-Schnellwahl im Viewer](docs/images/11b-ebenen-overlay.jpg)

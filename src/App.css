@@ -2433,3 +2433,27 @@ tr.focus-row td {
   gap: 8px;
   overflow-wrap: anywhere;
 }
+
+.layer-trash {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: #7d8191;
+  font: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+.layer-trash:hover {
+  color: #ff8a7a;
+  border-color: #343744;
+}
+.layer-trash.armed {
+  color: #fff;
+  background: #b3261e;
+  border-color: #b3261e;
+}

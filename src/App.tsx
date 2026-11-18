@@ -2895,6 +2895,7 @@ function App() {
                     if (visible) makeOverlay(id);
                   } else updateEntry(id, { display: { ...e.display, visible } });
                 }}
+                onRemove={removeEntry}
                 onOpacityChange={(id, opacity) => {
                   const e = byId(id);
                   if (e) updateEntry(id, { display: { ...e.display, opacity } });

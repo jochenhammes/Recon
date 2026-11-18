@@ -1,3 +1,5 @@
+import { Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { lutGradient } from "../viewer/volume";
 import type { ColorLut } from "../viewer/volume";
 
@@ -19,11 +21,21 @@ export function LayerToggle({
   rows,
   onVisibleChange,
   onOpacityChange,
+  onRemove,
 }: {
   rows: LayerToggleRow[];
   onVisibleChange: (id: string, visible: boolean) => void;
   onOpacityChange: (id: string, opacity: number) => void;
+  /** Removes the dataset (trash icon; second click within a few seconds confirms). */
+  onRemove?: (id: string) => void;
 }) {
+  // Two-step delete: the first click arms the trash icon ("Löschen?"), the second deletes.
+  const [armed, setArmed] = useState<string | null>(null);
+  useEffect(() => {
+    if (!armed) return;
+    const t = setTimeout(() => setArmed(null), 3000);
+    return () => clearTimeout(t);
+  }, [armed]);
   const shown = rows.filter((r) => r.role !== "hidden");
   const hidden = rows.filter((r) => r.role === "hidden");
   const row = (r: LayerToggleRow) => (
@@ -46,6 +58,22 @@ export function LayerToggle({
           title={`Deckkraft ${Math.round(r.opacity * 100)} %`}
           onChange={(e) => onOpacityChange(r.id, Number(e.target.value))}
         />
+      )}
+      {onRemove && (
+        <button
+          className={`layer-trash${armed === r.id ? " armed" : ""}`}
+          title={armed === r.id ? "Nochmals klicken: Datensatz entfernen" : `${r.title ?? r.label} entfernen`}
+          aria-label={armed === r.id ? `Entfernen von ${r.label} bestätigen` : `${r.label} entfernen`}
+          onClick={() => {
+            if (armed === r.id) {
+              setArmed(null);
+              onRemove(r.id);
+            } else setArmed(r.id);
+          }}
+        >
+          <Trash2 size={12} />
+          {armed === r.id && <span>Löschen?</span>}
+        </button>
       )}
     </li>
   );
