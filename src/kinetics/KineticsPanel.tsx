@@ -21,7 +21,10 @@ export interface KineticsApi {
   toMni: (id: string, t1Id: string | null, status: (s: string) => void, window: { fromMin: number; toMin: number }) => Promise<string>;
   /** Atlas labels on the grid of a dataset. */
   labelsFor: (atlasId: string, targetId: string) => Float32Array;
-  addMaps: (sourceId: string, maps: { label: string; data: Float32Array; window: [number, number]; visible?: boolean }[]) => void;
+  /** Creates the maps as datasets; returns their ids. */
+  addMaps: (sourceId: string, maps: { label: string; data: Float32Array; window: [number, number]; visible?: boolean }[]) => { id: string; label: string }[];
+  /** Shows a dataset as the top overlay. */
+  showDataset: (id: string) => void;
   loadCerebra: () => void;
   atlasBusy: boolean;
 }
@@ -74,6 +77,7 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
   const [makeMaps, setMakeMaps] = useState(true);
   const [result, setResult] = useState<Result | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
+  const [createdMaps, setCreatedMaps] = useState<{ dynId: string; maps: { id: string; label: string; hint: string }[] } | null>(null);
 
   const presets = useMemo(() => (atlas ? REFERENCE_PRESETS.filter((p) => p.id !== "whole").map((p) => ({ ...p, indices: presetIndices(atlas.atlas, p) })).filter((p) => p.indices.size) : []), [atlas]);
   const preset = presets.find((p) => p.id === refMode) ?? presets[0];
@@ -190,15 +194,22 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
           const v = Array.from(a).filter((x) => x !== 0 && Number.isFinite(x)).sort((p, q) => p - q);
           return [lo, v.length ? v[Math.floor(0.99 * (v.length - 1))] : 1];
         };
-        api.addMaps(
-          dyn.id,
+        const defs =
           model === "patlak"
-            ? [{ label: `Ki_ref (Patlak, t* ${tStarMin} min)`, data: r.maps.ki, window: win(r.maps.ki) }]
+            ? [
+                { label: `Ki_ref (Patlak, t* ${tStarMin} min)`, data: r.maps.ki, window: win(r.maps.ki), hint: "Einstromkonstante relativ zur Referenz (1/min)" },
+                { label: "V (Patlak-Achsenabschnitt)", data: r.maps.intercept, window: win(r.maps.intercept), visible: false, hint: "Verteilungsvolumen relativ zur Referenz" },
+                { label: "R² (Patlak)", data: r.maps.r2, window: [0, 1] as [number, number], visible: false, hint: "Linearität des Patlak-Plots ab t*" },
+              ]
             : [
-                { label: "BP_ND (SRTM)", data: r.maps.bp, window: win(r.maps.bp) },
-                { label: "R1 (SRTM)", data: r.maps.r1, window: [0, 2], visible: false },
-              ],
-        );
+                { label: "BP_ND (SRTM)", data: r.maps.bp, window: win(r.maps.bp), hint: "Bindungspotenzial (nicht verdrängbar)" },
+                { label: "R1 (SRTM)", data: r.maps.r1, window: [0, 2] as [number, number], visible: false, hint: "relativer Einstrom K1/K1′ (Perfusion)" },
+                { label: "k2 (SRTM)", data: r.maps.k2, window: win(r.maps.k2), visible: false, hint: "Auswaschrate der Zielregion (1/min)" },
+                { label: "k2a (SRTM)", data: r.maps.k2a, window: win(r.maps.k2a), visible: false, hint: "scheinbare Auswaschrate k2/(1+BP_ND) (1/min)" },
+                { label: "R² (SRTM)", data: r.maps.r2, window: [0, 1] as [number, number], visible: false, hint: "Fitgüte je Voxel" },
+              ];
+        const made = api.addMaps(dyn.id, defs);
+        setCreatedMaps({ dynId: dyn.id, maps: made.map((m, i) => ({ ...m, hint: defs[i].hint })) });
       }
     });
 
@@ -470,6 +481,21 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
                   Tabelle + TACs als CSV
                 </button>
               </div>
+              {createdMaps?.dynId === current.dynId && (
+                <>
+                  <h4 className="subheading">Parameterkarten (neue Datensätze, exportierbar)</h4>
+                  {createdMaps.maps.map((m) => (
+                    <div key={m.id} className="hidden-dataset-row">
+                      <span>
+                        <strong>{m.label}</strong> – {m.hint}
+                      </span>
+                      <button className="chip-btn" onClick={() => api.showDataset(m.id)}>
+                        einblenden
+                      </button>
+                    </div>
+                  ))}
+                </>
+              )}
               <p className="tool-hint">Zeile anklicken = Kurve und Fit der Region anzeigen.</p>
               <div className="region-table-wrap">
                 <table className="region-table label-stats-table">

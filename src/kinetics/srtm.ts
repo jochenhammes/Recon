@@ -95,12 +95,14 @@ export function srtmSetup(cref: ArrayLike<number>, timing: FrameTiming, opts: Sr
 }
 
 /** Best θ and linear coefficients for one TAC. */
-function solve(tac: ArrayLike<number>, s: SrtmSetup): { k: number; r1: number; b: number } {
+function solve(tac: ArrayLike<number>, s: SrtmSetup): { k: number; r1: number; b: number; rss: number; ssTot: number } {
   const n = s.cref.length;
-  let syc = 0, syy = 0;
+  let syc = 0, syy = 0, sy = 0, sw = 0;
   for (let i = 0; i < n; i++) {
     syc += s.weights[i] * tac[i] * s.cref[i];
     syy += s.weights[i] * tac[i] * tac[i];
+    sy += s.weights[i] * tac[i];
+    sw += s.weights[i];
   }
   let best = -1, bestRss = Infinity, bestR1 = NaN, bestB = NaN;
   for (let k = 0; k < s.thetas.length; k++) {
@@ -118,7 +120,7 @@ function solve(tac: ArrayLike<number>, s: SrtmSetup): { k: number; r1: number; b
       bestB = b;
     }
   }
-  return { k: best, r1: bestR1, b: bestB };
+  return { k: best, r1: bestR1, b: bestB, rss: bestRss, ssTot: syy - (sy * sy) / sw };
 }
 
 export function srtmFit(tac: ArrayLike<number>, s: SrtmSetup): SrtmFit {
@@ -142,10 +144,15 @@ export function srtmFit(tac: ArrayLike<number>, s: SrtmSetup): SrtmFit {
 }
 
 /** Voxelwise BP_ND, R1 and k2; voxels outside `mask` are 0. */
-export function srtmMaps(frames: Float32Array[], s: SrtmSetup, mask?: Uint8Array, onProgress?: (f: number) => void): { bp: Float32Array; r1: Float32Array; k2: Float32Array } {
+export function srtmMaps(
+  frames: Float32Array[],
+  s: SrtmSetup,
+  mask?: Uint8Array,
+  onProgress?: (f: number) => void,
+): { bp: Float32Array; r1: Float32Array; k2: Float32Array; k2a: Float32Array; r2: Float32Array } {
   const nv = frames[0].length;
   const n = frames.length;
-  const bp = new Float32Array(nv), r1 = new Float32Array(nv), k2 = new Float32Array(nv);
+  const bp = new Float32Array(nv), r1 = new Float32Array(nv), k2 = new Float32Array(nv), k2a = new Float32Array(nv), r2 = new Float32Array(nv);
   const tac = new Float64Array(n);
   for (let v = 0; v < nv; v++) {
     if (mask && !mask[v]) continue;
@@ -157,7 +164,9 @@ export function srtmMaps(frames: Float32Array[], s: SrtmSetup, mask?: Uint8Array
     bp[v] = kk2 / th - 1;
     r1[v] = f.r1;
     k2[v] = kk2;
+    k2a[v] = th;
+    r2[v] = f.ssTot > 0 ? 1 - f.rss / f.ssTot : 0;
     if (onProgress && v % 65536 === 0) onProgress(v / nv);
   }
-  return { bp, r1, k2 };
+  return { bp, r1, k2, k2a, r2 };
 }

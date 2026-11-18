@@ -47,10 +47,10 @@ self.onmessage = (event: MessageEvent<KineticsJob | { type: "stop" }>) => {
       const timing = { start: msg.start, duration: msg.duration };
       if (msg.model === "patlak") {
         const m = patlakMaps(msg.frames, patlakSetup(msg.cref, timing, msg.tStarMin), msg.mask);
-        post({ type: "result", maps: { ki: m.ki, intercept: m.intercept } }, [m.ki.buffer, m.intercept.buffer]);
+        post({ type: "result", maps: { ki: m.ki, intercept: m.intercept, r2: m.r2 } }, [m.ki.buffer, m.intercept.buffer, m.r2.buffer]);
       } else {
         const m = srtmMaps(msg.frames, srtmSetup(msg.cref, timing), msg.mask, (f) => progress(Math.round(f * 100), 100));
-        post({ type: "result", maps: { bp: m.bp, r1: m.r1, k2: m.k2 } }, [m.bp.buffer, m.r1.buffer, m.k2.buffer]);
+        post({ type: "result", maps: { bp: m.bp, r1: m.r1, k2: m.k2, k2a: m.k2a, r2: m.r2 } }, [m.bp.buffer, m.r1.buffer, m.k2.buffer, m.k2a.buffer, m.r2.buffer]);
       }
     }
   } catch (e) {

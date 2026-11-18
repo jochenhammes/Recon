@@ -122,3 +122,22 @@ describe("frame duration input", () => {
     expect(parseFrameDurations("abc", 3)).toMatch(/keine gültige/);
   });
 });
+
+describe("parameter maps", () => {
+  it("SRTM maps contain k2a = k2/(1+BP) and R²; Patlak maps contain V and R²", () => {
+    const s = srtmSetup(cref, timing);
+    const target = frameAvg(srtmTarget(1.1, 0.1, 1.0));
+    const m = srtmMaps(target.map((x) => Float32Array.from([x])), s);
+    expect(m.k2a[0]).toBeCloseTo(m.k2[0] / (1 + m.bp[0]), 5);
+    expect(m.k2a[0]).toBeCloseTo(0.05, 2);
+    expect(m.r2[0]).toBeGreaterThan(0.999);
+    let integ = 0;
+    const pt = frameAvg(crefFine.map((c, i) => {
+      if (i > 0) integ += 0.5 * DT * (crefFine[i - 1] + c);
+      return 0.01 * integ + 0.7 * c;
+    }));
+    const pm = patlakMaps(pt.map((x) => Float32Array.from([x])), patlakSetup(cref, timing, 15));
+    expect(pm.intercept[0]).toBeCloseTo(0.7, 1);
+    expect(pm.r2[0]).toBeGreaterThan(0.999);
+  });
+});

@@ -60,24 +60,31 @@ export function patlakFit(tac: ArrayLike<number>, s: PatlakSetup): PatlakFit {
 }
 
 /** Voxelwise Ki_ref and intercept (closed-form regression); voxels outside `mask` are 0. */
-export function patlakMaps(frames: Float32Array[], s: PatlakSetup, mask?: Uint8Array): { ki: Float32Array; intercept: Float32Array } {
+export function patlakMaps(frames: Float32Array[], s: PatlakSetup, mask?: Uint8Array): { ki: Float32Array; intercept: Float32Array; r2: Float32Array } {
   const nv = frames[0].length;
   const n = s.frames.length;
   const den = n * s.sxx - s.sx * s.sx;
   const ki = new Float32Array(nv);
   const intercept = new Float32Array(nv);
+  const r2 = new Float32Array(nv);
   const inv = Float64Array.from(s.cref, (c) => 1 / c);
   for (let v = 0; v < nv; v++) {
     if (mask && !mask[v]) continue;
-    let sy = 0, sxy = 0;
+    let sy = 0, sxy = 0, syy = 0;
     for (let k = 0; k < n; k++) {
       const y = frames[s.frames[k]][v] * inv[k];
       sy += y;
       sxy += s.x[k] * y;
+      syy += y * y;
     }
     const slope = (n * sxy - s.sx * sy) / den;
+    const icpt = (sy - slope * s.sx) / n;
     ki[v] = slope;
-    intercept[v] = (sy - slope * s.sx) / n;
+    intercept[v] = icpt;
+    // R² of the line: explained / total sum of squares.
+    const ssTot = syy - (sy * sy) / n;
+    const ssReg = slope * (sxy - (s.sx * sy) / n);
+    r2[v] = ssTot > 0 ? Math.max(0, Math.min(1, ssReg / ssTot)) : 0;
   }
-  return { ki, intercept };
+  return { ki, intercept, r2 };
 }

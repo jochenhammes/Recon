@@ -1532,15 +1532,22 @@ function App() {
     },
     addMaps: (sourceId, maps) => {
       const E = byId(sourceId);
-      if (!E) return;
+      if (!E) return [];
       const v = E.dataset.current;
+      const made: { id: string; label: string }[] = [];
       for (const m of maps) {
         const d = createDataset(v.withData(m.data), { kind: "reconstruction" }, `${E.dataset.displayName} · ${m.label}`);
         const derived: LoadedDataset = { ...d, derivedFrom: { name: `${E.dataset.displayName} (${m.label})`, source: { kind: "reconstruction" }, space: E.dataset.derivedFrom?.space ?? "nativ", label: m.label.split(" ")[0] } };
         const id = `ds${nextEntryId++}`;
         setEntries((prev) => [...prev, { id, dataset: derived, display: { window: m.window, lut: "kidney", opacity: 0.6, visible: m.visible !== false }, matrix: E.matrix }]);
         if (m.visible !== false) addOverlay(id);
+        made.push({ id, label: m.label });
       }
+      return made;
+    },
+    showDataset: (id) => {
+      setEntries((prev) => prev.map((x) => (x.id === id ? { ...x, display: { ...x.display, visible: true } } : x)));
+      addOverlay(id);
     },
     loadCerebra: () => void addBundledAtlas(),
     atlasBusy,

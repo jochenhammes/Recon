@@ -248,8 +248,10 @@ Ebenenkarte eines dynamischen Datensatzes den Regler **Zeit**:
    - Ein Klick auf eine Region zeigt ihre Zeit-Aktivitäts-Kurve mit der Referenz und bei SRTM den Modell-Fit; bei
      Patlak zusätzlich den Patlak-Plot mit Fitgerade.
    - *Tabelle + TACs als CSV* speichert die Parameter und alle Regionskurven.
-   - Die **Parameterkarten** (BP_ND, R1 ausgeblendet, bzw. Ki_ref) sind neue Datensätze im MNI-Raum. Sie lassen sich
-     anzeigen und exportieren und in der Label-Analyse auswerten.
+   - **Parameterkarten** (neue Datensätze im MNI-Raum, anzeigbar, exportierbar, in der Label-Analyse auswertbar):
+     - SRTM: **BP_ND** (eingeblendet), **R1** (relativer Einstrom), **k2**, **k2a** = k2/(1+BP_ND) und **R²** (Fitgüte).
+     - Patlak: **Ki_ref** (eingeblendet), **V** (Achsenabschnitt) und **R²** (Linearität ab t*).
+     - Die Ergebniskarte listet alle Karten; *einblenden* legt eine Karte als oberste Ebene in die Ansicht.
 
 ![Ergebnis Patlak](docs/images/62-kinetik-patlak.jpg)
 
