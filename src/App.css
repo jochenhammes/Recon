@@ -197,6 +197,7 @@
 }
 
 .workspace {
+  position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
@@ -1794,4 +1795,24 @@ tr.excluded-row td {
   .spin {
     animation: none;
   }
+}
+
+/* ─── Notice (bottom right of the viewer) ─────────────────────────────── */
+.toast {
+  position: absolute;
+  right: 16px;
+  bottom: 40px;
+  z-index: 30;
+  max-width: min(460px, calc(100% - 32px));
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--accent-border);
+  background: var(--surface);
+  color: var(--text-h);
+  font-size: 12.5px;
+  line-height: 1.4;
+  box-shadow: var(--shadow, 0 8px 24px rgba(0, 0, 0, 0.35));
 }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Activity, BarChart3, Brain, Crosshair, Download, Eye, FileCode2, FolderOpen, Target, Wand2 } from "lucide-react";
 import { KineticsPanel, type KineticsApi } from "./kinetics/KineticsPanel";
 import { LayerToggle } from "./ui/LayerToggle";
+import { type DisplayCandidate, type DisplayDecision, decideDisplay, gridBox, gridKey } from "./dataset/autoDisplay";
 import { type Activity as JobActivity, ActivityBar } from "./ui/ActivityBar";
 import { FrameSlider } from "./ui/FrameSlider";
 import { runKineticsJob } from "./kinetics/runner";
@@ -411,17 +412,53 @@ function App() {
 
   // Mirror of the state relevant for adding datasets, so several datasets can be added in one go
   // (e.g. all series of an upload) without each call seeing stale state.
-  const live = useRef({ entries, referenceId: reference?.id ?? null, activeId: active?.id ?? null });
-  live.current = { entries, referenceId: reference?.id ?? null, activeId: active?.id ?? null };
+  const live = useRef({ entries, referenceId: reference?.id ?? null, activeId: active?.id ?? null, overlayIds });
+  live.current = { entries, referenceId: reference?.id ?? null, activeId: active?.id ?? null, overlayIds };
 
-  function addDataset(next: LoadedDataset): Entry {
+  /** Loading decisions of the current upload (for the notice after loading). */
+  const loadDecisions = useRef<{ name: string; shown: boolean }[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 9000);
+    return () => clearTimeout(t);
+  }, [notice]);
+
+  /** Display decision for a newly loaded dataset (see decideDisplay). */
+  function autoDecision(next: LoadedDataset): DisplayDecision {
+    const L = live.current;
+    const cand = (d: LoadedDataset): DisplayCandidate => {
+      const v = d.current;
+      const dims: [number, number, number] = [v.nx, v.ny, v.nz];
+      return {
+        anatomical: isAnatomical(d.source) || d.template?.kind === "T1",
+        labels: !!d.atlas,
+        box: gridBox(v.geometry, dims),
+        gridKey: gridKey(v.geometry, dims),
+        frameOfReference: d.source.kind === "dicom" ? d.source.files[0].dataSet.string("x00200052")?.trim() || undefined : undefined,
+      };
+    };
+    const ref = L.entries.find((e) => e.id === L.referenceId);
+    const shown = L.overlayIds.flatMap((id) => {
+      const e = L.entries.find((x) => x.id === id);
+      return e && e.display.visible && id !== L.referenceId ? [cand(e.dataset)] : [];
+    });
+    return decideDisplay(cand(next), ref ? cand(ref.dataset) : null, shown);
+  }
+
+  /**
+   * Adds a dataset. Without `decision`: the first dataset becomes the base, a CT/MR replaces a functional base,
+   * everything else is shown on top (used for derived datasets). Loaded files pass the decision of `autoDecision`.
+   */
+  function addDataset(next: LoadedDataset, decision?: DisplayDecision): Entry {
     const L = live.current;
     const entry: Entry = { id: `ds${nextEntryId++}`, dataset: next, display: defaultDisplay(next.current, next.source), matrix: IDENTITY_MAT4 };
     if (next.atlas) entry.display = { window: [0, 255], lut: "labels", opacity: 0.45, visible: true, nearest: true };
     const ref = L.entries.find((e) => e.id === L.referenceId);
     const act = L.entries.find((e) => e.id === L.activeId);
-    if ((next.template || next.atlas) && ref) {
-      // Templates and atlases are added without changing reference, overlay or active dataset.
+    if (((next.template || next.atlas) && ref && !decision) || (decision === "hidden" && ref)) {
+      // Templates, atlases and datasets not displayed automatically are added without changing reference, overlay or
+      // active dataset (they can be shown via "Ebenen").
       setEntries((prev) => [...prev, entry]);
       live.current = { ...L, entries: [...L.entries, entry] };
       return entry;
@@ -433,7 +470,7 @@ function App() {
       referenceId = entry.id;
       setReferenceId(entry.id);
       setOverlayIds([]);
-    } else if (anatomical && !isAnatomical(ref.dataset.source)) {
+    } else if (decision ? decision === "newBase" : anatomical && !isAnatomical(ref.dataset.source)) {
       // CT/MR becomes the display base; the previous reference is shown on top.
       list = list.map((e) => (e.id === ref.id ? { ...e, display: overlayDisplay(e) } : e));
       referenceId = entry.id;
@@ -442,11 +479,12 @@ function App() {
     } else {
       list = list.map((e) => (e.id === entry.id ? { ...e, display: overlayDisplay(e) } : e));
       addOverlay(entry.id);
+      L.overlayIds = [...L.overlayIds, entry.id];
     }
     setEntries(list);
     setCursor(null);
     // A CT/MR added for fusion does not take over analysis/editing from an existing PET/SPECT.
-    const becomesActive = !act || !anatomical || isAnatomical(act.dataset.source);
+    const becomesActive = !next.atlas && (!act || !anatomical || isAnatomical(act.dataset.source));
     let activeId = L.activeId;
     if (becomesActive) {
       activeId = entry.id;
@@ -456,7 +494,7 @@ function App() {
       if (!anatomical) setUnitMode(suv?.ok ? "suv" : "raw");
       resetEditInputs(next, !anatomical && suv?.ok ? suv.info.factor : 1);
     }
-    live.current = { entries: list, referenceId, activeId };
+    live.current = { entries: list, referenceId, activeId, overlayIds: L.overlayIds };
     return entry;
   }
 
@@ -567,12 +605,11 @@ function App() {
     if (!isAnatomical(loaded.source)) setProjectionSet(null);
     const d0 = createDataset(loaded.volume, loaded.source, fileName);
     const d = loaded.dynamic ? { ...d0, dynamic: loaded.dynamic } : d0;
-    if (loaded.atlas) {
-      // Label images (atlas, segmentation) come back as atlases: label colors, region list, region statistics.
-      const hadReference = live.current.entries.some((e) => e.id === live.current.referenceId);
-      const entry = addDataset({ ...d, atlas: loaded.atlas });
-      if (hadReference) addOverlay(entry.id);
-    } else addDataset(d);
+    // Label images (atlas, segmentation) come back as atlases: label colors, region list, region statistics.
+    const ds = loaded.atlas ? { ...d, atlas: loaded.atlas } : d;
+    const decision = autoDecision(ds);
+    const entry = addDataset(ds, decision);
+    loadDecisions.current.push({ name: entryShort({ ...entry }), shown: decision !== "hidden" });
     setError(null);
   }
 
@@ -1733,7 +1770,18 @@ function App() {
       <VolumeUploadPanel
         title={entries.length ? "Weiteren Datensatz laden" : "Volumen laden"}
         onLoaded={handleVolumeLoaded}
-        onBusyChange={setLoadBusy}
+        onBusyChange={(b) => {
+          setLoadBusy(b);
+          if (b) loadDecisions.current = [];
+          else {
+            const d = loadDecisions.current;
+            const hidden = d.filter((x) => !x.shown);
+            if (hidden.length)
+              setNotice(
+                `${d.length} ${d.length === 1 ? "Datensatz" : "Datensätze"} geladen – nicht eingeblendet: ${hidden.map((h) => h.name).join(", ")}. Einblenden über „Ebenen“ oben rechts im Viewer.`,
+              );
+          }
+        }}
         description="PET, SPECT, CT oder MRT als DICOM (Datei oder Serie) bzw. NIfTI – beliebig viele."
       />
       {entries.map((e) => (
@@ -2350,7 +2398,8 @@ function App() {
   act(coregError && !coregRunning && { id: "coreg-error", label: "Registrierung", error: coregError, tab: "registration" });
   act(centiloidError && !centiloidRunning && { id: "centiloid-error", label: "Centiloid", error: centiloidError, tab: "normalization" });
   act(tumorError && !tumorBusy && { id: "tumor-error", label: "Tumorlast", error: tumorError, tab: "tumor" });
-  const mipLayerId = [overlay, reference].find((e) => e && !isAnatomical(e.dataset.source))?.id ?? reference?.id;
+  // MIP of the topmost visible functional image (not of label images or CT/MR).
+  const mipLayerId = [...overlays].reverse().concat(reference ? [reference] : []).find((e) => e.display.visible && !e.dataset.atlas && !isAnatomical(e.dataset.source))?.id ?? reference?.id;
 
   return (
     <AppShell
@@ -2449,6 +2498,14 @@ function App() {
             )}
             <p className="welcome-note">Alle Daten werden ausschließlich lokal im Browser verarbeitet.</p>
           </div>
+        </div>
+      )}
+      {notice && (
+        <div className="toast" role="status">
+          <span>{notice}</span>
+          <button className="icon-btn small" aria-label="Hinweis schließen" onClick={() => setNotice(null)}>
+            ×
+          </button>
         </div>
       )}
     </AppShell>
