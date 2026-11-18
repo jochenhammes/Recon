@@ -1834,7 +1834,6 @@ tr.excluded-row td {
   border: 1px solid #343744;
   color: #d8dbe4;
   font-size: 11px;
-  pointer-events: none;
 }
 .legend-row {
   display: flex;
@@ -2232,4 +2231,88 @@ tr.excluded-row td {
 .plain-list li {
   margin: 2px 0;
   overflow-wrap: anywhere;
+}
+
+.legend-bar-wrap {
+  position: relative;
+  height: 12px;
+  display: flex;
+  align-items: center;
+}
+.legend-bar-wrap .legend-bar {
+  flex: 1;
+  height: 8px;
+  cursor: grab;
+  touch-action: none;
+}
+.legend-bar-wrap .legend-bar:active {
+  cursor: grabbing;
+}
+.legend-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 9px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+.legend-handle::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 3px;
+  border-radius: 2px;
+  background: #e4e6ee;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+  opacity: 0.75;
+}
+.legend-handle:hover::after {
+  opacity: 1;
+  background: #fff;
+}
+.legend-handle.left {
+  left: -4px;
+}
+.legend-handle.right {
+  right: -4px;
+}
+.lut-menu {
+  position: absolute;
+  z-index: 12;
+  min-width: 250px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid #343744;
+  background: #171920;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.lut-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #d8dbe4;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.lut-menu button:hover,
+.lut-menu button.active {
+  background: #3b2a5c;
+  color: #fff;
+}
+.lut-menu i {
+  width: 36px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
 }

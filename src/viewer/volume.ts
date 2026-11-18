@@ -114,7 +114,23 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
 }
 
-export type ColorLut = "gray" | "inverted" | "rainbow" | "kidney" | "voi" | "labels";
+export type ColorLut = "gray" | "inverted" | "hot" | "kidney" | "blue" | "rainbow" | "voi" | "labels";
+
+/** Color tables offered in the UI (label and VOI tables are special-purpose). */
+export const LUT_CHOICES: { value: ColorLut; label: string }[] = [
+  { value: "gray", label: "Graustufen" },
+  { value: "inverted", label: "Invertiert" },
+  { value: "hot", label: "Hot (Schwarz–Rot–Gelb–Weiß)" },
+  { value: "kidney", label: "Kidney (Schwarz–Blau–Grün–Gelb–Rot–Weiß)" },
+  { value: "blue", label: "Blau (Schwarz–Blau–Hellblau–Weiß)" },
+  { value: "rainbow", label: "Regenbogen" },
+  { value: "labels", label: "Atlas-Regionen (Farbtabelle)" },
+];
+
+/** Projects saved before "hot" got its own name used "kidney" for the hot-body table. */
+export function migrateLut(lut: string, savedVersion: number): ColorLut {
+  return savedVersion < 2 && lut === "kidney" ? "hot" : (lut as ColorLut);
+}
 
 function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
   const c = v * s;
@@ -142,11 +158,8 @@ function buildRainbowLut(): Uint8Array {
   return t;
 }
 
-function buildKidneyLut(): Uint8Array {
-  // Hot-body: black → red → yellow → white.
-  const stops: [number, number, number, number][] = [
-    [0, 0, 0, 0], [85, 255, 0, 0], [170, 255, 255, 0], [255, 255, 255, 255],
-  ];
+/** Piecewise linear table from [index, r, g, b] stops. */
+function buildStopsLut(stops: [number, number, number, number][]): Uint8Array {
   const t = new Uint8Array(256 * 3);
   for (let i = 0; i < 256; i++) {
     let k = stops.length - 2;
@@ -164,7 +177,14 @@ function buildKidneyLut(): Uint8Array {
 }
 
 const RAINBOW_LUT = buildRainbowLut();
-const KIDNEY_LUT = buildKidneyLut();
+// Hot body: black → red → yellow → white.
+const HOT_LUT = buildStopsLut([[0, 0, 0, 0], [85, 255, 0, 0], [170, 255, 255, 0], [255, 255, 255, 255]]);
+// Kidney (renal scintigraphy style): black → dark blue → blue → cyan → green → yellow → red → white.
+const KIDNEY_LUT = buildStopsLut([
+  [0, 0, 0, 0], [36, 0, 0, 120], [72, 0, 0, 255], [108, 0, 200, 255], [144, 0, 220, 60], [180, 255, 255, 0], [220, 255, 40, 0], [255, 255, 255, 255],
+]);
+// Blue shades: black → dark blue → blue → light blue → white.
+const BLUE_LUT = buildStopsLut([[0, 0, 0, 0], [70, 0, 20, 110], [140, 20, 90, 230], [200, 110, 190, 255], [255, 235, 248, 255]]);
 const GRAY_LUT = Uint8Array.from({ length: 256 * 3 }, (_, i) => Math.floor(i / 3));
 const INVERTED_LUT = Uint8Array.from({ length: 256 * 3 }, (_, i) => 255 - Math.floor(i / 3));
 /** Distinct colors for label atlases (index = label with window [0, 255]); golden-angle hues. */
@@ -180,8 +200,12 @@ export function lutTable(lut: ColorLut): Uint8Array {
   switch (lut) {
     case "rainbow":
       return RAINBOW_LUT;
+    case "hot":
+      return HOT_LUT;
     case "kidney":
       return KIDNEY_LUT;
+    case "blue":
+      return BLUE_LUT;
     case "inverted":
       return INVERTED_LUT;
     case "voi":

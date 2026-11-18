@@ -77,7 +77,7 @@ import { ExportPanel } from "./components/ExportPanel";
 import { buildSinogram } from "./recon/sinogram";
 import type { ReconParams } from "./recon/volume";
 import { reconstructVolume } from "./workers/workerPool";
-import { Volume3D } from "./viewer/volume";
+import { Volume3D, migrateLut } from "./viewer/volume";
 import { Viewer } from "./viewer/Viewer";
 import { useShallowStable } from "./viewer/useShallowStable";
 import type { LayerDisplay, LayoutKind, ViewKind, ViewerLayer } from "./viewer/types";
@@ -183,7 +183,7 @@ function centerOf(v: Volume3D): Vec3 {
 function overlayDisplay(entry: Entry): LayerDisplay {
   const d = entry.display;
   if (isAnatomical(entry.dataset.source)) return { ...d, opacity: Math.min(d.opacity, 0.5), visible: true };
-  return { ...d, lut: d.lut === "gray" ? "kidney" : d.lut, opacity: d.opacity === 1 ? 0.6 : d.opacity, visible: true };
+  return { ...d, lut: d.lut === "gray" ? "hot" : d.lut, opacity: d.opacity === 1 ? 0.6 : d.opacity, visible: true };
 }
 
 function App() {
@@ -626,9 +626,11 @@ function App() {
     setProjectBusy("open");
     setProjectError(null);
     try {
-      const { state } = await loadProject(await file.arrayBuffer());
+      const { state, meta } = await loadProject(await file.arrayBuffer());
       const st = state as ReturnType<typeof sessionState>;
       if (!Array.isArray(st.entries)) throw new Error("Projekt enthält keine Datensätze.");
+      const savedVersion = typeof meta.version === "number" ? meta.version : 1;
+      st.entries = st.entries.map((e) => ({ ...e, display: { ...e.display, lut: migrateLut(e.display.lut, savedVersion) } }));
       for (const e of st.entries) {
         const n = Number(e.id.replace(/^ds/, ""));
         if (Number.isFinite(n) && n >= nextEntryId) nextEntryId = n + 1;
@@ -1673,7 +1675,7 @@ function App() {
     const d = createDataset(v.withData(data), E.dataset.source, `${E.dataset.displayName} · SUVR`);
     const derived: LoadedDataset = { ...d, derivedFrom: { name: `${E.dataset.displayName} (SUVR, Referenz: ${refLabel})`, source: { kind: "reconstruction" }, space: E.dataset.derivedFrom?.space ?? "nativ", label: "SUVR" } };
     const id = `ds${nextEntryId++}`;
-    setEntries((prev) => [...prev, { id, dataset: derived, display: { window: [0, 3], lut: "kidney", opacity: 0.6, visible: true }, matrix: E.matrix }]);
+    setEntries((prev) => [...prev, { id, dataset: derived, display: { window: [0, 3], lut: "hot", opacity: 0.6, visible: true }, matrix: E.matrix }]);
     addOverlay(id);
     setActiveId(id);
   }
@@ -1766,7 +1768,7 @@ function App() {
         const d = createDataset(v.withData(m.data), { kind: "reconstruction" }, `${E.dataset.displayName} · ${m.label}`);
         const derived: LoadedDataset = { ...d, derivedFrom: { name: `${E.dataset.displayName} (${m.label})`, source: { kind: "reconstruction" }, space: E.dataset.derivedFrom?.space ?? "nativ", label: m.label.split(" ")[0] } };
         const id = `ds${nextEntryId++}`;
-        setEntries((prev) => [...prev, { id, dataset: derived, display: { window: m.window, lut: "kidney", opacity: 0.6, visible: m.visible !== false }, matrix: E.matrix }]);
+        setEntries((prev) => [...prev, { id, dataset: derived, display: { window: m.window, lut: "hot", opacity: 0.6, visible: m.visible !== false }, matrix: E.matrix }]);
         if (m.visible !== false) addOverlay(id);
         made.push({ id, label: m.label });
       }
@@ -2685,6 +2687,10 @@ function App() {
           onWindowChange={(id, window) => {
             const e = byId(id);
             if (e) updateEntry(id, { display: { ...e.display, window } });
+          }}
+          onLutChange={(id, lut) => {
+            const e = byId(id);
+            if (e) updateEntry(id, { display: { ...e.display, lut } });
           }}
           layout={layout}
           focusView={focusView}

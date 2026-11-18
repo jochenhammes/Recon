@@ -14,7 +14,7 @@ describe("fusion export", () => {
     const pet = vol((i) => (i % 2 ? 10 : 0));
     const layers = [
       { volume: base, w2v: worldToVoxelTransform(geom), display: { window: [0, 100] as [number, number], lut: "gray" as const, opacity: 1, visible: true } },
-      { volume: pet, w2v: worldToVoxelTransform(geom), display: { window: [0, 10] as [number, number], lut: "kidney" as const, opacity: 0.5, visible: true } },
+      { volume: pet, w2v: worldToVoxelTransform(geom), display: { window: [0, 10] as [number, number], lut: "hot" as const, opacity: 0.5, visible: true } },
     ];
     const rgb = renderFusion(layers, grid);
     // Voxel 0: overlay at window minimum → transparent → white base.

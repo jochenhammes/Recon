@@ -12,7 +12,7 @@ import { parseDicomBytes } from "../viewer/volumeLoader";
  */
 
 export const PROJECT_FORMAT = "recon-studio-project";
-export const PROJECT_VERSION = 1;
+export const PROJECT_VERSION = 2;
 export const PROJECT_EXTENSION = ".recon";
 
 export class ProjectError extends Error {}

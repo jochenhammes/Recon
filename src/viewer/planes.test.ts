@@ -91,7 +91,7 @@ describe("compositeLayers", () => {
     const rgba = compositeLayers(
       [
         { values: base, window: [0, 100], lut: "gray", opacity: 1 },
-        { values: overlay, window: [0, 10], lut: "kidney", opacity: 0.5 },
+        { values: overlay, window: [0, 10], lut: "hot", opacity: 0.5 },
       ],
       2,
     );

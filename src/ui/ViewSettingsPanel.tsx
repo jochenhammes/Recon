@@ -1,15 +1,9 @@
 import { formatInput, parseInput } from "../components/format";
 import type { LayerDisplay } from "../viewer/types";
-import type { ColorLut } from "../viewer/volume";
+import { type ColorLut, LUT_CHOICES } from "../viewer/volume";
 import { useEffect, useState } from "react";
 
-const LUT_OPTIONS: { value: ColorLut; label: string }[] = [
-  { value: "gray", label: "Graustufen" },
-  { value: "inverted", label: "Invertiert" },
-  { value: "kidney", label: "Hot (Schwarz–Rot–Gelb–Weiß)" },
-  { value: "rainbow", label: "Regenbogen" },
-  { value: "labels", label: "Atlas-Regionen (Farbtabelle)" },
-];
+const LUT_OPTIONS = LUT_CHOICES;
 
 export interface WindowPreset {
   label: string;

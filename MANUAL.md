@@ -43,8 +43,12 @@ Beispieldaten (keine Patientendaten).
 - **Viewer** (rechts): Layout 2×2, 1+3 oder Einzelbild, *Zoom zurücksetzen*, *Screenshot* (PNG).
   Rechts in der Viewer-Leiste: **Skala** (Farbskala ein/aus), **Ebenen** (siehe
   [Abschnitt 4](#4-ansicht-ebenen-und-fusion)) und **?** (Maus- und Tastenbedienung).
-  Die **Farbskala** unten links zeigt für jede farbige Ebene Farbtabelle und Fenster (Min/Max in SUV, HU, BP_ND …) und
-  bei Labelbildern die Region unter dem Cursor; sie erscheint auch im Screenshot.
+  Die **Farbskala** unten links zeigt für jede sichtbare Ebene Farbtabelle und Fenster (Min/Max in SUV, HU, BP_ND …) und
+  bei Labelbildern die Region unter dem Cursor; sie erscheint auch im Screenshot. Sie ist zugleich Bedienelement:
+  - **Enden des Balkens ziehen** (weiße Griffe): Fenster-Minimum bzw. -Maximum,
+  - **Mitte ziehen**: ganzes Fenster verschieben,
+  - **Rechtsklick** auf den Balken: Farbtabelle wählen – Graustufen, Invertiert, Hot, Kidney (Schwarz–Blau–Grün–Gelb–Rot–
+    Weiß), Blau (Schwarz–Blau–Hellblau–Weiß), Regenbogen.
   Statuszeile unten: Position in mm (Patientenkoordinaten LPS) und die Werte aller sichtbaren Ebenen unter dem
   Fadenkreuz – je Ebene mit Farbbalken ihrer Farbtabelle, Modalität und Schlagwort bzw. Dateiname; bei Labelbildern
   der Name der Region.
@@ -139,7 +143,8 @@ Karte **Projekt** im Bereich *Daten*:
 
 Bereich **Ansicht** – eine Karte je angezeigter Ebene (oben = oberste Ebene):
 
-1. **Farbtabelle**: Graustufen, invertiert, Hot, Regenbogen, Atlas-Regionen.
+1. **Farbtabelle**: Graustufen, invertiert, Hot, Kidney, Blau, Regenbogen, Atlas-Regionen (auch per Rechtsklick auf
+   die Farbskala im Viewer).
 2. **Fenster**: *Min*/*Max* eintragen, *Auto*, oder Presets (PET: SUV 0–5/10/15; CT: Weichteil, Lunge, Knochen,
    Gehirn, Leber). Alternativ im Bild mit der rechten Maustaste ziehen.
 3. **Deckkraft** (Overlays) und **anzeigen** (Häkchen = Ebene ein/aus).

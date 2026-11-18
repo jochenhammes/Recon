@@ -7,7 +7,7 @@ import { compositeLayers } from "./composite";
 import { type GpuDraw, ImageCanvas } from "./ImageCanvas";
 import { GlRenderer } from "./gl/renderer";
 import { mipSource, orientedMip } from "./mip";
-import { Volume3D, lutGradient, lutTable } from "./volume";
+import { type ColorLut, LUT_CHOICES, Volume3D, lutGradient, lutTable } from "./volume";
 import {
   type DisplayGrid,
   type PlaneKind,
@@ -40,6 +40,8 @@ export interface ViewerProps {
   onPaint?: (world: Vec3, normalAxis: 0 | 1 | 2) => void;
   /** Extra controls for the viewer toolbar. */
   toolbar?: ReactNode;
+  /** Color table chosen in the color scale (right click). */
+  onLutChange?: (layerId: string, lut: ColorLut) => void;
   /** Layer list shown as a floating panel (top right) when the "Ebenen" button is on. */
   layerPanel?: ReactNode;
   /** Optional per-view overlay (e.g. VOI outlines), drawn in plane pixel coordinates. */
@@ -58,6 +60,9 @@ interface LegendItem {
   min?: string;
   max?: string;
   unit?: string;
+  /** Window in raw units and display scale (for dragging the limits). */
+  window?: [number, number];
+  scale?: number;
   region?: { name: string; color: string };
 }
 
@@ -76,9 +81,9 @@ function legendItems(layers: ViewerLayer[], point: Vec3): LegendItem[] {
       out.push({ id: l.id, label: l.label, lut: "labels", region });
       continue;
     }
-    if (l.display.lut === "gray" || l.display.lut === "inverted" || l.display.lut === "voi") continue;
+    if (l.display.lut === "voi") continue;
     const sc = l.unit?.scale ?? 1;
-    out.push({ id: l.id, label: l.label, lut: l.display.lut, min: formatValue(l.display.window[0] * sc), max: formatValue(l.display.window[1] * sc), unit: l.unit?.label });
+    out.push({ id: l.id, label: l.label, lut: l.display.lut, min: formatValue(l.display.window[0] * sc), max: formatValue(l.display.window[1] * sc), unit: l.unit?.label, window: l.display.window, scale: sc });
   }
   return out;
 }
@@ -326,7 +331,7 @@ export function Viewer(props: ViewerProps) {
       </div>
       <div ref={layoutRef} className={`viewer-layout layout-${layout}`}>
         {props.layerPanel && layersOpen && <div className="viewer-layer-panel">{props.layerPanel}</div>}
-        {legendOn && <Legend items={legendItems(layers, statusPoint)} />}
+        {legendOn && <Legend items={legendItems(layers, statusPoint)} onWindowChange={props.onWindowChange} onLutChange={props.onLutChange} />}
         {layout === "grid" && GRID_ORDER.map(renderView)}
         {layout === "single" && renderView(focusView)}
         {layout === "focus" && (
@@ -604,10 +609,63 @@ function MipView({ layer, transform, onTransformChange, onWindowDrag, onDoubleCl
   );
 }
 
-function Legend({ items }: { items: LegendItem[] }) {
+/**
+ * Color scale: drag the left/right end of a bar to change the window minimum/maximum, drag the middle to shift the
+ * window; right click on a bar chooses the color table.
+ */
+function Legend({
+  items,
+  onWindowChange,
+  onLutChange,
+}: {
+  items: LegendItem[];
+  onWindowChange: (layerId: string, window: [number, number]) => void;
+  onLutChange?: (layerId: string, lut: ColorLut) => void;
+}) {
+  const [menu, setMenu] = useState<{ id: string; x: number; y: number; lut: ColorLut } | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ id: string; mode: "min" | "max" | "shift"; x0: number; w0: [number, number]; px: number } | null>(null);
+  useEffect(() => {
+    if (!menu) return;
+    const close = (e: PointerEvent) => {
+      if (!(e.target as HTMLElement).closest?.(".lut-menu")) setMenu(null);
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setMenu(null);
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [menu]);
   if (!items.length) return null;
+
+  const startDrag = (e: React.PointerEvent<HTMLElement>, it: LegendItem, mode: "min" | "max" | "shift") => {
+    if (e.button !== 0 || !it.window) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const bar = (e.currentTarget.closest(".legend-bar-wrap") as HTMLElement).getBoundingClientRect();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    drag.current = { id: it.id, mode, x0: e.clientX, w0: it.window, px: Math.max(20, bar.width) };
+  };
+  const moveDrag = (e: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d) return;
+    const [lo, hi] = d.w0;
+    const delta = ((e.clientX - d.x0) / d.px) * (hi - lo || 1);
+    const minWidth = Math.abs(hi - lo) * 0.01 || 1e-6;
+    let next: [number, number];
+    if (d.mode === "min") next = [Math.min(lo + delta, hi - minWidth), hi];
+    else if (d.mode === "max") next = [lo, Math.max(hi + delta, lo + minWidth)];
+    else next = [lo + delta, hi + delta];
+    onWindowChange(d.id, next);
+  };
+  const endDrag = () => {
+    drag.current = null;
+  };
+
   return (
-    <div className="viewer-legend" aria-label="Farbskala">
+    <div className="viewer-legend" aria-label="Farbskala" ref={rootRef} onPointerDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()}>
       {items.map((it) =>
         it.lut === "labels" ? (
           <div key={it.id} className="legend-row">
@@ -626,7 +684,27 @@ function Legend({ items }: { items: LegendItem[] }) {
         ) : (
           <div key={it.id} className="legend-row">
             <span className="legend-name">{it.label}</span>
-            <span className="legend-bar" style={{ background: lutGradient(it.lut) }} />
+            <div
+              className="legend-bar-wrap"
+              title="Enden ziehen: Fenster-Min/-Max · Mitte ziehen: verschieben · Rechtsklick: Farbtabelle"
+              onContextMenu={(e) => {
+                if (!onLutChange) return;
+                e.preventDefault();
+                const r = rootRef.current!.getBoundingClientRect();
+                setMenu({ id: it.id, x: e.clientX - r.left, y: e.clientY - r.top, lut: it.lut });
+              }}
+            >
+              <span
+                className="legend-bar"
+                style={{ background: lutGradient(it.lut) }}
+                onPointerDown={(e) => startDrag(e, it, "shift")}
+                onPointerMove={moveDrag}
+                onPointerUp={endDrag}
+                onPointerCancel={endDrag}
+              />
+              <span className="legend-handle left" aria-label="Fenster-Minimum ziehen" onPointerDown={(e) => startDrag(e, it, "min")} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} />
+              <span className="legend-handle right" aria-label="Fenster-Maximum ziehen" onPointerDown={(e) => startDrag(e, it, "max")} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} />
+            </div>
             <span className="legend-scale">
               <span>{it.min}</span>
               <span>
@@ -636,6 +714,25 @@ function Legend({ items }: { items: LegendItem[] }) {
             </span>
           </div>
         ),
+      )}
+      {menu && onLutChange && (
+        <div className="lut-menu" role="menu" style={{ left: Math.min(menu.x, 40), bottom: `calc(100% - ${menu.y}px)` }}>
+          {LUT_CHOICES.filter((c) => c.value !== "labels").map((c) => (
+            <button
+              key={c.value}
+              role="menuitemradio"
+              aria-checked={c.value === menu.lut}
+              className={c.value === menu.lut ? "active" : ""}
+              onClick={() => {
+                onLutChange(menu.id, c.value);
+                setMenu(null);
+              }}
+            >
+              <i style={{ background: lutGradient(c.value) }} />
+              {c.label}
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );
