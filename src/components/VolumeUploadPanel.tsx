@@ -12,9 +12,11 @@ export interface VolumeUploadPanelProps {
   onBusyChange?: (busy: boolean) => void;
   /** Small drop zone without heading (once data are loaded). */
   compact?: boolean;
+  /** Called instead of loading when a project file (.recon) is dropped/selected. */
+  onProjectFile?: (file: File) => void;
 }
 
-export function VolumeUploadPanel({ onLoaded, title = "Volumen laden", description, single, onBusyChange, compact }: VolumeUploadPanelProps) {
+export function VolumeUploadPanel({ onLoaded, title = "Volumen laden", description, single, onBusyChange, compact, onProjectFile }: VolumeUploadPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -24,6 +26,11 @@ export function VolumeUploadPanel({ onLoaded, title = "Volumen laden", descripti
 
   async function handleFiles(fileList: FileList | File[] | null) {
     if (!fileList || fileList.length === 0) return;
+    const project = Array.from(fileList).find((f) => /\.recon$/i.test(f.name));
+    if (project && onProjectFile) {
+      onProjectFile(project);
+      return;
+    }
     setBusy(true);
     onBusyChange?.(true);
     setError(null);

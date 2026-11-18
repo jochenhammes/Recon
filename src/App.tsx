@@ -3,6 +3,8 @@ import { Card } from "./ui/Card";
 import { Activity, BarChart3, Brain, Crosshair, Download, Eye, FileCode2, FolderOpen, Gauge, Target, Wand2 } from "lucide-react";
 import { KineticsPanel, type KineticsApi } from "./kinetics/KineticsPanel";
 import { LayerToggle } from "./ui/LayerToggle";
+import { PROJECT_EXTENSION, ProjectError, loadProject, saveProject } from "./project/project";
+import { InfoText } from "./ui/Info";
 import { type DisplayCandidate, type DisplayDecision, decideDisplay, gridBox, gridKey } from "./dataset/autoDisplay";
 import { type Activity as JobActivity, ActivityBar } from "./ui/ActivityBar";
 import { FrameSlider } from "./ui/FrameSlider";
@@ -414,7 +416,7 @@ function App() {
 
   // Mirror of the state relevant for adding datasets, so several datasets can be added in one go
   // (e.g. all series of an upload) without each call seeing stale state.
-  const live = useRef({ entries, referenceId: reference?.id ?? null, activeId: active?.id ?? null, overlayIds });
+  const live = useRef<{ entries: Entry[]; referenceId: string | null; activeId: string | null; overlayIds: string[] }>({ entries, referenceId: reference?.id ?? null, activeId: active?.id ?? null, overlayIds });
   live.current = { entries, referenceId: reference?.id ?? null, activeId: active?.id ?? null, overlayIds };
 
   /** Loading decisions of the current upload (for the notice after loading). */
@@ -552,6 +554,123 @@ function App() {
     if (id === active?.id) setActiveId(rest[0]?.id ?? null);
     if (voi?.entryId === id) setVoi(null);
   }
+
+  // ── Project file (.recon): whole session ──
+  const [projectBusy, setProjectBusy] = useState<"save" | "open" | null>(null);
+  const [projectError, setProjectError] = useState<string | null>(null);
+  const projectInput = useRef<HTMLInputElement>(null);
+
+  function sessionState() {
+    return {
+      entries,
+      referenceId,
+      overlayIds,
+      activeId,
+      layout,
+      focusView,
+      cursor,
+      unitMode,
+      normalization,
+      normSubjectId,
+      normTemplateId,
+      centiloidVois,
+      centiloidOutcome,
+      tumor,
+      tumorIndication,
+      tumorTargetId,
+      liverRef,
+    };
+  }
+
+  async function saveProjectFile() {
+    if (!entries.length || projectBusy) return;
+    setProjectBusy("save");
+    setProjectError(null);
+    await new Promise((r) => setTimeout(r, 30)); // let the activity indicator render
+    try {
+      const blob = saveProject(sessionState(), { app: "Recon Studio", datasets: entries.map((e) => entryLabel(e)) });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Recon-Projekt_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}${PROJECT_EXTENSION}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      setNotice(`Projekt gespeichert (${(blob.size / 1e6).toLocaleString("de-DE", { maximumFractionDigits: 1 })} MB).`);
+    } catch (e) {
+      setProjectError(`Speichern fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setProjectBusy(null);
+    }
+  }
+
+  async function openProjectFile(file: File) {
+    if (projectBusy) return;
+    if (entries.length && !window.confirm("Projekt öffnen: Die aktuell geladenen Datensätze und Ergebnisse werden ersetzt. Fortfahren?")) return;
+    setProjectBusy("open");
+    setProjectError(null);
+    try {
+      const { state } = await loadProject(await file.arrayBuffer());
+      const st = state as ReturnType<typeof sessionState>;
+      if (!Array.isArray(st.entries)) throw new Error("Projekt enthält keine Datensätze.");
+      for (const e of st.entries) {
+        const n = Number(e.id.replace(/^ds/, ""));
+        if (Number.isFinite(n) && n >= nextEntryId) nextEntryId = n + 1;
+      }
+      setEntries(st.entries);
+      setReferenceId(st.referenceId);
+      setOverlayIds(st.overlayIds ?? []);
+      setActiveId(st.activeId);
+      setLayout(st.layout ?? "grid");
+      setFocusView(st.focusView ?? "axial");
+      setCursor(st.cursor ?? null);
+      setUnitMode(st.unitMode ?? "raw");
+      setNormalization(st.normalization ?? null);
+      setNormSubjectId(st.normSubjectId ?? null);
+      setNormTemplateId(st.normTemplateId ?? null);
+      setCentiloidVois(st.centiloidVois ?? null);
+      setCentiloidOutcome(st.centiloidOutcome ?? null);
+      setTumor(st.tumor ?? null);
+      setTumorIndication(st.tumorIndication ?? "lymphoma");
+      setTumorTargetId(st.tumorTargetId ?? null);
+      setLiverRef(st.liverRef ?? null);
+      setVoi(null);
+      setCoregResults({});
+      setProjectionSet(null);
+      live.current = { entries: st.entries, referenceId: st.referenceId, activeId: st.activeId, overlayIds: st.overlayIds ?? [] };
+      setNotice(`Projekt „${file.name}“ geöffnet: ${st.entries.length} ${st.entries.length === 1 ? "Datensatz" : "Datensätze"}.`);
+    } catch (e) {
+      setProjectError(e instanceof ProjectError ? e.message : `Öffnen fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setProjectBusy(null);
+    }
+  }
+
+  const projectCard = (
+    <Card title="Projekt" persistKey="project">
+      <div className="button-row">
+        <button className="secondary-btn" disabled={!entries.length || !!projectBusy} onClick={() => void saveProjectFile()}>
+          {projectBusy === "save" ? "Wird gespeichert …" : "Projekt speichern"}
+        </button>
+        <button className="secondary-btn" disabled={!!projectBusy} onClick={() => projectInput.current?.click()}>
+          {projectBusy === "open" ? "Wird geöffnet …" : "Projekt öffnen …"}
+        </button>
+      </div>
+      <InfoText
+        details={
+          <>
+            Gespeichert werden alle Datensätze (DICOM-Originaldateien, NIfTI-Volumen, Bearbeitungen, dynamische Frames), Registrierungen,
+            Schlagworte, Anzeige, Normalisierung sowie Centiloid- und Tumorlast-Ergebnisse. Kinetik-Tabellen und Label-Analysen werden nach dem
+            Öffnen neu berechnet. Die Datei enthält die Patientendaten der geladenen Bilder – vertraulich behandeln.
+          </>
+        }
+      >
+        Ganze Sitzung als <code>{PROJECT_EXTENSION}</code>-Datei – enthält Patientendaten.
+      </InfoText>
+      {projectError && <div className="error-banner">{projectError}</div>}
+    </Card>
+  );
 
   const [templateBusy, setTemplateBusy] = useState(false);
   const [atlasBusy, setAtlasBusy] = useState(false);
@@ -1764,6 +1883,7 @@ function App() {
       <VolumeUploadPanel
         title={entries.length ? "Weiteren Datensatz laden" : "Volumen laden"}
         onLoaded={handleVolumeLoaded}
+        onProjectFile={(f) => void openProjectFile(f)}
         onBusyChange={(b) => {
           setLoadBusy(b);
           if (b) loadDecisions.current = [];
@@ -1816,6 +1936,18 @@ function App() {
           onRemove={removeEntry}
         />
       )}
+      {projectCard}
+      <input
+        ref={projectInput}
+        type="file"
+        hidden
+        accept={`${PROJECT_EXTENSION},.zip`}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void openProjectFile(f);
+          e.target.value = "";
+        }}
+      />
       <details className="card collapsible">
         <summary>Standardraum-Vorlage</summary>
         <p className="hint">Vorlage für die räumliche Normalisierung (Registrierung → Standardraum).</p>
@@ -2392,6 +2524,7 @@ function App() {
   const act = (a: JobActivity | false | "" | null | undefined) => {
     if (a) activities.push(a);
   };
+  act(projectBusy && { id: "project", label: projectBusy === "save" ? "Projekt speichern" : "Projekt öffnen", tab: "data" });
   act(loadBusy && { id: "load", label: "Laden", detail: "Dateien werden gelesen", tab: "data" });
   act(busy && { id: "recon", label: "Rekonstruktion", fraction: progress, tab: "data" });
   act(
@@ -2512,16 +2645,22 @@ function App() {
                 : "PET-, SPECT-, CT- oder MRT-Daten als DICOM (einzeln oder als Serie) bzw. NIfTI laden, SPECT-Rohdaten rekonstruieren, analysieren, bearbeiten, coregistrieren und exportieren."}
             </p>
             {!projectionSet && (
-              <button
-                className="primary-btn"
-                onClick={() => {
-                  setActiveTab("data");
-                  setPanelOpen(true);
-                }}
-              >
-                Daten laden
-              </button>
+              <div className="welcome-actions">
+                <button
+                  className="primary-btn"
+                  onClick={() => {
+                    setActiveTab("data");
+                    setPanelOpen(true);
+                  }}
+                >
+                  Daten laden
+                </button>
+                <button className="secondary-btn" disabled={!!projectBusy} onClick={() => projectInput.current?.click()}>
+                  {projectBusy === "open" ? "Wird geöffnet …" : "Projekt öffnen …"}
+                </button>
+              </div>
             )}
+            {projectError && <div className="error-banner">{projectError}</div>}
             <p className="welcome-note">Alle Daten werden ausschließlich lokal im Browser verarbeitet.</p>
           </div>
         </div>
