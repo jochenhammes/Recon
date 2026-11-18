@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { sanitizePatientId, setExportPatientId, withPatientId } from "./core/exportName";
 import { Card } from "./ui/Card";
 import { Activity, BarChart3, Brain, Crosshair, Download, Eye, FileCode2, FolderOpen, Gauge, Target, Wand2 } from "lucide-react";
 import { KineticsPanel, type KineticsApi } from "./kinetics/KineticsPanel";
@@ -273,6 +274,9 @@ function App() {
   const centiloidCancelled = useRef(false);
   const normRun = useRef<{ cancel: () => void } | null>(null);
   const [loadBusy, setLoadBusy] = useState(false);
+  /** Patient ID: prefix of all exported NIfTI/CSV file names. */
+  const [patientId, setPatientId] = useState("");
+  setExportPatientId(patientId);
   const [kineticsActivity, setKineticsActivity] = useState<{ label: string; fraction: number | null } | null>(null);
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     try {
@@ -572,6 +576,7 @@ function App() {
 
   function sessionState() {
     return {
+      patientId,
       entries,
       referenceId,
       overlayIds,
@@ -629,6 +634,7 @@ function App() {
         if (Number.isFinite(n) && n >= nextEntryId) nextEntryId = n + 1;
       }
       setEntries(st.entries);
+      setPatientId(st.patientId ?? "");
       setReferenceId(st.referenceId);
       setOverlayIds(st.overlayIds ?? []);
       setActiveId(st.activeId);
@@ -1138,7 +1144,7 @@ function App() {
       const url = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
       const a = document.createElement("a");
       a.href = url;
-      a.download = fileName;
+      a.download = withPatientId(fileName);
       a.click();
       URL.revokeObjectURL(url);
       setFusionStatus(`${fileName}: ${grid.nx} × ${grid.ny} × ${grid.nz}, ${grid.geometry.spacing.map((v) => v.toFixed(2)).join(" × ")} mm.`);
@@ -1338,7 +1344,7 @@ function App() {
     const url = URL.createObjectURL(new Blob([bytes], { type }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = name;
+    a.download = withPatientId(name);
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -1823,7 +1829,7 @@ function App() {
     const url = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = `y_${(subject?.dataset.displayName ?? "subject").replace(/\.nii(\.gz)?$/i, "").replace(/[^A-Za-z0-9_.-]+/g, "_")}.nii`;
+    a.download = withPatientId(`y_${(subject?.dataset.displayName ?? "subject").replace(/\.nii(\.gz)?$/i, "").replace(/[^A-Za-z0-9_.-]+/g, "_")}.nii`);
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -1973,6 +1979,17 @@ function App() {
         description="PET, SPECT, CT oder MRT als DICOM (Datei oder Serie) bzw. NIfTI – beliebig viele."
         compact={entries.length > 0}
       />
+      <section className="card patient-card">
+        <label className="field">
+          Patient-ID
+          <input type="text" value={patientId} maxLength={64} placeholder="optional, z. B. P0815" onChange={(e) => setPatientId(e.target.value)} />
+        </label>
+        <p className="tool-hint">
+          {sanitizePatientId(patientId)
+            ? `Exportierte NIfTI- und CSV-Dateien beginnen mit „${sanitizePatientId(patientId)}_“.`
+            : "Wird allen exportierten NIfTI- und CSV-Dateinamen vorangestellt."}
+        </p>
+      </section>
       {entries.length > 0 && (
         <DatasetList
           rows={entries.map((e) => {

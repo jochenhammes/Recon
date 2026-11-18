@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { withPatientId } from "../core/exportName";
 import { Card } from "../ui/Card";
 import { InfoText } from "../ui/Info";
 import type { Vec3, WorldToVoxel } from "../core/geometry";
@@ -33,11 +34,11 @@ function safe(s: string): string {
   return s.trim().replace(/[^A-Za-z0-9_.-]+/g, "_") || "volume";
 }
 
-function download(bytes: Uint8Array<ArrayBuffer>, name: string, type: string) {
+function download(bytes: Uint8Array<ArrayBuffer>, name: string, type: string, allNifti = false) {
   const url = URL.createObjectURL(new Blob([bytes], { type }));
   const a = document.createElement("a");
   a.href = url;
-  a.download = name;
+  a.download = withPatientId(name, { archive: name.endsWith(".zip") && allNifti });
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -119,8 +120,8 @@ export function SpaceExport({ spaces, activeId, anonymize }: SpaceExportProps) {
         const f = outputs[0].files[0];
         download(f.bytes, f.name.endsWith(".nii") ? f.name : `${outputs[0].name}.dcm`, f.name.endsWith(".nii") ? "application/octet-stream" : "application/dicom");
       } else {
-        const entries = outputs.flatMap((o) => (o.files.length === 1 && o.files[0].name.endsWith(".nii") ? o.files : o.files.map((f) => ({ name: `${o.name}/${f.name}`, bytes: f.bytes }))));
-        download(buildZip(entries), outputs.length === 1 ? `${outputs[0].name}.zip` : `export_im_${safe(datasetModality(target.dataset))}-Raum.zip`, "application/zip");
+        const entries = outputs.flatMap((o) => (o.files.length === 1 && o.files[0].name.endsWith(".nii") ? o.files.map((f) => ({ ...f, name: withPatientId(f.name) })) : o.files.map((f) => ({ name: `${o.name}/${f.name}`, bytes: f.bytes }))));
+        download(buildZip(entries), outputs.length === 1 ? `${outputs[0].name}.zip` : `export_im_${safe(datasetModality(target.dataset))}-Raum.zip`, "application/zip", entries.every((e) => e.name.endsWith(".nii")));
       }
       setStatus(`${selected.length} Datensatz/Datensätze exportiert (${grid.nx} × ${grid.ny} × ${grid.nz}).`);
     } catch (e) {

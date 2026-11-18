@@ -1,4 +1,5 @@
 import { Download, Maximize2, Search, X } from "lucide-react";
+import { withPatientId } from "../core/exportName";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { csvText, csvWithInfo } from "../core/csv";
@@ -32,7 +33,7 @@ function downloadText(text: string, name: string) {
   const url = URL.createObjectURL(new Blob(["﻿", text], { type: "text/csv;charset=utf-8" }));
   const a = document.createElement("a");
   a.href = url;
-  a.download = name;
+  a.download = withPatientId(name);
   document.body.appendChild(a);
   a.click();
   a.remove();

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { withPatientId } from "../core/exportName";
 import { Card } from "../ui/Card";
 import type { LoadedDataset } from "../dataset/types";
 import { modalityLabel } from "../dataset/describe";
@@ -45,7 +46,7 @@ function downloadBytes(bytes: Uint8Array<ArrayBuffer>, fileName: string, mimeTyp
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = fileName;
+  a.download = withPatientId(fileName);
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

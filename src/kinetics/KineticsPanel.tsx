@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { withPatientId } from "../core/exportName";
 import { BigTable } from "../ui/BigTable";
 import { Card } from "../ui/Card";
 import { type AtlasInfo, REFERENCE_PRESETS, presetIndices } from "../atlas/atlas";
@@ -242,7 +243,7 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
     const url = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = `Kinetik_${result.model}_${(dyn?.label ?? "").replace(/[^A-Za-z0-9_.-]+/g, "_")}.csv`;
+    a.download = withPatientId(`Kinetik_${result.model}_${(dyn?.label ?? "").replace(/[^A-Za-z0-9_.-]+/g, "_")}.csv`);
     a.click();
     URL.revokeObjectURL(url);
   }

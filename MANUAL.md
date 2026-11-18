@@ -78,6 +78,9 @@ Alles wird lokal im Browser berechnet; Daten werden nirgendwohin hochgeladen.
    Labelbilder auf dem Raster eines angezeigten Datensatzes. Alles andere – z. B. ein zweites PET, ein T1 neben einem
    Ganzkörper-CT, Daten einer anderen Region – wird geladen, aber **nicht eingeblendet**; ein Hinweis unten rechts nennt
    diese Datensätze. Einblenden über **Ebenen** im Viewer oder das Auge in der Datensatzliste.
+   **Patient-ID** (Feld oberhalb der Liste, optional): wird allen exportierten NIfTI- und CSV-Dateien vorangestellt
+   (`P0815_…nii`, `P0815_…csv`, auch in ZIP-Archiven solcher Dateien); DICOM-Exporte bleiben unverändert. Die ID wird im
+   Projekt mitgespeichert.
 4. **Datensatzliste**: eine Zeile je Datensatz mit Modalität (farbig), Schlagwort, Name und *Basis*-Markierung.
    - Klick auf die Zeile: Details (Modalität, Quelle, Matrix, Voxelgröße, Koordinaten, Dynamik) und Schlagwort.
    - 👁 ein-/ausblenden · ✎ **aktiv** setzen – darauf beziehen sich Analyse, Bearbeiten, Header und Export.

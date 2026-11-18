@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { withPatientId } from "../core/exportName";
 import { BigTable } from "./BigTable";
 import { Card } from "./Card";
 import { InfoText } from "./Info";
@@ -114,7 +115,7 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
     const url = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = `Labelanalyse_${current.datasetLabel.replace(/[^A-Za-z0-9_.-]+/g, "_")}.csv`;
+    a.download = withPatientId(`Labelanalyse_${current.datasetLabel.replace(/[^A-Za-z0-9_.-]+/g, "_")}.csv`);
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -124,7 +125,7 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
     const url = URL.createObjectURL(new Blob([bytes], { type }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = name;
+    a.download = withPatientId(name, { archive: true });
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -151,7 +152,7 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
     for (const t of props.targets) {
       try {
         const r = t.id === current?.targetId ? current : props.compute(labelSet.id, t.id);
-        files.push({ name: `Histogramme_${safe(r.datasetLabel)}.csv`, bytes: new TextEncoder().encode(histCsv(r)) });
+        files.push({ name: withPatientId(`Histogramme_${safe(r.datasetLabel)}.csv`), bytes: new TextEncoder().encode(histCsv(r)) });
       } catch {
         skipped.push(t.label);
       }
