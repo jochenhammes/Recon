@@ -2323,3 +2323,62 @@ tr.excluded-row td {
   border-radius: 2px;
   flex-shrink: 0;
 }
+
+/* ─── Lesion review ───────────────────────────────────────────────────── */
+.review-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.review-box .tool-hint {
+  margin: 0;
+}
+.review-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: var(--text-h);
+}
+.review-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+.review-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--success);
+}
+.review-buttons {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr auto;
+  gap: 6px;
+}
+.review-buttons .secondary-btn {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+.review-buttons .confirm {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 50%, transparent);
+}
+.review-buttons .reject {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 50%, transparent);
+}
+.review-keys {
+  color: var(--text-dim);
+}
+.review-cell {
+  text-align: center;
+}
+tr.focus-row td {
+  background: var(--accent-bg);
+  outline: none;
+}

@@ -26,7 +26,7 @@ import { CtSegCard } from "./ui/CtSegCard";
 import type { SegmentProgress } from "./segmentation/infer";
 import { type CtSegRun, loadModelMeta, runCtSegmentation } from "./segmentation/ctSegment";
 import type { CtSegBackend } from "./workers/ctseg.worker";
-import { type Lesion, type ThresholdMethod, lesionStats } from "./tumor/segment";
+import { type Lesion, type ThresholdMethod, cleanupLesions, lesionStats } from "./tumor/segment";
 import { burdenCsv, splitBurden, tumorBurden } from "./tumor/metrics";
 import { EXCLUSION_PRESETS, annotateLesions, autoLiverCenter, organsOnGrid } from "./tumor/organs";
 import { runTumorSegmentation } from "./tumor/runner";
@@ -1296,6 +1296,32 @@ function App() {
     setTumor((t) => (t ? { ...t, lesions: t.lesions.map((l) => (l.id === id ? { ...l, included: !l.included } : l)), version: t.version + 1 } : t));
   }
 
+  /** Review: lesion currently looked at (table order = SUVmax descending). */
+  const [focusLesionId, setFocusLesionId] = useState<number | null>(null);
+  const lesionOrder = (a: Lesion, b: Lesion) => b.suvMax - a.suvMax;
+
+  /** Confirms (include) or rejects (exclude) a lesion and moves on to the next unreviewed one. */
+  function reviewLesion(id: number, include: boolean) {
+    if (!tumor) return;
+    const lesions = tumor.lesions.map((l) => (l.id === id ? { ...l, included: include, reviewed: true } : l));
+    setTumor({ ...tumor, lesions, version: tumor.version + 1 });
+    const sorted = [...lesions].sort(lesionOrder);
+    const i = sorted.findIndex((l) => l.id === id);
+    const next = [...sorted.slice(i + 1), ...sorted.slice(0, i)].find((l) => !l.reviewed);
+    if (next) gotoLesion(next.id);
+  }
+
+  /** Removes the rejected/excluded lesions for good and renumbers the remaining ones by SUVmax. */
+  function cleanupTumor() {
+    if (!tumor) return;
+    const removed = tumor.lesions.filter((l) => !l.included).length;
+    if (!removed) return;
+    if (!window.confirm(`${removed} ausgeschlossene Läsion(en) endgültig entfernen und die übrigen nach SUVmax neu nummerieren (1 = höchster SUVmax)?`)) return;
+    const r = cleanupLesions(tumor.labels, tumor.lesions, lesionOrder);
+    setTumor({ ...tumor, labels: r.labels, lesions: r.lesions, version: tumor.version + 1 });
+    setFocusLesionId(null);
+  }
+
   const lastToggle = useRef<{ id: number; time: number } | null>(null);
   function tumorClick(world: Vec3) {
     const i = tumorIndexAt(world);
@@ -1350,7 +1376,10 @@ function App() {
   function gotoLesion(id: number) {
     const e = tumor && byId(tumor.entryId);
     const l = tumor?.lesions.find((x) => x.id === id);
-    if (e && l) setCursor(applyMat4(e.matrix, l.centroid));
+    if (e && l) {
+      setCursor(applyMat4(e.matrix, l.centroid));
+      setFocusLesionId(id);
+    }
   }
 
   function downloadBytes(bytes: Uint8Array<ArrayBuffer>, name: string, type = "application/octet-stream") {
@@ -2485,6 +2514,9 @@ function App() {
           onBrushMmChange={setTumorBrushMm}
           onToggle={toggleLesion}
           onGoto={gotoLesion}
+          focusId={focusLesionId}
+          onReview={reviewLesion}
+          onCleanup={cleanupTumor}
           onExportCsv={exportTumorCsv}
           onExportNifti={exportTumorNifti}
           onClear={() => tumor?.datasetId ? removeEntry(tumor.datasetId) : setTumor(null)}

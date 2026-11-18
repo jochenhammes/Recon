@@ -38,6 +38,8 @@ export interface Lesion {
   /** Voxel index of the maximum. */
   maxIndex: number;
   included: boolean;
+  /** Checked by the reader (confirmed = included, rejected = excluded). */
+  reviewed?: boolean;
   /** Why the lesion is excluded (automatic), if so. */
   note?: string;
   /** Dominant CT organ (> 50 % of the voxels), if organ labels are available. */
@@ -236,4 +238,19 @@ export function clearLabel(labels: Int32Array, id: number): Int32Array {
   const out = Int32Array.from(labels);
   for (let i = 0; i < out.length; i++) if (out[i] === id) out[i] = 0;
   return out;
+}
+
+/**
+ * Removes all excluded lesions from the label image and renumbers the remaining ones 1…n in the given order
+ * (e.g. by SUVmax). Returns the new label image and lesions.
+ */
+export function cleanupLesions(labels: Int32Array, lesions: Lesion[], order: (a: Lesion, b: Lesion) => number): { labels: Int32Array; lesions: Lesion[] } {
+  const kept = lesions.filter((l) => l.included).sort(order);
+  const map = new Map(kept.map((l, i) => [l.id, i + 1]));
+  const out = new Int32Array(labels.length);
+  for (let i = 0; i < labels.length; i++) {
+    const id = labels[i];
+    if (id) out[i] = map.get(id) ?? 0;
+  }
+  return { labels: out, lesions: kept.map((l) => ({ ...l, id: map.get(l.id)! })) };
 }

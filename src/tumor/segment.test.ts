@@ -66,3 +66,22 @@ describe("tumor segmentation", () => {
     expect(liver.lesions[0].volumeMl).toBeGreaterThan(0.9 * sphereMl(20));
   });
 });
+
+describe("lesion cleanup", () => {
+  it("removes excluded lesions and renumbers the rest in the given order", async () => {
+    const { cleanupLesions } = await import("./segment");
+    const base = { voxels: 1, volumeMl: 1, suvMean: 1, suvPeak: 1, tlg: 1, centroid: [0, 0, 0] as [number, number, number], maxIndex: 0 };
+    const lesions = [
+      { ...base, id: 1, suvMax: 3, included: true },
+      { ...base, id: 2, suvMax: 9, included: false, reviewed: true },
+      { ...base, id: 5, suvMax: 7, included: true, reviewed: true },
+    ];
+    const labels = Int32Array.from([0, 1, 2, 5, 5, 2, 1]);
+    const r = cleanupLesions(labels, lesions, (a, b) => b.suvMax - a.suvMax);
+    expect(Array.from(r.labels)).toEqual([0, 2, 0, 1, 1, 0, 2]);
+    expect(r.lesions.map((l) => [l.id, l.suvMax, l.reviewed ?? false])).toEqual([
+      [1, 7, true],
+      [2, 3, false],
+    ]);
+  });
+});

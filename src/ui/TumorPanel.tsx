@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BigTable } from "./BigTable";
 import { Card } from "./Card";
 import { formatValue } from "../components/format";
@@ -50,6 +50,12 @@ export interface TumorPanelProps {
   onBrushMmChange: (mm: number) => void;
   onToggle: (id: number) => void;
   onGoto: (id: number) => void;
+  /** Lesion being reviewed (cursor there). */
+  focusId: number | null;
+  /** Confirm (true) or reject (false) a lesion; the app moves on to the next unreviewed one. */
+  onReview: (id: number, include: boolean) => void;
+  /** Removes excluded lesions for good and renumbers the rest. */
+  onCleanup: () => void;
   onExportCsv: () => void;
   onExportNifti: () => void;
   onClear: () => void;
@@ -261,6 +267,7 @@ export function TumorPanel(props: TumorPanelProps) {
                   ? "Ziehen entfernt Voxel aus den Läsionen."
                   : "Ausgeschlossene Läsionen werden nicht angezeigt und nicht gezählt."}
           </p>
+          <ReviewBox lesions={props.lesions} focusId={props.focusId} onGoto={props.onGoto} onReview={props.onReview} onCleanup={props.onCleanup} />
           <div className="button-row">
             <button className="secondary-btn" onClick={props.onExportCsv}>
               CSV
@@ -268,8 +275,8 @@ export function TumorPanel(props: TumorPanelProps) {
             <button className="secondary-btn" onClick={props.onExportNifti}>
               Maske (NIfTI)
             </button>
-            <button className="secondary-btn" onClick={props.onClear}>
-              Verwerfen
+            <button className="secondary-btn" title="Das ganze Tumorlast-Ergebnis (und den Läsionen-Datensatz) löschen" onClick={props.onClear}>
+              Ergebnis löschen
             </button>
           </div>
           <BigTable title="Tumorlast – Läsionen" onCsv={props.onExportCsv}>
@@ -277,6 +284,7 @@ export function TumorPanel(props: TumorPanelProps) {
               <thead>
                 <tr>
                   <th />
+                  <th title="Prüfstatus: ✓ bestätigt, ✗ verworfen, · offen">Geprüft</th>
                   <th>Nr</th>
                   <th>ml</th>
                   <th>SUVmax</th>
@@ -289,10 +297,16 @@ export function TumorPanel(props: TumorPanelProps) {
                 {[...props.lesions]
                   .sort((x, y) => y.suvMax - x.suvMax)
                   .map((l) => (
-                    <tr key={l.id} className={l.included ? "clickable" : "clickable excluded-row"} onClick={() => props.onGoto(l.id)} title={l.note ?? "Zur Läsion springen"}>
+                    <tr
+                      key={l.id}
+                      className={`clickable${l.included ? "" : " excluded-row"}${l.id === props.focusId ? " focus-row" : ""}`}
+                      onClick={() => props.onGoto(l.id)}
+                      title={l.note ?? "Zur Läsion springen"}
+                    >
                       <td>
                         <input type="checkbox" checked={l.included} onClick={(e) => e.stopPropagation()} onChange={() => props.onToggle(l.id)} />
                       </td>
+                      <td className="review-cell">{l.reviewed ? (l.included ? "✓" : "✗") : "·"}</td>
                       <td>{l.id}</td>
                       <td>{formatValue(l.volumeMl)}</td>
                       <td>{f(l.suvMax)}</td>
@@ -307,5 +321,106 @@ export function TumorPanel(props: TumorPanelProps) {
         </Card>
       )}
     </>
+  );
+}
+
+/**
+ * Guided review: step through the lesions (SUVmax descending), confirm or reject each one; keyboard: Enter = confirm,
+ * Entf/Backspace = reject, ←/→ = previous/next (while the tumor panel is shown and no input field has the focus).
+ */
+function ReviewBox({
+  lesions,
+  focusId,
+  onGoto,
+  onReview,
+  onCleanup,
+}: {
+  lesions: Lesion[];
+  focusId: number | null;
+  onGoto: (id: number) => void;
+  onReview: (id: number, include: boolean) => void;
+  onCleanup: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const sorted = [...lesions].sort((a, b) => b.suvMax - a.suvMax);
+  const idx = sorted.findIndex((l) => l.id === focusId);
+  const cur = idx >= 0 ? sorted[idx] : null;
+  const reviewed = lesions.filter((l) => l.reviewed).length;
+  const excluded = lesions.filter((l) => !l.included).length;
+  const step = (d: number) => {
+    if (!sorted.length) return;
+    const i = idx < 0 ? 0 : (idx + d + sorted.length) % sorted.length;
+    onGoto(sorted[i].id);
+  };
+  const firstOpen = () => onGoto((sorted.find((l) => !l.reviewed) ?? sorted[0]).id);
+
+  const latest = useRef({ cur, step, onReview });
+  latest.current = { cur, step, onReview };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Only while this panel is visible, no modifier, and not typing in a field.
+      if (!ref.current?.offsetParent || e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target as HTMLElement;
+      if (t.closest("input, select, textarea, [contenteditable=true]")) return;
+      // Enter on a focused button already clicks it (e.g. "Bestätigen" again for the next lesion).
+      if (e.key === "Enter" && t.closest("button")) return;
+      const { cur, step, onReview } = latest.current;
+      if (e.key === "ArrowRight") step(1);
+      else if (e.key === "ArrowLeft") step(-1);
+      else if (e.key === "Enter" && cur) onReview(cur.id, true);
+      else if ((e.key === "Delete" || e.key === "Backspace") && cur) onReview(cur.id, false);
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  if (!lesions.length) return null;
+  return (
+    <div className="review-box" ref={ref}>
+      <div className="review-head">
+        <strong>Durchsehen</strong>
+        <span>
+          {reviewed}/{lesions.length} geprüft
+        </span>
+      </div>
+      <div className="review-progress" aria-hidden="true">
+        <span style={{ width: `${(100 * reviewed) / lesions.length}%` }} />
+      </div>
+      {cur ? (
+        <p className="tool-hint">
+          Läsion {cur.id} ({idx + 1}/{sorted.length}) · {formatValue(cur.volumeMl)} ml · SUVmax {formatValue(cur.suvMax)}
+          {cur.bone ? " · Knochen" : cur.organ ? ` · ${cur.organ.replace(/_/g, " ")}` : ""} ·{" "}
+          {cur.reviewed ? (cur.included ? "bestätigt" : "verworfen") : cur.included ? "offen" : "offen (ausgeschlossen)"}
+        </p>
+      ) : (
+        <p className="tool-hint">Jede Läsion ansehen und bestätigen oder verwerfen – die Ansicht springt jeweils zur nächsten offenen.</p>
+      )}
+      {cur ? (
+        <div className="review-buttons">
+          <button className="secondary-btn" onMouseDown={(e) => e.preventDefault()} title="Vorherige (←)" onClick={() => step(-1)}>
+            ◀
+          </button>
+          <button className="secondary-btn confirm" onMouseDown={(e) => e.preventDefault()} title="Bestätigen (Enter)" onClick={() => onReview(cur.id, true)}>
+            ✓ Bestätigen
+          </button>
+          <button className="secondary-btn reject" onMouseDown={(e) => e.preventDefault()} title="Verwerfen (Entf)" onClick={() => onReview(cur.id, false)}>
+            ✗ Verwerfen
+          </button>
+          <button className="secondary-btn" onMouseDown={(e) => e.preventDefault()} title="Nächste (→)" onClick={() => step(1)}>
+            ▶
+          </button>
+        </div>
+      ) : (
+        <button className="secondary-btn" onMouseDown={(e) => e.preventDefault()} onClick={firstOpen}>
+          Durchsehen starten
+        </button>
+      )}
+      {cur && <p className="tool-hint review-keys">Tastatur: Enter = bestätigen · Entf = verwerfen · ←/→ = blättern</p>}
+      <button className="secondary-btn" disabled={!excluded} title="Ausgeschlossene Läsionen endgültig entfernen, übrige nach SUVmax neu nummerieren" onClick={onCleanup}>
+        Bereinigen{excluded ? ` (${excluded} ausgeschlossene entfernen)` : ""}
+      </button>
+    </div>
   );
 }
