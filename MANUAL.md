@@ -45,8 +45,11 @@ Beispieldaten (keine Patientendaten).
   [Abschnitt 4](#4-ansicht-ebenen-und-fusion)) und **?** (Maus- und Tastenbedienung).
   Die **Farbskala** unten links zeigt für jede sichtbare Ebene Farbtabelle und Fenster (Min/Max in SUV, HU, BP_ND …) und
   bei Labelbildern die Region unter dem Cursor; sie erscheint auch im Screenshot. Sie ist zugleich Bedienelement:
-  - **Enden des Balkens ziehen** (weiße Griffe): Fenster-Minimum bzw. -Maximum,
-  - **Mitte ziehen**: ganzes Fenster verschieben,
+  - Der Balken umfasst den ganzen Wertebereich des Datensatzes (Zahlen links/rechts darunter); die beiden **weißen
+    Griffe** markieren Fenster-Minimum und -Maximum (Mitte: aktuelles Fenster). Unterhalb des Fensters gilt die erste,
+    oberhalb die letzte Farbe der Farbtabelle.
+  - **Griff ziehen**: Fenster-Minimum bzw. -Maximum verschieben,
+  - **Bereich zwischen den Griffen ziehen**: ganzes Fenster verschieben,
   - **Rechtsklick** auf den Balken: Farbtabelle wählen – Graustufen, Invertiert, Hot, DaT (Schwarz–Grün–Gelb–Hellrot, typische
     DaTSCAN-Darstellung), Blau (Schwarz–Blau–Hellblau–Weiß), Regenbogen.
   Statuszeile unten: Position in mm (Patientenkoordinaten LPS) und die Werte aller sichtbaren Ebenen unter dem

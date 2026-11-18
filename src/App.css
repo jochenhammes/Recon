@@ -1826,7 +1826,7 @@ tr.excluded-row td {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  width: 190px;
+  width: 230px;
   max-width: calc(100% - 16px);
   padding: 7px 9px;
   border-radius: 7px;
@@ -2235,48 +2235,55 @@ tr.excluded-row td {
 
 .legend-bar-wrap {
   position: relative;
-  height: 12px;
+  height: 14px;
+  margin: 0 5px;
   display: flex;
   align-items: center;
 }
 .legend-bar-wrap .legend-bar {
   flex: 1;
   height: 8px;
+  border-radius: 2px;
+}
+.legend-window-span {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
   cursor: grab;
   touch-action: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.35);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.35);
 }
-.legend-bar-wrap .legend-bar:active {
+.legend-window-span:active {
   cursor: grabbing;
 }
 .legend-handle {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 9px;
+  top: -1px;
+  bottom: -1px;
+  width: 12px;
+  margin-left: -6px;
   cursor: ew-resize;
   touch-action: none;
+  z-index: 1;
 }
 .legend-handle::after {
   content: "";
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 3px;
-  width: 3px;
+  left: 4px;
+  width: 4px;
   border-radius: 2px;
-  background: #e4e6ee;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
-  opacity: 0.75;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.75);
 }
 .legend-handle:hover::after {
-  opacity: 1;
-  background: #fff;
+  background: #e4d9ff;
 }
-.legend-handle.left {
-  left: -4px;
-}
-.legend-handle.right {
-  right: -4px;
+.legend-window {
+  color: #e4e6ee;
+  font-weight: 600;
 }
 .lut-menu {
   position: absolute;

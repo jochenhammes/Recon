@@ -63,7 +63,46 @@ interface LegendItem {
   /** Window in raw units and display scale (for dragging the limits). */
   window?: [number, number];
   scale?: number;
+  /** Fixed value range of the bar (raw units): data minimum … maximum, widened to include the window. */
+  range?: [number, number];
+  rangeMin?: string;
+  rangeMax?: string;
   region?: { name: string; color: string };
+}
+
+/** Data minimum and maximum per voxel array (cached; the bar of the color scale spans this range). */
+const dataRanges = new WeakMap<object, [number, number]>();
+function dataRange(data: ArrayLike<number>): [number, number] {
+  let r = dataRanges.get(data as object);
+  if (!r) {
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < data.length; i++) {
+      const v = data[i];
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+    }
+    r = Number.isFinite(lo) ? [lo, hi > lo ? hi : lo + 1] : [0, 1];
+    dataRanges.set(data as object, r);
+  }
+  return r;
+}
+
+/** Position (0..1) of the window limits on the bar. */
+function windowOnBar(it: LegendItem): [number, number] {
+  const [r0, r1] = it.range!;
+  const [w0, w1] = it.window!;
+  const f = (v: number) => Math.min(1, Math.max(0, (v - r0) / (r1 - r0 || 1)));
+  return [f(w0), f(w1)];
+}
+
+/** CSS gradient of the bar: first LUT color below the window, the LUT across the window, last color above. */
+function windowGradient(lut: ColorLut, a: number, b: number): string {
+  const t = lutTable(lut);
+  const c = (k: number) => `rgb(${t[k * 3]}, ${t[k * 3 + 1]}, ${t[k * 3 + 2]})`;
+  const stops = [`${c(0)} 0%`, `${c(0)} ${a * 100}%`];
+  for (let i = 0; i <= 12; i++) stops.push(`${c(Math.round((i / 12) * 255))} ${(a + ((b - a) * i) / 12) * 100}%`);
+  stops.push(`${c(255)} ${b * 100}%`, `${c(255)} 100%`);
+  return `linear-gradient(90deg, ${stops.join(", ")})`;
 }
 
 /** Legend entries: every visible colored layer (window in display units) and label images (region under the cursor). */
@@ -83,7 +122,21 @@ function legendItems(layers: ViewerLayer[], point: Vec3): LegendItem[] {
     }
     if (l.display.lut === "voi") continue;
     const sc = l.unit?.scale ?? 1;
-    out.push({ id: l.id, label: l.label, lut: l.display.lut, min: formatValue(l.display.window[0] * sc), max: formatValue(l.display.window[1] * sc), unit: l.unit?.label, window: l.display.window, scale: sc });
+    const [d0, d1] = dataRange(l.volume.data);
+    const range: [number, number] = [Math.min(d0, l.display.window[0]), Math.max(d1, l.display.window[1])];
+    out.push({
+      id: l.id,
+      label: l.label,
+      lut: l.display.lut,
+      min: formatValue(l.display.window[0] * sc),
+      max: formatValue(l.display.window[1] * sc),
+      unit: l.unit?.label,
+      window: l.display.window,
+      scale: sc,
+      range,
+      rangeMin: formatValue(range[0] * sc),
+      rangeMax: formatValue(range[1] * sc),
+    });
   }
   return out;
 }
@@ -107,16 +160,19 @@ function drawLegend(ctx: CanvasRenderingContext2D, items: LegendItem[], height: 
     if (!it.region && it.lut !== "labels") {
       const t = lutTable(it.lut);
       const gx = x + pad, gy = y + 14 * dpr, gw = w - 2 * pad, gh = 6 * dpr;
+      const [a, b] = windowOnBar(it);
       for (let i = 0; i < gw; i++) {
-        const k = Math.round((i / (gw - 1)) * 255);
+        const f = i / (gw - 1);
+        const k = Math.round(Math.min(1, Math.max(0, (f - a) / (b - a || 1e-6))) * 255);
         ctx.fillStyle = `rgb(${t[k * 3]}, ${t[k * 3 + 1]}, ${t[k * 3 + 2]})`;
         ctx.fillRect(gx + i, gy, 1, gh);
       }
+      ctx.fillStyle = "#ffffff";
+      for (const f of [a, b]) ctx.fillRect(gx + f * (gw - 1) - dpr, gy - dpr, 2 * dpr, gh + 2 * dpr);
       ctx.fillStyle = "#a3a7b6";
       ctx.font = `${10 * dpr}px system-ui, sans-serif`;
-      ctx.fillText(`${it.min}`, gx, gy + gh + 1 * dpr);
-      const right = `${it.max}${it.unit ? ` ${it.unit}` : ""}`;
-      ctx.fillText(right, gx + gw - ctx.measureText(right).width, gy + gh + 1 * dpr);
+      const mid = `${it.min} – ${it.max}${it.unit ? ` ${it.unit}` : ""}`;
+      ctx.fillText(mid, gx + (gw - ctx.measureText(mid).width) / 2, gy + gh + 1 * dpr);
       ctx.font = `${11 * dpr}px system-ui, sans-serif`;
     }
     y += row;
@@ -646,13 +702,15 @@ function Legend({
     e.stopPropagation();
     const bar = (e.currentTarget.closest(".legend-bar-wrap") as HTMLElement).getBoundingClientRect();
     e.currentTarget.setPointerCapture(e.pointerId);
-    drag.current = { id: it.id, mode, x0: e.clientX, w0: it.window, px: Math.max(20, bar.width) };
+    // The bar spans the fixed value range: one pixel = range / bar width.
+    const [r0, r1] = it.range ?? it.window;
+    drag.current = { id: it.id, mode, x0: e.clientX, w0: it.window, px: Math.max(20, bar.width) / (r1 - r0 || 1) };
   };
   const moveDrag = (e: React.PointerEvent) => {
     const d = drag.current;
     if (!d) return;
     const [lo, hi] = d.w0;
-    const delta = ((e.clientX - d.x0) / d.px) * (hi - lo || 1);
+    const delta = (e.clientX - d.x0) / d.px;
     const minWidth = Math.abs(hi - lo) * 0.01 || 1e-6;
     let next: [number, number];
     if (d.mode === "min") next = [Math.min(lo + delta, hi - minWidth), hi];
@@ -684,33 +742,19 @@ function Legend({
         ) : (
           <div key={it.id} className="legend-row">
             <span className="legend-name">{it.label}</span>
-            <div
-              className="legend-bar-wrap"
-              title="Enden ziehen: Fenster-Min/-Max · Mitte ziehen: verschieben · Rechtsklick: Farbtabelle"
-              onContextMenu={(e) => {
+            <LegendBar item={it} onContextMenu={(e) => {
                 if (!onLutChange) return;
                 e.preventDefault();
                 const r = rootRef.current!.getBoundingClientRect();
                 setMenu({ id: it.id, x: e.clientX - r.left, y: e.clientY - r.top, lut: it.lut });
-              }}
-            >
-              <span
-                className="legend-bar"
-                style={{ background: lutGradient(it.lut) }}
-                onPointerDown={(e) => startDrag(e, it, "shift")}
-                onPointerMove={moveDrag}
-                onPointerUp={endDrag}
-                onPointerCancel={endDrag}
-              />
-              <span className="legend-handle left" aria-label="Fenster-Minimum ziehen" onPointerDown={(e) => startDrag(e, it, "min")} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} />
-              <span className="legend-handle right" aria-label="Fenster-Maximum ziehen" onPointerDown={(e) => startDrag(e, it, "max")} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} />
-            </div>
+              }} startDrag={startDrag} moveDrag={moveDrag} endDrag={endDrag} />
             <span className="legend-scale">
-              <span>{it.min}</span>
-              <span>
-                {it.max}
+              <span>{it.rangeMin}</span>
+              <span className="legend-window">
+                {it.min} – {it.max}
                 {it.unit ? ` ${it.unit}` : ""}
               </span>
+              <span>{it.rangeMax}</span>
             </span>
           </div>
         ),
@@ -734,6 +778,36 @@ function Legend({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function LegendBar({
+  item,
+  onContextMenu,
+  startDrag,
+  moveDrag,
+  endDrag,
+}: {
+  item: LegendItem;
+  onContextMenu: (e: React.MouseEvent) => void;
+  startDrag: (e: React.PointerEvent<HTMLElement>, it: LegendItem, mode: "min" | "max" | "shift") => void;
+  moveDrag: (e: React.PointerEvent) => void;
+  endDrag: () => void;
+}) {
+  const [a, b] = item.range && item.window ? windowOnBar(item) : [0, 1];
+  const drag = (mode: "min" | "max" | "shift") => ({
+    onPointerDown: (e: React.PointerEvent<HTMLElement>) => startDrag(e, item, mode),
+    onPointerMove: moveDrag,
+    onPointerUp: endDrag,
+    onPointerCancel: endDrag,
+  });
+  return (
+    <div className="legend-bar-wrap" title="Griffe ziehen: Fenster-Min/-Max · Bereich dazwischen ziehen: verschieben · Rechtsklick: Farbtabelle" onContextMenu={onContextMenu}>
+      <span className="legend-bar" style={{ background: windowGradient(item.lut, a, b) }} />
+      <span className="legend-window-span" style={{ left: `${a * 100}%`, width: `${(b - a) * 100}%` }} {...drag("shift")} />
+      <span className="legend-handle" style={{ left: `${a * 100}%` }} aria-label="Fenster-Minimum ziehen" {...drag("min")} />
+      <span className="legend-handle" style={{ left: `${b * 100}%` }} aria-label="Fenster-Maximum ziehen" {...drag("max")} />
     </div>
   );
 }
