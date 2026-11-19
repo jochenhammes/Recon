@@ -5,7 +5,8 @@ import { Activity, BarChart3, Brain, Calculator, Crosshair, Download, Eye, FileC
 import { KineticsPanel, type KineticsApi } from "./kinetics/KineticsPanel";
 import { LayerToggle } from "./ui/LayerToggle";
 import { type TripleWindowRequest, TripleWindowCard } from "./ui/TripleWindowCard";
-import { dilateRegion, regionTable, tripleWindow } from "./edit/tripleWindow";
+import { addRims, regionOnGrid, regionTable, tripleWindow } from "./edit/tripleWindow";
+import { GlRenderer } from "./viewer/gl/renderer";
 import { type ImcalcJob, ImcalcPanel } from "./ui/ImcalcPanel";
 import { combine, groupMeanSd, linear, product, quotient, zScore } from "./imcalc/imcalc";
 import { PROJECT_EXTENSION, ProjectError, loadProject, saveProject } from "./project/project";
@@ -1213,17 +1214,16 @@ function App() {
     setTripleStatus("Organkarte auf das CT-Raster …");
     try {
       await new Promise((res) => setTimeout(res, 20));
-      const labels = organLabelsFor(ct, organs);
-      if (!labels) throw new Error("Organkarte und CT liegen nicht im selben Raum.");
-      const table = regionTable(organs.dataset.atlas.labels);
-      const region = Uint8Array.from(labels, (l) => table[l] ?? 0);
+      const ow2v = w2vById.get(organs.id);
+      if (!ow2v) throw new Error("Organkarte und CT liegen nicht im selben Raum.");
       const v = ct.dataset.current;
+      // One byte per CT voxel, read straight from the organ labels (no resampled float copy of the organ map).
+      const region = await regionOnGrid(organs.dataset.current, transformedWorldToVoxel(ow2v, invert4(ct.matrix)), v, regionTable(organs.dataset.atlas.labels));
       const minSp = Math.min(...v.geometry.spacing);
       const dims: [number, number, number] = [v.nx, v.ny, v.nz];
-      setTripleStatus("Ränder von Knochen und Lunge …");
-      // Bone first (ribs next to the lung keep the bone window), then the lung rim.
-      await dilateRegion(region, dims, 2, Math.round(r.marginMm.bone / minSp));
-      await dilateRegion(region, dims, 1, Math.round(r.marginMm.lung / minSp));
+      setTripleStatus("Ränder an Lunge und Knochen …");
+      // Black rims at the window borders (bone outside, lung on both sides of the pleura line).
+      await addRims(region, dims, Math.round(r.marginMm.lung / minSp), Math.round(r.marginMm.bone / minSp));
       setTripleStatus("Fenster werden umgerechnet …");
       const data = await tripleWindow(v.data, region, r.windows);
       let nLung = 0, nBone = 0;
@@ -1232,6 +1232,9 @@ function App() {
         else if (x === 2) nBone++;
       }
       const vol = v.withData(data);
+      // Replacing the CT as base: free its GPU texture before the new volume is uploaded (two CT-sized
+      // float textures at once can exhaust the GPU memory of weaker graphics cards).
+      if (reference?.id === ct.id) GlRenderer.get()?.retain(layers.filter((l) => l.id !== ct.id).map((l) => l.volume));
       const name = `Triple-Window · ${ct.dataset.displayName}`;
       const c = (w: [number, number]) => [(w[0] + w[1]) / 2, w[1] - w[0]].map((x) => String(Math.round(x)));
       const [wc, ww] = c(r.windows.soft);

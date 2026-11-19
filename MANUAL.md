@@ -513,8 +513,8 @@ Bereich **Bearbeiten** (wirkt auf den aktiven Datensatz):
    [Abschnitt 9](#9-ct-organsegmentierung)): erzeugt einen künstlichen CT-Datensatz für den schnellen anatomischen
    Überblick in **einem** Fenster. Alle Voxel stehen im Weichteilfenster (Standard 40/400); Voxel der Lungen und der
    Trachea werden so umgerechnet, dass sie wie im Lungenfenster (−600/1500) erscheinen, Voxel des Skeletts wie im
-   Knochenfenster (300/1500). Fenster als Zentrum/Breite änderbar; *Rand Lunge/Knochen* verbreitert die Regionen
-   (Pleura, Kortikalis, gröbere Organkarte). Ist das CT die Basis der Ansicht, ersetzt der neue Datensatz
+   Knochenfenster (300/1500). Fenster als Zentrum/Breite änderbar. An den Fenstergrenzen liegt ein **schwarzer Rand**
+   (*Schwarzer Rand Lunge* beidseits der Pleuragrenze, Standard 4 mm; *Knochen* außen um die Kortikalis, 2 mm; 0 = ohne). Ist das CT die Basis der Ansicht, ersetzt der neue Datensatz
    „CT 3W · Triple-Window …“ es dort (das Original bleibt unter *Ebenen*). Die Werte sind keine echten HU mehr
    (Einheit „HU*“) – nicht für Messungen oder Diagnostik; beim DICOM-Export heißt die Serie
    „Triple-Window (kuenstlich, nicht diagnostisch)“, Fenster 40/400.

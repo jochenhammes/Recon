@@ -28,8 +28,8 @@ export function TripleWindowCard(props: {
     const f = (w: HuWindow) => toCw(w).map((v) => formatInput(v)) as [string, string];
     return { soft: f(TRIPLE_DEFAULTS.soft), lung: f(TRIPLE_DEFAULTS.lung), bone: f(TRIPLE_DEFAULTS.bone) };
   });
-  const [lungMm, setLungMm] = useState("3");
-  const [boneMm, setBoneMm] = useState("1");
+  const [lungMm, setLungMm] = useState("4");
+  const [boneMm, setBoneMm] = useState("2");
   const ct = props.cts.find((c) => c.id === ctId) ?? props.cts[0];
   const organs = props.organSets.find((o) => o.id === organId) ?? props.organSets.find((o) => o.forCt === ct?.id) ?? props.organSets[0];
   const win = (k: "soft" | "lung" | "bone"): HuWindow | null => {
@@ -64,8 +64,9 @@ export function TripleWindowCard(props: {
             der Lungen (inkl. Trachea) werden so umgerechnet, dass sie wie im Lungenfenster erscheinen, Voxel des Skeletts wie im Knochenfenster.
           </p>
           <p>
-            Grundlage ist die Organkarte der CT-Segmentierung (Bereich Tumorlast). Der Rand verbreitert Lungen- bzw. Knochenregion um einige mm (Pleura,
-            Kortikalis, gröbere Organkarte). Die Werte sind keine echten HU mehr – nicht für Messungen oder Diagnostik verwenden.
+            Grundlage ist die Organkarte der CT-Segmentierung (Bereich Tumorlast). An den Grenzen zwischen den Fenstern liegt ein schwarzer Rand
+            (Lunge: beidseits der Pleuragrenze, Knochen: außen um die Kortikalis); er verdeckt den sonst hellen Übergangssaum aus Brustwand bzw.
+            Teilvolumen der gröberen Organkarte. 0 mm = ohne Rand. Die Werte sind keine echten HU mehr – nicht für Messungen oder Diagnostik verwenden.
           </p>
         </>
       }
@@ -104,11 +105,11 @@ export function TripleWindowCard(props: {
           {row("bone", "Knochen")}
           <div className="imcalc-coeffs">
             <label className="field">
-              Rand Lunge (mm)
+              Schwarzer Rand Lunge (mm)
               <input value={lungMm} disabled={props.busy} onChange={(e) => setLungMm(e.target.value)} />
             </label>
             <label className="field">
-              Rand Knochen (mm)
+              Schwarzer Rand Knochen (mm)
               <input value={boneMm} disabled={props.busy} onChange={(e) => setBoneMm(e.target.value)} />
             </label>
           </div>
