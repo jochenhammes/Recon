@@ -331,7 +331,7 @@ function NuclideCard({ dataSet, edits, onChange }: { dataSet: import("dicom-pars
           </p>
           <p>
             Wirkt beim DICOM-Export auf alle Dateien der Serie und sofort auf die SUV-Berechnung in der App (Zerfallskorrektur mit der neuen
-            Halbwertszeit). Der Nuklid-Code wird mit der Standard-Bezeichnung (z. B. „^18^Fluorine“) und dem privaten Kodierschema „99RECON“ geschrieben.
+            Halbwertszeit). Der Nuklid-Code ist der SNOMED-CT-Code aus dem DICOM-Standard (Schema „SCT“, z. B. 77004003 „^18^Fluorine“); für Tb-161 gibt es dort keinen Code, es wird das private Schema „99RECON“ verwendet.
           </p>
         </>
       }
@@ -353,7 +353,7 @@ function NuclideCard({ dataSet, edits, onChange }: { dataSet: import("dicom-pars
         </select>
       </label>
       <p className="tool-hint">
-        Wird geschrieben: {n.meaning} · Halbwertszeit {fmtHl(n.halfLifeSec)} · Positronenanteil {n.positronFraction.toLocaleString("de-DE")}
+        Wird geschrieben: {n.meaning} ({n.code ? `SCT ${n.code}` : "privater Code"}) · Halbwertszeit {fmtHl(n.halfLifeSec)} · Positronenanteil {n.positronFraction.toLocaleString("de-DE")}
       </p>
       <label className="field">
         Radiopharmazeutikum (optional, z. B. PSMA-1007)

@@ -345,6 +345,8 @@ describe("radionuclide header edit", () => {
       expect(rp.string("x00181076")).toBe("0.8891");
       const code = rp.elements["x00540300"].items![0].dataSet!;
       expect(code.string("x00080104")).toBe("^68^Gallium");
+      expect(code.string("x00080100")).toBe("35337001");
+      expect(code.string("x00080102")).toBe("SCT");
       expect(currentNuclide(ds).match?.id).toBe("Ga-68");
     }
   });

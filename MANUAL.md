@@ -543,8 +543,8 @@ Bereich **Bearbeiten** (wirkt auf den aktiven Datensatz):
    Radiopharmaceutical Information Sequence (0054,0016) neu: Nuklid-Code (0054,0300), Halbwertszeit (0018,1075),
    Positronenanteil (0018,1076) und optional das Radiopharmazeutikum (0018,0031). Aktivität, Injektionszeit und
    alle anderen Angaben bleiben erhalten. Die SUV-Berechnung in der App verwendet sofort die neue Halbwertszeit.
-   Der Nuklid-Code wird mit dem privaten Kodierschema `99RECON` und der Standardbezeichnung (z. B. `^68^Gallium`)
-   geschrieben.
+   Der Nuklid-Code ist der SNOMED-CT-Code aus dem DICOM-Standard (CID 18/4020, Schema `SCT`, z. B. `35337001`
+   `^68^Gallium`). Für Tb-161 definiert DICOM keinen Code; dort wird das private Schema `99RECON` verwendet.
 
 ---
 

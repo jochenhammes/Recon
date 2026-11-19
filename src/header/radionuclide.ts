@@ -6,6 +6,8 @@ import type { HeaderEdit } from "./headerModel";
 /** Radionuclides offered in the header editor (half-life in s, positron branching fraction). */
 export interface Nuclide {
   id: string;
+  /** SNOMED CT code (scheme SCT, DICOM CID 18/4020); missing → private code. */
+  code?: string;
   /** DICOM code meaning (CID 4020 style, e.g. "^18^Fluorine"). */
   meaning: string;
   halfLifeSec: number;
@@ -18,20 +20,25 @@ const min = 60, h = 3600, d = 86400;
 
 /** Physical data after NNDC/DDEP (half-lives) and positron branching ratios. */
 export const NUCLIDES: Nuclide[] = [
-  { id: "F-18", meaning: "^18^Fluorine", halfLifeSec: 109.77 * min, positronFraction: 0.9673, halfLifeText: "109,77 min" },
-  { id: "C-11", meaning: "^11^Carbon", halfLifeSec: 20.364 * min, positronFraction: 0.9975, halfLifeText: "20,364 min" },
-  { id: "Cu-64", meaning: "^64^Copper", halfLifeSec: 12.701 * h, positronFraction: 0.1752, halfLifeText: "12,701 h" },
-  { id: "Ga-68", meaning: "^68^Gallium", halfLifeSec: 67.71 * min, positronFraction: 0.8891, halfLifeText: "67,71 min" },
-  { id: "Tc-99m", meaning: "^99m^Technetium", halfLifeSec: 6.0067 * h, positronFraction: 0, halfLifeText: "6,0067 h" },
-  { id: "I-123", meaning: "^123^Iodine", halfLifeSec: 13.2235 * h, positronFraction: 0, halfLifeText: "13,2235 h" },
-  { id: "I-131", meaning: "^131^Iodine", halfLifeSec: 8.0252 * d, positronFraction: 0, halfLifeText: "8,0252 d" },
-  { id: "Y-90", meaning: "^90^Yttrium", halfLifeSec: 64.053 * h, positronFraction: 0.000032, halfLifeText: "64,053 h" },
-  { id: "Lu-177", meaning: "^177^Lutetium", halfLifeSec: 6.6443 * d, positronFraction: 0, halfLifeText: "6,6443 d" },
+  { id: "F-18", code: "77004003", meaning: "^18^Fluorine", halfLifeSec: 109.77 * min, positronFraction: 0.9673, halfLifeText: "109,77 min" },
+  { id: "C-11", code: "40565003", meaning: "^11^Carbon", halfLifeSec: 20.364 * min, positronFraction: 0.9975, halfLifeText: "20,364 min" },
+  { id: "Cu-64", code: "3932008", meaning: "^64^Copper", halfLifeSec: 12.701 * h, positronFraction: 0.1752, halfLifeText: "12,701 h" },
+  { id: "Ga-68", code: "35337001", meaning: "^68^Gallium", halfLifeSec: 67.71 * min, positronFraction: 0.8891, halfLifeText: "67,71 min" },
+  { id: "Tc-99m", code: "72454006", meaning: "^99m^Technetium", halfLifeSec: 6.0067 * h, positronFraction: 0, halfLifeText: "6,0067 h" },
+  { id: "I-123", code: "21572004", meaning: "^123^Iodine", halfLifeSec: 13.2235 * h, positronFraction: 0, halfLifeText: "13,2235 h" },
+  { id: "I-131", code: "1368003", meaning: "^131^Iodine", halfLifeSec: 8.0252 * d, positronFraction: 0, halfLifeText: "8,0252 d" },
+  { id: "Y-90", code: "14691008", meaning: "^90^Yttrium", halfLifeSec: 64.053 * h, positronFraction: 0.000032, halfLifeText: "64,053 h" },
+  { id: "Lu-177", code: "447553000", meaning: "^177^Lutetium", halfLifeSec: 6.6443 * d, positronFraction: 0, halfLifeText: "6,6443 d" },
   { id: "Tb-161", meaning: "^161^Terbium", halfLifeSec: 6.953 * d, positronFraction: 0, halfLifeText: "6,953 d" },
 ];
 
-/** Coding scheme of the radionuclide code written by the app (private, the code meaning is the standard text). */
+/** Private coding scheme for nuclides without a SNOMED CT code in DICOM (Tb-161). */
 export const NUCLIDE_SCHEME = "99RECON";
+
+/** Code written to (0054,0300): SNOMED CT where DICOM defines one, else the private scheme. */
+export function nuclideCode(n: Nuclide): { value: string; scheme: string; meaning: string } {
+  return n.code ? { value: n.code, scheme: "SCT", meaning: n.meaning } : { value: n.id, scheme: NUCLIDE_SCHEME, meaning: n.meaning };
+}
 
 export const RP_SEQUENCE = "x00540016";
 
@@ -63,10 +70,12 @@ export function currentNuclide(ds: DataSet): { meaning?: string; halfLifeSec?: n
   if (!rp) return {};
   const code = rp.elements["x00540300"]?.items?.[0]?.dataSet;
   const meaning = code?.string("x00080104")?.trim();
+  const codeValue = code?.string("x00080100")?.trim();
   const hl = Number(rp.string("x00181075"));
   const pf = Number(rp.string("x00181076"));
   const halfLifeSec = Number.isFinite(hl) && hl > 0 ? hl : undefined;
   const match =
+    NUCLIDES.find((n) => codeValue && n.code === codeValue) ??
     NUCLIDES.find((n) => meaning && n.meaning.toLowerCase() === meaning.toLowerCase()) ??
     (halfLifeSec ? NUCLIDES.find((n) => Math.abs(n.halfLifeSec - halfLifeSec) / n.halfLifeSec < 0.01) : undefined);
   return { meaning, halfLifeSec, positronFraction: Number.isFinite(pf) ? pf : undefined, radiopharmaceutical: rp.string("x00180031")?.trim() || undefined, match };
@@ -103,10 +112,11 @@ export function radiopharmaceuticalSequence(file: { bytes: Uint8Array; dataSet: 
       if (replaced.has(el.tag) || el.tag.startsWith("xfffe")) continue;
       parts.push({ tag: tagNum(el.tag), bytes: rawElement(file.bytes, el, explicit) });
     }
+  const c = nuclideCode(n);
   const codeItem = concatBytes([
-    encodeElementBytes(0x0008, 0x0100, stringValue("SH", n.id), explicit),
-    encodeElementBytes(0x0008, 0x0102, stringValue("SH", NUCLIDE_SCHEME), explicit),
-    encodeElementBytes(0x0008, 0x0104, stringValue("LO", n.meaning), explicit),
+    encodeElementBytes(0x0008, 0x0100, stringValue("SH", c.value), explicit),
+    encodeElementBytes(0x0008, 0x0102, stringValue("SH", c.scheme), explicit),
+    encodeElementBytes(0x0008, 0x0104, stringValue("LO", c.meaning), explicit),
   ]);
   parts.push({ tag: 0x00540300, bytes: encodeElementBytes(0x0054, 0x0300, sequenceValue([codeItem]), explicit) });
   parts.push({ tag: 0x00181075, bytes: encodeElementBytes(0x0018, 0x1075, stringValue("DS", formatDS(Number(n.halfLifeSec.toPrecision(8)))), explicit) });
