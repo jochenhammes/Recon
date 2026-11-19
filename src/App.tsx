@@ -277,6 +277,7 @@ function App() {
   const centiloidCancelled = useRef(false);
   const normRun = useRef<{ cancel: () => void } | null>(null);
   const [loadBusy, setLoadBusy] = useState(false);
+  const [exportActivity, setExportActivity] = useState<string | null>(null);
   /** Patient ID: prefix of all exported NIfTI/CSV file names. */
   const [patientId, setPatientId] = useState("");
   setExportPatientId(patientId);
@@ -2784,7 +2785,16 @@ function App() {
       icon: Download,
       disabled: !dataset,
       disabledReason: "Erst einen Datensatz laden",
-      content: dataset && active && <ExportPanel dataset={dataset} spaces={spaces} activeId={active.id} />,
+      content: dataset && active && (
+        <ExportPanel
+          items={spaces.map((sp) => {
+            const suv = suvById.get(sp.id);
+            return { ...sp, suvFactor: suv?.ok ? suv.info.factor : null };
+          })}
+          activeId={active.id}
+          onActivity={setExportActivity}
+        />
+      ),
     },
   ];
 
@@ -2822,6 +2832,7 @@ function App() {
   act(fusionBusy && { id: "fusion", label: "Fusionsexport", tab: "view" });
   act(editBusy && { id: "edit", label: "Bearbeiten", tab: "edit" });
   act((templateBusy || atlasBusy) && { id: "bundled", label: templateBusy ? "Vorlage laden" : "Atlas laden", tab: templateBusy ? "normalization" : "analysis" });
+  act(exportActivity && { id: "export", label: "Export", detail: exportActivity, tab: "export" });
   act(imcalcBusy && { id: "imcalc", label: "IMCALC", detail: imcalcBusy, tab: "imcalc" });
   act(kineticsActivity && { id: "kinetics", label: "Kinetik", detail: kineticsActivity.label, fraction: kineticsActivity.fraction, tab: "kinetics" });
   act(ctSegError && !ctSegRunning && { id: "ctseg-error", label: "CT-Segmentierung", error: ctSegError, tab: "tumor" });

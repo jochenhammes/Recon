@@ -31,7 +31,7 @@ Alles läuft im Browser; es gibt keinen Server, **die Daten verlassen den Rechne
 | **IMCALC** | Voxelweise Rechnung auf Datensätzen gleichen Rasters: a·X + b, a·X₁ + b·X₂, Produkt, Quotient, Gruppen-Mittelwert und -SD, Z-Karten gegen eine Vergleichskohorte; Ergebnisse sind neue Datensätze (anzeigen, exportieren, weiterverarbeiten) |
 | **Bearbeiten** | Werteoperationen (Schwelle, Bereich, Begrenzen, linear), VOI (Kugel, Quader, Pinsel), Gauß-Glättung, Spiegeln, Drehen, Resampling; rückgängig |
 | **DICOM-Header** | Alle Elemente durchsuchen, ändern, löschen, hinzufügen (mit VR-Prüfung) |
-| **Export** | DICOM mit Original-Header (byte-genau erhalten) oder als neue Serie aus Vorlage, NIfTI mit Orientierung (Labelbilder mit Regionsnamen), Export in den Raum eines anderen Datensatzes, optionale Anonymisierung |
+| **Export** | Beliebige Datensätze per Häkchen, mehrere als ein ZIP; NIfTI oder DICOM (Original-Header byte-genau erhalten bzw. neue Serie aus Vorlage); ohne Resampling im eigenen Raster (Koregistrierung im NIfTI-Header) oder in das Raster eines anderen Datensatzes; PET als NIfTI optional in SUV; Labelbilder mit Regionsnamen; optionale Anonymisierung; Patient-ID im Dateinamen |
 
 Bedienung: einklappbare Karten mit Status, Erläuterungen hinter ⓘ, verbreiterbares Seitenpanel, Aktivitätsanzeige für
 laufende Berechnungen in der Kopfzeile – Details im [Handbuch](MANUAL.md).

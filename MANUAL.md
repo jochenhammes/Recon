@@ -533,23 +533,34 @@ Bereich **Bearbeiten** (wirkt auf den aktiven Datensatz):
 
 ![Export](docs/images/50-export.jpg)
 
-Bereich **Export** (aktiver Datensatz):
+Bereich **Export**, Karte **Dateien exportieren**:
 
-1. **Datensatz (eigener Raum)**:
-   - *Als DICOM speichern* – bei DICOM-Quellen mit Original-Header (alle Elemente byte-genau, neue UIDs, ImageType
-     DERIVED); nach Crop/Drehung/Resampling als neue Serie aus Vorlage; Serien als ZIP.
-   - *Als NIfTI speichern* – mit Orientierung (sform/qform); Labelbilder mit Regionsnamen im Header.
-   - Ist im Bereich *Daten* eine **Patient-ID** eingetragen, beginnen alle NIfTI- und CSV-Dateien mit `<ID>_`.
-   - **Anonymisierung** (optional): Patienten-, Geräte- und Freitextangaben entfernen, UIDs ersetzen; Zeiten und
-     optional Gewicht/Größe bleiben für die SUV-Berechnung erhalten.
-2. **In Zielraum exportieren / resampeln**:
-   1. Datensätze anhaken.
-   2. **Zielraum** (Raster eines anderen Datensatzes) wählen; *wie Ziel*, eigene *Matrix* oder *Voxelgröße*.
-   3. Interpolation (nächster Nachbar, trilinear, B-Spline; Labelbilder immer nächster Nachbar).
-   4. Format *DICOM* (Header der Quelle, Geometrie und Frame of Reference des Ziels) oder *NIfTI* → *Exportieren*.
-3. Fusionen: Bereich **Ansicht** → *Fusion exportieren* ([Abschnitt 4](#4-ansicht-ebenen-und-fusion)).
+1. **Datensätze** anhaken (vorausgewählt: der aktive; *alle* / *keine*). Jede Zeile nennt Matrix und Voxelgröße.
+2. **Format**:
+   - **NIfTI** – mit Orientierung (sform/qform); Labelbilder mit Regionsnamen im Header; NIfTI-Quellen ohne
+     Änderungen mit ihrem Original-Header.
+   - **DICOM** – DICOM-Quellen mit Original-Header (alle Elemente byte-genau, neue UIDs, ImageType DERIVED; nach
+     Crop/Drehung/Resampling als neue Serie aus Vorlage), andere Datensätze als Secondary Capture.
+3. **Raum**:
+   - **Eigenes Raster** (Standard): **kein Resampling** – jeder Datensatz behält Matrix und Voxelgröße, das PET
+     bleibt in seiner Auflösung. Bei NIfTI steht die **Koregistrierung im Header**: In SPM, FSL oder 3D Slicer
+     liegen PET und CT ohne Resampling deckungsgleich. DICOM-Serien behalten ihre Original-Lage (Hinweis, wenn ein
+     gewählter Datensatz registriert ist).
+   - **Raster von … (Resampling)**: alle gewählten Datensätze über ihre Registrierung in das Raster eines Datensatzes
+     (*wie Ziel*, eigene *Matrix* oder *Voxelgröße*); Interpolation nächster Nachbar, trilinear oder B-Spline,
+     Labelbilder immer nächster Nachbar.
+4. **PET-Werte als SUV speichern** (nur NIfTI; erscheint, wenn ein gewählter PET-Datensatz aus DICOM mit Dosis,
+   Injektionszeit und Gewicht stammt): Werte × SUV-Faktor (der Faktor steht dabei), Dateiname mit `_SUV`,
+   Header-Feld *descrip* „SUVbw“. Datensätze ohne SUV-Angaben bleiben in Originalwerten (Hinweis).
+5. DICOM-Optionen: „[bearbeitet]“ in der SeriesDescription, Fensterwerte anpassen; **Anonymisierung** (Karte darunter):
+   Patienten-, Geräte- und Freitextangaben entfernen, UIDs ersetzen; Zeiten und optional Gewicht/Größe bleiben für
+   die SUV-Berechnung erhalten.
+6. **Exportieren**: eine Datei wird direkt gespeichert, **mehrere als ein ZIP** (`Export_<n>_Datensaetze.zip`; DICOM-Serien
+   je in einem Ordner). Ist im Bereich *Daten* eine **Patient-ID** eingetragen, beginnen NIfTI-Dateien und das ZIP
+   mit `<ID>_`. Fortschritt in der Karte und in der Aktivitätsanzeige.
+7. Fusionen: Bereich **Ansicht** → *Fusion exportieren* ([Abschnitt 4](#4-ansicht-ebenen-und-fusion)).
    Analyse-Tabellen: CSV-Knöpfe in den jeweiligen Karten oder **⤢** → *CSV*.
-4. Ganze Sitzung: **Projekt speichern** im Bereich *Daten* ([Abschnitt 2](#projekt-speichern-und-öffnen)).
+8. Ganze Sitzung: **Projekt speichern** im Bereich *Daten* ([Abschnitt 2](#projekt-speichern-und-öffnen)).
 
 ---
 

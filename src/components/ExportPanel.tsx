@@ -1,187 +1,332 @@
-import { useState } from "react";
-import { umlaut, withPatientId } from "../core/exportName";
-import { Card } from "../ui/Card";
-import type { LoadedDataset } from "../dataset/types";
-import { modalityLabel } from "../dataset/describe";
-import type { ReconParams } from "../recon/volume";
-import { changesGrid, describeEdit } from "../edit/operations";
+import { useMemo, useState } from "react";
+import type { Vec3 } from "../core/geometry";
+import { isIdentityMat4 } from "../core/transform";
 import type { AnonymizeOptions } from "../export/anonymize";
-import { buildReconstructionDicom } from "../export/dicomWriter";
-import { type ExportedFile, buildEditedDicomFiles } from "../export/editedDicomExport";
-import { buildNiftiFile, buildNiftiFromOriginalHeader } from "../export/niftiWriter";
-import { buildTemplateSeries } from "../export/templateDicomWriter";
-import { buildZip } from "../export/zip";
-import { type SpaceDataset, SpaceExport } from "./SpaceExport";
+import { type ExportItem, type ExportSettings, type OutFile, exportDatasetFiles, packageFiles, suvApplies } from "../export/exportJob";
+import { INTERPOLATION_LABELS, type Interpolation, type TargetGrid, customGrid } from "../resample/resample";
+import { Card } from "../ui/Card";
+import { InfoText } from "../ui/Info";
+import { formatInput, formatValue, parseInput } from "./format";
 
 export interface ExportPanelProps {
-  dataset: LoadedDataset;
-  /** All loaded datasets with their placement (for export into another dataset's space). */
-  spaces: SpaceDataset[];
+  /** All datasets that can be exported (with placement and SUV factor). */
+  items: ExportItem[];
+  /** Preselected dataset. */
   activeId: string;
+  /** Reports the running export (activity indicator); null when done. */
+  onActivity?: (text: string | null) => void;
 }
 
-const FILTER_LABELS: Record<string, string> = {
-  ramp: "Ram-Lak",
-  "shepp-logan": "Shepp-Logan",
-  cosine: "Cosine",
-  hamming: "Hamming",
-  hann: "Hann",
-  "hann-half": "Hann ×0,5",
-  butterworth: "Butterworth",
-};
+type SpaceMode = "native" | "resampled";
+type GridMode = "target" | "matrix" | "voxel";
 
-function describeRecon(params: ReconParams | undefined): string {
-  if (!params) return "SPECT-Rekonstruktion";
-  return params.algorithm === "fbp"
-    ? `FBP (${FILTER_LABELS[params.filterType] ?? params.filterType})`
-    : `OSEM (${params.numSubsets} Subsets, ${params.numIterations} Iterationen)`;
-}
-
-function safeFileName(s: string): string {
-  return s.trim().replace(/[äöüÄÖÜß]/g, umlaut).replace(/[^A-Za-z0-9_.-]+/g, "_");
-}
-
-function downloadBytes(bytes: Uint8Array<ArrayBuffer>, fileName: string, mimeType: string) {
-  const blob = new Blob([bytes], { type: mimeType });
-  const url = URL.createObjectURL(blob);
+function download(file: { name: string; bytes: Uint8Array<ArrayBuffer>; type: string }) {
+  const url = URL.createObjectURL(new Blob([file.bytes], { type: file.type }));
   const a = document.createElement("a");
   a.href = url;
-  a.download = withPatientId(fileName);
+  a.download = file.name;
   document.body.appendChild(a);
   a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function downloadFiles(files: ExportedFile[], base: string) {
-  if (files.length === 1) downloadBytes(files[0].bytes, `${base}.dcm`, "application/dicom");
-  else downloadBytes(buildZip(files), `${base}.zip`, "application/zip");
-}
-
-export function ExportPanel({ dataset, spaces, activeId }: ExportPanelProps) {
-  const { source, current: volume, edits } = dataset;
+/**
+ * Export: choose datasets, format (DICOM/NIfTI) and space (own grid without resampling, or resampled into the grid
+ * of another dataset); several files are downloaded as one ZIP. NIfTI from PET optionally in SUV.
+ */
+export function ExportPanel({ items, activeId, onActivity }: ExportPanelProps) {
+  const [selected, setSelected] = useState<string[]>([activeId]);
+  const [format, setFormat] = useState<"dicom" | "nifti">("nifti");
+  const [spaceMode, setSpaceMode] = useState<SpaceMode>("native");
+  const [targetId, setTargetId] = useState<string | null>(null);
+  const [gridMode, setGridMode] = useState<GridMode>("target");
+  const [matrixText, setMatrixText] = useState<string[]>([]);
+  const [voxelText, setVoxelText] = useState<string[]>([]);
+  const [method, setMethod] = useState<Interpolation>("linear");
+  const [suv, setSuv] = useState(true);
   const [markSeries, setMarkSeries] = useState(true);
   const [adjustWindow, setAdjustWindow] = useState(true);
   const [anonymize, setAnonymize] = useState(false);
   const [pseudonym, setPseudonym] = useState("ANONYM");
   const [retainPatientChars, setRetainPatientChars] = useState(true);
+  const [working, setWorking] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
   const [messages, setMessages] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [working, setWorking] = useState(false);
 
-  const edited = edits.length > 0;
-  const gridChanged = edits.some(changesGrid);
-  const baseName = dataset.displayName.replace(/\.nii(\.gz)?$/i, "").replace(/\.[^./\\]+$/, "") || "volume";
-  const suffix = source.kind === "reconstruction" ? (edited ? "_recon_edited" : "_recon") : edited ? "_edited" : "_export";
-  const editDescription = edits.map((e) => describeEdit(e)).join("; ");
+  const chosen = items.filter((i) => selected.includes(i.id));
+  const target = items.find((i) => i.id === targetId) ?? items.find((i) => isIdentityMat4(i.matrix)) ?? items[0];
+  const tv = target?.dataset.current;
+  const baseGrid: TargetGrid | null = useMemo(() => (tv ? { nx: tv.nx, ny: tv.ny, nz: tv.nz, geometry: tv.geometry } : null), [tv]);
+  const matrixValues = (matrixText.length ? matrixText : tv ? [tv.nx, tv.ny, tv.nz].map(String) : []).map(parseInput) as Vec3;
+  const voxelValues = (voxelText.length ? voxelText : tv ? tv.geometry.spacing.map((s) => formatInput(s)) : []).map(parseInput) as Vec3;
+  const grid: TargetGrid | null = !baseGrid
+    ? null
+    : gridMode === "target"
+      ? baseGrid
+      : gridMode === "matrix"
+        ? matrixValues.every((v) => v >= 1)
+          ? customGrid(baseGrid, { matrix: matrixValues })
+          : null
+        : voxelValues.every((v) => v > 0)
+          ? customGrid(baseGrid, { voxelMm: voxelValues })
+          : null;
+
   const anonOptions: AnonymizeOptions | undefined = anonymize ? { pseudonym, retainPatientCharacteristics: retainPatientChars } : undefined;
-  const outBase = anonymize ? `${safeFileName(pseudonym) || "ANONYM"}${edited ? "_edited" : ""}` : `${safeFileName(baseName)}${suffix}`;
+  const settings: ExportSettings | null =
+    spaceMode === "resampled" && (!grid || !target)
+      ? null
+      : {
+          format,
+          space: spaceMode === "native" ? { kind: "native" } : { kind: "resampled", target: target!, grid: grid!, method },
+          suv,
+          anonymize: anonOptions,
+          markSeries,
+          adjustWindow,
+        };
+  const suvCandidates = chosen.filter((i) => i.suvFactor && !i.dataset.atlas);
+  const anyDicomSource = chosen.some((i) => i.dataset.source.kind === "dicom");
+  const anyEditedDicom = chosen.some((i) => i.dataset.source.kind === "dicom" && i.dataset.edits.length > 0);
+  const anyRegistered = chosen.some((i) => !isIdentityMat4(i.matrix));
 
-  function run(action: () => string[]) {
-    setError(null);
+  async function run() {
+    if (!settings || chosen.length === 0) return;
     setWorking(true);
-    // Let the "läuft" state render before the (synchronous) export work starts.
-    setTimeout(() => {
-      try {
-        const msgs = action();
-        setMessages(msgs.length > 5 ? [...msgs.slice(0, 4), `… und ${msgs.length - 4} weitere Hinweise`] : msgs);
-      } catch (e) {
-        setMessages([]);
-        setError(`Export fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
-      } finally {
-        setWorking(false);
+    setError(null);
+    setMessages([]);
+    const all: OutFile[] = [];
+    const warnings: string[] = [];
+    try {
+      for (const [i, item] of chosen.entries()) {
+        const text = `${i + 1}/${chosen.length}: ${item.label}`;
+        setStatus(`${text} …`);
+        onActivity?.(text);
+        await new Promise((r) => setTimeout(r, 20)); // let the status render
+        const r = await exportDatasetFiles(item, settings, i, (f) => setStatus(`${text} ${Math.round(f * 100)} %`));
+        all.push(...r.files);
+        warnings.push(...r.warnings);
+        if (format === "nifti" && suv && item.suvFactor && !suvApplies(item, settings)) warnings.push(`${item.label}: Labelbild – ohne SUV.`);
       }
-    }, 30);
+      if (format === "nifti" && suv) {
+        const noSuv = chosen.filter((i) => !i.suvFactor && !i.dataset.atlas && /PT|PET/.test(i.label));
+        if (noSuv.length) warnings.push(`Ohne SUV-Angaben (Originalwerte): ${noSuv.map((i) => i.label).join(", ")}.`);
+      }
+      setStatus("Datei wird erstellt …");
+      const pkg = packageFiles(all, `Export_${chosen.length}_Datensaetze.zip`);
+      download(pkg);
+      setStatus(`${pkg.name}: ${chosen.length} ${chosen.length === 1 ? "Datensatz" : "Datensätze"}, ${all.length} ${all.length === 1 ? "Datei" : "Dateien"}.`);
+      setMessages(warnings.length > 6 ? [...warnings.slice(0, 5), `… und ${warnings.length - 5} weitere Hinweise`] : warnings);
+    } catch (e) {
+      setStatus(null);
+      setError(`Export fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setWorking(false);
+      onActivity?.(null);
+    }
   }
 
-  function exportDicom() {
-    run(() => {
-      if (source.kind === "dicom" && !gridChanged) {
-        const { files, warnings } = buildEditedDicomFiles(volume, source, {
-          seriesDescriptionSuffix: markSeries && edited ? " [bearbeitet]" : undefined,
-          derivationDescription: edited ? editDescription : undefined,
-          adjustWindow: edited && adjustWindow,
-          anonymize: anonOptions,
-          headerEdits: dataset.headerEdits,
-        });
-        downloadFiles(files, outBase);
-        return warnings;
-      }
-      if (source.kind === "dicom") {
-        const { files, warnings } = buildTemplateSeries(volume, source.files[0], {
-          seriesDescription: `${source.files[0].dataSet.string("x0008103e")?.trim() ?? ""} [bearbeitet]`.trim(),
-          derivationDescription: editDescription,
-          anonymize: anonOptions,
-          headerEdits: dataset.headerEdits,
-        });
-        downloadFiles(files, outBase);
-        return ["Neue Serie mit verändertem Voxelraster auf Basis des Original-Headers erzeugt.", ...warnings];
-      }
-      const description = source.kind === "reconstruction" ? describeRecon(source.reconParams) : `NIfTI-Import ${dataset.displayName}`;
-      const bytes = buildReconstructionDicom(volume, {
-        seriesDescription: edited ? `${description} [bearbeitet]`.slice(0, 64) : description,
-      });
-      downloadBytes(bytes, `${outBase}.dcm`, "application/dicom");
-      return [];
-    });
-  }
-
-  function exportNifti() {
-    run(() => {
-      if (source.kind === "nifti" && !gridChanged && !dataset.atlas) {
-        const bytes = buildNiftiFromOriginalHeader(volume, source.nifti);
-        if (bytes) {
-          downloadBytes(bytes, `${outBase}.nii`, "application/octet-stream");
-          return ["Original-NIfTI-Header übernommen, Datentyp float32."];
-        }
-      }
-      downloadBytes(buildNiftiFile(volume, { atlas: dataset.atlas }), `${outBase}.nii`, "application/octet-stream");
-      return dataset.atlas ? [`Als Labelbild gespeichert (${dataset.atlas.labels.size} Regionen mit Namen im Header) – wird beim Laden wieder als Atlas erkannt.`] : [];
-    });
-  }
-
-  const dicomLabel =
-    source.kind === "dicom"
-      ? gridChanged
-        ? "Als neue DICOM-Serie speichern"
-        : source.files.length > 1
-          ? `Als DICOM-Serie speichern (ZIP, ${source.files.length} Dateien)`
-          : "Als DICOM speichern (Original-Header)"
-      : "Als DICOM speichern";
+  const gridOf = (i: ExportItem) => {
+    const v = i.dataset.current;
+    return `${v.nx}×${v.ny}×${v.nz} · ${v.geometry.spacing.map((s) => formatValue(s)).join("×")} mm`;
+  };
 
   return (
     <div className="export-panel">
-      <Card title={<>Datensatz · {modalityLabel(source)} (eigener Raum)</>}>
-        <button className="secondary-btn" disabled={working} onClick={exportDicom}>
-          {dicomLabel}
-        </button>
-        <button className="secondary-btn" disabled={working} onClick={exportNifti}>
-          {source.kind === "nifti" && !gridChanged ? "Als NIfTI speichern (Original-Header)" : "Als NIfTI speichern"}
-        </button>
-        {source.kind === "dicom" && edited && !gridChanged && (
+      <Card
+        title={<>Dateien exportieren</>}
+        info={
+          <>
+            <p>
+              Datensätze anhaken, Format und Raum wählen. Eine Datei wird direkt gespeichert, mehrere als ein ZIP (DICOM-Serien je in einem Ordner).
+              Ist im Bereich „Daten“ eine Patient-ID eingetragen, beginnen NIfTI-Dateien (und das ZIP) damit.
+            </p>
+            <p>
+              <strong>Eigenes Raster</strong>: kein Resampling, jeder Datensatz behält Matrix und Voxelgröße (das PET bleibt in seiner Auflösung).
+              Bei NIfTI steht die Koregistrierung im Header (sform/qform) – in SPM, FSL oder 3D Slicer liegen die Dateien deckungsgleich. DICOM-Serien
+              behalten die Original-Lage.
+            </p>
+            <p>
+              <strong>Raster von …</strong>: alle Datensätze werden über ihre Registrierung in das Raster eines Datensatzes resampelt (wahlweise mit
+              eigener Matrix oder Voxelgröße); Labelbilder immer mit nächstem Nachbarn.
+            </p>
+            <p>DICOM aus DICOM-Quellen: alle Header-Daten des Originals bleiben erhalten, neue UIDs, ImageType DERIVED. Andere Quellen: Secondary Capture.</p>
+          </>
+        }
+      >
+        <div className="export-list-head">
+          <span>Datensätze</span>
+          <span>
+            <button className="link-btn" disabled={working} onClick={() => setSelected(items.map((i) => i.id))}>
+              alle
+            </button>{" "}
+            ·{" "}
+            <button className="link-btn" disabled={working} onClick={() => setSelected([])}>
+              keine
+            </button>
+          </span>
+        </div>
+        <div className="imcalc-list export-list">
+          {items.map((i) => (
+            <label key={i.id} className="checkbox-field" title={gridOf(i)}>
+              <input type="checkbox" checked={selected.includes(i.id)} disabled={working} onChange={(e) => setSelected((prev) => (e.target.checked ? [...prev, i.id] : prev.filter((x) => x !== i.id)))} />
+              <span className="export-item-name">{i.label}</span>
+              <em className="export-item-grid">{gridOf(i)}</em>
+            </label>
+          ))}
+        </div>
+
+        <div className="field">
+          Format
+          <div className="segmented-control" role="group" aria-label="Format">
+            {(
+              [
+                ["nifti", "NIfTI"],
+                ["dicom", "DICOM"],
+              ] as const
+            ).map(([k, l]) => (
+              <button key={k} className={format === k ? "active" : ""} disabled={working} onClick={() => setFormat(k)}>
+                {l}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="field">
+          Raum
+          <div className="segmented-control" role="group" aria-label="Raum">
+            <button className={spaceMode === "native" ? "active" : ""} disabled={working} onClick={() => setSpaceMode("native")}>
+              Eigenes Raster
+            </button>
+            <button className={spaceMode === "resampled" ? "active" : ""} disabled={working} onClick={() => setSpaceMode("resampled")}>
+              Raster von … (Resampling)
+            </button>
+          </div>
+        </div>
+        {spaceMode === "native" && (
+          <p className="tool-hint">
+            Kein Resampling.{" "}
+            {format === "nifti"
+              ? anyRegistered
+                ? "Registrierungen werden in den NIfTI-Header geschrieben."
+                : ""
+              : anyRegistered
+                ? "DICOM behält die Original-Lage – für deckungsgleiche DICOM-Dateien „Raster von …“ wählen."
+                : ""}
+          </p>
+        )}
+        {spaceMode === "resampled" && target && tv && (
+          <>
+            <label className="field">
+              Zielraster
+              <select
+                value={target.id}
+                disabled={working}
+                onChange={(e) => {
+                  setTargetId(e.target.value);
+                  setMatrixText([]);
+                  setVoxelText([]);
+                }}
+              >
+                {items.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label} – {s.dataset.current.nx}×{s.dataset.current.ny}×{s.dataset.current.nz}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="segmented-control" role="group" aria-label="Raster">
+              {(
+                [
+                  ["target", "wie Ziel"],
+                  ["matrix", "Matrix"],
+                  ["voxel", "Voxelgröße"],
+                ] as [GridMode, string][]
+              ).map(([m, l]) => (
+                <button key={m} className={gridMode === m ? "active" : ""} disabled={working} onClick={() => setGridMode(m)}>
+                  {l}
+                </button>
+              ))}
+            </div>
+            {gridMode !== "target" && (
+              <div className="field-row three">
+                {["x", "y", "z"].map((a, i) => (
+                  <label key={a} className="field">
+                    {a} ({gridMode === "matrix" ? "Voxel" : "mm"})
+                    <input
+                      type="text"
+                      inputMode={gridMode === "matrix" ? "numeric" : "decimal"}
+                      value={
+                        gridMode === "matrix" ? (matrixText[i] ?? String([tv.nx, tv.ny, tv.nz][i])) : (voxelText[i] ?? formatInput(tv.geometry.spacing[i]))
+                      }
+                      onChange={(e) => {
+                        if (gridMode === "matrix") {
+                          const next = matrixText.length ? [...matrixText] : [tv.nx, tv.ny, tv.nz].map(String);
+                          next[i] = e.target.value;
+                          setMatrixText(next);
+                        } else {
+                          const next = voxelText.length ? [...voxelText] : tv.geometry.spacing.map((s) => formatInput(s));
+                          next[i] = e.target.value;
+                          setVoxelText(next);
+                        }
+                      }}
+                    />
+                  </label>
+                ))}
+              </div>
+            )}
+            {grid && (
+              <p className="tool-hint">
+                Ergebnis: {grid.nx} × {grid.ny} × {grid.nz} Voxel à {grid.geometry.spacing.map((s) => s.toFixed(2)).join(" × ")} mm.
+              </p>
+            )}
+            <label className="field">
+              Interpolation (Labelbilder: nächster Nachbar)
+              <select value={method} disabled={working} onChange={(e) => setMethod(e.target.value as Interpolation)}>
+                {(Object.keys(INTERPOLATION_LABELS) as Interpolation[]).map((m) => (
+                  <option key={m} value={m}>
+                    {INTERPOLATION_LABELS[m]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
+        )}
+
+        {format === "nifti" && suvCandidates.length > 0 && (
+          <label className="checkbox-field">
+            <input type="checkbox" checked={suv} disabled={working} onChange={(e) => setSuv(e.target.checked)} />
+            PET-Werte als SUV speichern ({suvCandidates.map((i) => `${i.label}: × ${formatValue(i.suvFactor!)}`).join("; ")})
+          </label>
+        )}
+        {format === "dicom" && anyEditedDicom && (
           <>
             <label className="checkbox-field">
-              <input type="checkbox" checked={markSeries} onChange={(e) => setMarkSeries(e.target.checked)} />
+              <input type="checkbox" checked={markSeries} disabled={working} onChange={(e) => setMarkSeries(e.target.checked)} />
               SeriesDescription um „[bearbeitet]“ ergänzen
             </label>
             <label className="checkbox-field">
-              <input type="checkbox" checked={adjustWindow} onChange={(e) => setAdjustWindow(e.target.checked)} />
+              <input type="checkbox" checked={adjustWindow} disabled={working} onChange={(e) => setAdjustWindow(e.target.checked)} />
               Fensterwerte an neuen Wertebereich anpassen
             </label>
           </>
         )}
-        <p className="export-note">
-          {source.kind === "dicom"
-            ? gridChanged
-              ? "Das Voxelraster wurde verändert: Es entsteht eine neue Serie mit angepasster Geometrie; alle übrigen Header-Daten werden aus dem Original übernommen."
-              : "Alle Header-Daten des Originals werden unverändert übernommen. Neu vergeben werden SOP- und Series-Instance-UID; ImageType wird DERIVED, Fenster und Pixelwert-Grenzen werden angepasst."
-            : "DICOM-Export ohne Original-Header: anonymisiertes Secondary-Capture-Bild mit Voxelgeometrie."}
-        </p>
+
+        <button className="primary-btn" disabled={working || chosen.length === 0 || !settings} onClick={() => void run()}>
+          {working ? "Export läuft …" : chosen.length > 1 ? `${chosen.length} Datensätze exportieren (ZIP)` : "Exportieren"}
+        </button>
+        {status && <p className="tool-hint">{status}</p>}
+        {messages.length > 0 && (
+          <ul className="export-messages">
+            {messages.map((m, i) => (
+              <li key={i}>{m}</li>
+            ))}
+          </ul>
+        )}
+        {error && <div className="error-banner">{error}</div>}
       </Card>
 
-      <SpaceExport key={activeId} spaces={spaces} activeId={activeId} anonymize={anonOptions} />
-
-      {spaces.some((sp) => sp.dataset.source.kind === "dicom") && (
+      {format === "dicom" && anyDicomSource && (
         <section className="card">
           <label className="checkbox-field">
             <input type="checkbox" checked={anonymize} onChange={(e) => setAnonymize(e.target.checked)} />
@@ -197,27 +342,14 @@ export function ExportPanel({ dataset, spaces, activeId }: ExportPanelProps) {
                 <input type="checkbox" checked={retainPatientChars} onChange={(e) => setRetainPatientChars(e.target.checked)} />
                 Gewicht, Größe, Geschlecht, Alter behalten (für SUV)
               </label>
-              <p className="export-note">
-                Entfernt bzw. geleert werden Patientendaten (Name, ID, Geburtsdatum, Adresse …), Betreiber (Institution, Abteilung,
-                Ärzte, Bediener, Station), Gerät (Hersteller, Modell, Seriennummern, Software, Kalibrierung), Freitexte, Auftrags-/
-                Referenz-Sequenzen und alle Private Tags. UIDs werden ersetzt, Dateien heißen IM00001.dcm usw. Datum und Uhrzeit bleiben
-                erhalten (für Zerfallskorrektur/SUV). Eingebrannte Beschriftungen im Bild werden nicht erkannt.
-              </p>
+              <InfoText details="Entfernt bzw. geleert werden Patientendaten (Name, ID, Geburtsdatum, Adresse …), Betreiber (Institution, Abteilung, Ärzte, Bediener, Station), Gerät (Hersteller, Modell, Seriennummern, Software, Kalibrierung), Freitexte, Auftrags-/Referenz-Sequenzen und alle Private Tags. UIDs werden ersetzt, Dateien heißen IM00001.dcm usw. Datum und Uhrzeit bleiben erhalten (für Zerfallskorrektur/SUV). Eingebrannte Beschriftungen im Bild werden nicht erkannt.">
+                Patienten-, Geräte- und Freitextangaben werden entfernt.
+              </InfoText>
             </>
           )}
           {!anonymize && <p className="export-note">Ohne Anonymisierung bleiben alle Patientendaten aus dem Original-Header enthalten.</p>}
         </section>
       )}
-
-      {working && <p className="tool-hint">Export läuft …</p>}
-      {messages.length > 0 && (
-        <ul className="export-messages">
-          {messages.map((m, i) => (
-            <li key={i}>{m}</li>
-          ))}
-        </ul>
-      )}
-      {error && <div className="error-banner">{error}</div>}
     </div>
   );
 }

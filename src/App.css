@@ -2457,3 +2457,26 @@ tr.focus-row td {
   background: #b3261e;
   border-color: #b3261e;
 }
+
+/* ─── Export ──────────────────────────────────────────────────────────── */
+.export-list-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: var(--text-h);
+  margin-bottom: 4px;
+}
+.export-list .checkbox-field {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 6px;
+}
+.export-item-name {
+  min-width: 0;
+}
+.export-item-grid {
+  grid-column: 2;
+  font-style: normal;
+  font-size: 11px;
+  color: var(--text-dim);
+}

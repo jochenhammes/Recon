@@ -2,6 +2,7 @@ import type { Volume3D } from "../viewer/volume";
 import type { NiftiSourceInfo } from "../dataset/types";
 import { niftiQformFromGeometry, niftiSformFromGeometry } from "../core/geometry";
 import type { AtlasInfo } from "../atlas/atlas";
+import { type Mat4, isIdentityMat4, transformGeometry } from "../core/transform";
 import { NIFTI_INTENT_LABEL, atlasExtension } from "../atlas/labelNifti";
 
 const HEADER_SIZE = 348;
@@ -16,11 +17,24 @@ const NIFTI_UNITS_MM = 2;
  * With `atlas`, the file is marked as a label image (intent NIFTI_INTENT_LABEL) and carries the label
  * table in a header extension, so that it is recognized as an atlas when loaded again.
  */
-export function buildNiftiFile(volume: Volume3D, opts: { atlas?: AtlasInfo } = {}): Uint8Array<ArrayBuffer> {
+export function buildNiftiFile(
+  volume: Volume3D,
+  opts: {
+    atlas?: AtlasInfo;
+    /** Native → reference world (registration): written into sform/qform, voxels unchanged. */
+    worldMatrix?: Mat4;
+    /** Multiplies the stored values (e.g. Bq/ml → SUV). */
+    valueScale?: number;
+    /** Header field descrip (max. 80 characters). */
+    description?: string;
+  } = {},
+): Uint8Array<ArrayBuffer> {
+  const geometry = opts.worldMatrix && !isIdentityMat4(opts.worldMatrix) ? transformGeometry(volume.geometry, opts.worldMatrix) : volume.geometry;
   const extension = opts.atlas ? atlasExtension(opts.atlas) : new Uint8Array(4); // all-zero: no extensions
   const VOX_OFFSET = HEADER_SIZE + extension.length;
-  const { nx, ny, nz, data, voxelSpacingMm } = volume;
-  const [spacingZ, spacingY, spacingX] = voxelSpacingMm;
+  const { nx, ny, nz } = volume;
+  const data = opts.valueScale !== undefined && opts.valueScale !== 1 ? Float32Array.from(volume.data, (v) => v * opts.valueScale!) : volume.data;
+  const [spacingX, spacingY, spacingZ] = geometry.spacing;
 
   const header = new ArrayBuffer(HEADER_SIZE);
   const dv = new DataView(header);
@@ -51,7 +65,7 @@ export function buildNiftiFile(volume: Volume3D, opts: { atlas?: AtlasInfo } = {
   dv.setFloat32(112, 1, true); // scl_slope
   dv.setFloat32(116, 0, true); // scl_inter
 
-  writeAscii(dv, 148, 80, "Recon Studio export (anonymized)");
+  writeAscii(dv, 148, 80, opts.description ?? "Recon Studio export (anonymized)");
   if (opts.atlas) {
     dv.setInt16(68, NIFTI_INTENT_LABEL, true); // intent_code
     writeAscii(dv, 328, 16, "Labels");
@@ -59,10 +73,10 @@ export function buildNiftiFile(volume: Volume3D, opts: { atlas?: AtlasInfo } = {
 
   // Orientation: sform from the volume's patient geometry (LPS → RAS); qform as well if the axes
   // are orthogonal. Code 1 = scanner-based anatomical coordinates.
-  const srow = niftiSformFromGeometry(volume.geometry);
+  const srow = niftiSformFromGeometry(geometry);
   for (let i = 0; i < 12; i++) dv.setFloat32(280 + i * 4, srow[i], true);
   dv.setInt16(254, 1, true); // sform_code
-  const q = niftiQformFromGeometry(volume.geometry);
+  const q = niftiQformFromGeometry(geometry);
   if (q) {
     dv.setInt16(252, 1, true); // qform_code
     dv.setFloat32(76, q.qfac, true); // pixdim[0] = qfac

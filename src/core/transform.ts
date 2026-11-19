@@ -1,4 +1,4 @@
-import { type Vec3, type WorldToVoxel, rotationMatrix } from "./geometry";
+import { type Vec3, type VolumeGeometry, type WorldToVoxel, rotationMatrix } from "./geometry";
 
 /**
  * Spatial transform between two datasets in patient (LPS) world coordinates, mm.
@@ -192,4 +192,22 @@ export function worldToVoxelThrough(w2v: WorldToVoxel, M: Mat4): WorldToVoxel {
   if (isIdentityMat4(M)) return w2v;
   const A = [M[0], M[1], M[2], M[4], M[5], M[6], M[8], M[9], M[10]];
   return { m: mul3(w2v.m, A), origin: applyMat4(invert4(M), w2v.origin) };
+}
+
+/**
+ * Geometry of a volume moved by M (native world → reference world): voxel (i, j, k) of the result lies at
+ * M · (position in `g`). Rigid M keeps orthonormal axes; scaling/shear give non-orthogonal axes and other spacings.
+ */
+export function transformGeometry(g: VolumeGeometry, M: Mat4): VolumeGeometry {
+  const origin = applyMat4(M, g.origin);
+  const axes: Vec3[] = [];
+  const spacing: number[] = [];
+  for (let a = 0; a < 3; a++) {
+    const tip = applyMat4(M, [g.origin[0] + g.axes[a][0] * g.spacing[a], g.origin[1] + g.axes[a][1] * g.spacing[a], g.origin[2] + g.axes[a][2] * g.spacing[a]]);
+    const v: Vec3 = [tip[0] - origin[0], tip[1] - origin[1], tip[2] - origin[2]];
+    const len = Math.hypot(v[0], v[1], v[2]) || 1;
+    axes.push([v[0] / len, v[1] / len, v[2] / len]);
+    spacing.push(len);
+  }
+  return { ...g, origin, axes: axes as [Vec3, Vec3, Vec3], spacing: spacing as Vec3 };
 }
