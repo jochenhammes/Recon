@@ -509,9 +509,18 @@ Bereich **Bearbeiten** (wirkt auf den aktiven Datensatz):
 2. **VOI**: *Kugel* oder *Quader* am Fadenkreuz (Radius/Größe in mm) oder *Pinsel* (malen/radieren, schichtweise).
    Statistik (Volumen, Mittel, Max, Min, Peak 1 ml); *Bereich innen/außen*, *Aktion* (Wert setzen, skalieren) →
    *Auf VOI anwenden*; *Auf VOI zuschneiden*; *VOI löschen*.
-3. **Filter**: Gauß-Glättung (FWHM in mm).
-4. **Geometrie**: Spiegeln (R↔L, A↔P, H↔F), Drehen (↻ 90° / ↺ 90°), Resampling auf neue Voxelgröße.
-5. **Verlauf**: *Rückgängig* nimmt den letzten Schritt zurück, *Original* verwirft alle Bearbeitungen
+3. **Triple-Window-CT** (Karte aufklappen; braucht ein CT und seine Organkarte aus der CT-Organsegmentierung,
+   [Abschnitt 9](#9-ct-organsegmentierung)): erzeugt einen künstlichen CT-Datensatz für den schnellen anatomischen
+   Überblick in **einem** Fenster. Alle Voxel stehen im Weichteilfenster (Standard 40/400); Voxel der Lungen und der
+   Trachea werden so umgerechnet, dass sie wie im Lungenfenster (−600/1500) erscheinen, Voxel des Skeletts wie im
+   Knochenfenster (300/1500). Fenster als Zentrum/Breite änderbar; *Rand Lunge/Knochen* verbreitert die Regionen
+   (Pleura, Kortikalis, gröbere Organkarte). Ist das CT die Basis der Ansicht, ersetzt der neue Datensatz
+   „CT 3W · Triple-Window …“ es dort (das Original bleibt unter *Ebenen*). Die Werte sind keine echten HU mehr
+   (Einheit „HU*“) – nicht für Messungen oder Diagnostik; beim DICOM-Export heißt die Serie
+   „Triple-Window (kuenstlich, nicht diagnostisch)“, Fenster 40/400.
+4. **Filter**: Gauß-Glättung (FWHM in mm).
+5. **Geometrie**: Spiegeln (R↔L, A↔P, H↔F), Drehen (↻ 90° / ↺ 90°), Resampling auf neue Voxelgröße.
+6. **Verlauf**: *Rückgängig* nimmt den letzten Schritt zurück, *Original* verwirft alle Bearbeitungen
    (neu berechnet aus dem Original, keine Kopien im Speicher).
 
 ---

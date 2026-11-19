@@ -2480,3 +2480,22 @@ tr.focus-row td {
   font-size: 11px;
   color: var(--text-dim);
 }
+
+/* ─── Triple-window CT ────────────────────────────────────────────────── */
+.triple-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) 1fr 1fr;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 12.5px;
+}
+.triple-row input {
+  width: 100%;
+  min-width: 0;
+}
+.triple-head {
+  color: var(--text-dim);
+  font-size: 11px;
+  margin-bottom: 2px;
+}

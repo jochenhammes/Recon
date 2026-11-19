@@ -4,6 +4,8 @@ import { Card } from "./ui/Card";
 import { Activity, BarChart3, Brain, Calculator, Crosshair, Download, Eye, FileCode2, FolderOpen, Gauge, Target, Wand2 } from "lucide-react";
 import { KineticsPanel, type KineticsApi } from "./kinetics/KineticsPanel";
 import { LayerToggle } from "./ui/LayerToggle";
+import { type TripleWindowRequest, TripleWindowCard } from "./ui/TripleWindowCard";
+import { dilateRegion, regionTable, tripleWindow } from "./edit/tripleWindow";
 import { type ImcalcJob, ImcalcPanel } from "./ui/ImcalcPanel";
 import { combine, groupMeanSd, linear, product, quotient, zScore } from "./imcalc/imcalc";
 import { PROJECT_EXTENSION, ProjectError, loadProject, saveProject } from "./project/project";
@@ -1196,6 +1198,69 @@ function App() {
     const w2v = w2vById.get(organs.id);
     if (!w2v) return null;
     return organsOnGrid(organs.dataset.current, transformedWorldToVoxel(w2v, invert4(pet.matrix)), pet.dataset.current);
+  }
+
+  // ── Triple-window CT: lungs and skeleton in their own window inside one soft-tissue window ──
+  const [tripleBusy, setTripleBusy] = useState(false);
+  const [tripleStatus, setTripleStatus] = useState<string | null>(null);
+  const [tripleError, setTripleError] = useState<string | null>(null);
+
+  async function createTripleWindow(r: TripleWindowRequest) {
+    const ct = byId(r.ctId), organs = byId(r.organId);
+    if (!ct || !organs?.dataset.atlas || tripleBusy) return;
+    setTripleBusy(true);
+    setTripleError(null);
+    setTripleStatus("Organkarte auf das CT-Raster …");
+    try {
+      await new Promise((res) => setTimeout(res, 20));
+      const labels = organLabelsFor(ct, organs);
+      if (!labels) throw new Error("Organkarte und CT liegen nicht im selben Raum.");
+      const table = regionTable(organs.dataset.atlas.labels);
+      const region = Uint8Array.from(labels, (l) => table[l] ?? 0);
+      const v = ct.dataset.current;
+      const minSp = Math.min(...v.geometry.spacing);
+      const dims: [number, number, number] = [v.nx, v.ny, v.nz];
+      setTripleStatus("Ränder von Knochen und Lunge …");
+      // Bone first (ribs next to the lung keep the bone window), then the lung rim.
+      await dilateRegion(region, dims, 2, Math.round(r.marginMm.bone / minSp));
+      await dilateRegion(region, dims, 1, Math.round(r.marginMm.lung / minSp));
+      setTripleStatus("Fenster werden umgerechnet …");
+      const data = await tripleWindow(v.data, region, r.windows);
+      let nLung = 0, nBone = 0;
+      for (const x of region) {
+        if (x === 1) nLung++;
+        else if (x === 2) nBone++;
+      }
+      const vol = v.withData(data);
+      const name = `Triple-Window · ${ct.dataset.displayName}`;
+      const c = (w: [number, number]) => [(w[0] + w[1]) / 2, w[1] - w[0]].map((x) => String(Math.round(x)));
+      const [wc, ww] = c(r.windows.soft);
+      const d = createDataset(vol, ct.dataset.source, name);
+      const dataset: LoadedDataset = {
+        ...d,
+        kindLabel: "CT 3W",
+        valueUnit: "HU*",
+        // DICOM export: marked as artificial, soft-tissue window preset.
+        headerEdits: [
+          ...ct.dataset.headerEdits,
+          { tag: "x0008103e", vr: "LO", value: "Triple-Window (kuenstlich, nicht diagnostisch)", scope: "all" },
+          { tag: "x00281050", vr: "DS", value: wc, scope: "all" },
+          { tag: "x00281051", vr: "DS", value: ww, scope: "all" },
+        ],
+        ...(ct.dataset.derivedFrom ? { derivedFrom: { ...ct.dataset.derivedFrom, name } } : {}),
+      };
+      const id = `ds${nextEntryId++}`;
+      setEntries((prev) => [...prev, { id, dataset, display: { window: r.windows.soft, lut: "gray", opacity: 1, visible: true }, matrix: ct.matrix, tag: ct.tag ? `${ct.tag} 3W` : undefined }]);
+      // Shown instead of the CT when the CT is the base of the view (same grid and placement).
+      if (reference?.id === ct.id) setReferenceId(id);
+      const ml = (n: number) => ((n * v.geometry.spacing[0] * v.geometry.spacing[1] * v.geometry.spacing[2]) / 1e6).toFixed(1);
+      setTripleStatus(`Angelegt: Lunge ${ml(nLung)} l, Skelett ${ml(nBone)} l im eigenen Fenster${reference?.id === ct.id ? " – als Basis der Ansicht eingesetzt" : " – über „Ebenen“ einblenden"}.`);
+    } catch (e) {
+      setTripleStatus(null);
+      setTripleError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setTripleBusy(false);
+    }
   }
 
   async function runTumor(method: ThresholdMethod, minVolumeMl: number) {
@@ -2760,6 +2825,14 @@ function App() {
             }}
             onCrop={() => voiBounds && handleApplyEdit({ type: "crop", min: voiBounds.min, max: voiBounds.max })}
           />
+          <TripleWindowCard
+            cts={ctEntries.filter((e) => e.dataset.kindLabel !== "CT 3W").map((e) => ({ id: e.id, label: entryLabel(e) }))}
+            organSets={organEntries.map((e) => ({ id: e.id, label: entryLabel(e), forCt: ctEntries.find((c) => e.dataset.displayName === `CT-Organe · ${c.dataset.displayName}`)?.id }))}
+            busy={tripleBusy}
+            status={tripleStatus}
+            error={tripleError}
+            onRun={(r) => void createTripleWindow(r)}
+          />
           <FilterSection busy={editBusy} onApply={handleApplyEdit} />
           <GeometrySection key={`${volume.nx}x${volume.ny}x${volume.nz}`} volume={volume} busy={editBusy} onApply={handleApplyEdit} />
           <HistorySection scale={scale} unitLabel={unitLabel} edits={dataset.edits} busy={editBusy} onUndo={handleUndo} onReset={handleReset} />
@@ -2833,6 +2906,7 @@ function App() {
   act(editBusy && { id: "edit", label: "Bearbeiten", tab: "edit" });
   act((templateBusy || atlasBusy) && { id: "bundled", label: templateBusy ? "Vorlage laden" : "Atlas laden", tab: templateBusy ? "normalization" : "analysis" });
   act(exportActivity && { id: "export", label: "Export", detail: exportActivity, tab: "export" });
+  act(tripleBusy && { id: "triple", label: "Triple-Window-CT", detail: tripleStatus ?? undefined, tab: "edit" });
   act(imcalcBusy && { id: "imcalc", label: "IMCALC", detail: imcalcBusy, tab: "imcalc" });
   act(kineticsActivity && { id: "kinetics", label: "Kinetik", detail: kineticsActivity.label, fraction: kineticsActivity.fraction, tab: "kinetics" });
   act(ctSegError && !ctSegRunning && { id: "ctseg-error", label: "CT-Segmentierung", error: ctSegError, tab: "tumor" });
