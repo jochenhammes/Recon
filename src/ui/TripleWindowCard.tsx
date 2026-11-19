@@ -8,7 +8,10 @@ export interface TripleWindowRequest {
   ctId: string;
   organId: string;
   windows: { soft: HuWindow; lung: HuWindow; bone: HuWindow };
+  /** Black rims (mm, 0 = none). */
   marginMm: { lung: number; bone: number };
+  /** Smoothing of the organ masks (FWHM, mm). */
+  smoothMm: number;
 }
 
 const toCw = (w: HuWindow) => [(w[0] + w[1]) / 2, w[1] - w[0]];
@@ -28,8 +31,9 @@ export function TripleWindowCard(props: {
     const f = (w: HuWindow) => toCw(w).map((v) => formatInput(v)) as [string, string];
     return { soft: f(TRIPLE_DEFAULTS.soft), lung: f(TRIPLE_DEFAULTS.lung), bone: f(TRIPLE_DEFAULTS.bone) };
   });
-  const [lungMm, setLungMm] = useState("4");
-  const [boneMm, setBoneMm] = useState("2");
+  const [lungMm, setLungMm] = useState("0");
+  const [boneMm, setBoneMm] = useState("0");
+  const [smoothMm, setSmoothMm] = useState("6");
   const ct = props.cts.find((c) => c.id === ctId) ?? props.cts[0];
   const organs = props.organSets.find((o) => o.id === organId) ?? props.organSets.find((o) => o.forCt === ct?.id) ?? props.organSets[0];
   const win = (k: "soft" | "lung" | "bone"): HuWindow | null => {
@@ -64,9 +68,9 @@ export function TripleWindowCard(props: {
             der Lungen (inkl. Trachea) werden so umgerechnet, dass sie wie im Lungenfenster erscheinen, Voxel des Skeletts wie im Knochenfenster.
           </p>
           <p>
-            Grundlage ist die Organkarte der CT-Segmentierung (Bereich Tumorlast). An den Grenzen zwischen den Fenstern liegt ein schwarzer Rand
-            (Lunge: beidseits der Pleuragrenze, Knochen: außen um die Kortikalis); er verdeckt den sonst hellen Übergangssaum aus Brustwand bzw.
-            Teilvolumen der gröberen Organkarte. 0 mm = ohne Rand. Die Werte sind keine echten HU mehr – nicht für Messungen oder Diagnostik verwenden.
+            Grundlage ist die Organkarte der CT-Segmentierung (Bereich Tumorlast, 3-mm-Raster). Damit an den Grenzen keine Treppen entstehen, werden
+            Lungen- und Skelettmaske weichgezeichnet (Kantenglättung) und für jedes CT-Voxel interpoliert; die Fenster gehen über ±0,75 mm weich
+            ineinander über. Optional markiert ein schwarzer Rand die Grenze (Lunge: beidseits, Knochen: außen; 0 mm = ohne). Die Werte sind keine echten HU mehr – nicht für Messungen oder Diagnostik verwenden.
           </p>
         </>
       }
@@ -103,6 +107,10 @@ export function TripleWindowCard(props: {
           {row("soft", "Weichteil (Basis)")}
           {row("lung", "Lunge")}
           {row("bone", "Knochen")}
+          <label className="field">
+            Kantenglättung (mm, FWHM)
+            <input value={smoothMm} disabled={props.busy} onChange={(e) => setSmoothMm(e.target.value)} />
+          </label>
           <div className="imcalc-coeffs">
             <label className="field">
               Schwarzer Rand Lunge (mm)
@@ -123,6 +131,7 @@ export function TripleWindowCard(props: {
                 organId: organs!.id,
                 windows: { soft: windows.soft!, lung: windows.lung!, bone: windows.bone! },
                 marginMm: { lung: Math.max(0, parseInput(lungMm) || 0), bone: Math.max(0, parseInput(boneMm) || 0) },
+                smoothMm: Math.max(0.5, parseInput(smoothMm) || 6),
               })
             }
           >

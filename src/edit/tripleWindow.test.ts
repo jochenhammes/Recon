@@ -48,3 +48,30 @@ describe("region map on the CT grid", () => {
     expect(Array.from(r)).toEqual([1, 1, 2, 2]);
   });
 });
+
+describe("smooth triple-window CT", () => {
+  it("blends the windows smoothly at the organ-map border and has no staircase", async () => {
+    const { smoothTripleWindow } = await import("./tripleWindow");
+    const { identityGeometry, worldToVoxelTransform } = await import("../core/geometry");
+    const { gaussianSmooth } = await import("./filters");
+    const { Volume3D } = await import("../viewer/volume");
+    // Organ map 20 × 1 × 1 at 3 mm: lung in voxels 0–9, soft tissue 10–19.
+    const og = identityGeometry([3, 3, 3]);
+    const organVol = new Volume3D(Float32Array.from({ length: 20 }, (_, i) => (i < 10 ? 1 : 0)), 1, 1, 20, [3, 3, 3], og);
+    const table = regionTable(new Map([[1, "lung lower lobe left"]]));
+    // CT at 1 mm, all voxels −800 HU (lung-like).
+    const ctGeom = identityGeometry([1, 1, 1]);
+    const ct = { nx: 60, ny: 1, nz: 1, geometry: ctGeom, data: new Float32Array(60).fill(-800) };
+    const smooth = (ind: Float32Array, fwhm: number) => gaussianSmooth(organVol.withData(ind), fwhm);
+    const r = await smoothTripleWindow(ct, organVol, worldToVoxelTransform(og), table, smooth, { windows: TRIPLE_DEFAULTS, smoothMm: 6, rimLungMm: 0, rimBoneMm: 0 });
+    const [s0, s1] = TRIPLE_DEFAULTS.soft;
+    const lungVal = s0 + ((-800 + 1350) / 1500) * (s1 - s0);
+    // Deep inside the lung: lung window; far outside: original HU; border (x ≈ 28.5 mm) in between, monotone.
+    expect(r.data[5]).toBeCloseTo(lungVal, 1);
+    expect(r.data[55]).toBe(-800);
+    for (let i = 1; i < 60; i++) expect(r.data[i]).toBeLessThanOrEqual(r.data[i - 1] + 1e-3);
+    const border = r.data.findIndex((v) => v < (lungVal + -800) / 2);
+    expect(border).toBeGreaterThan(25);
+    expect(border).toBeLessThan(32);
+  });
+});

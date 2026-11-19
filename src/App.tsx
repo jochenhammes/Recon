@@ -5,7 +5,8 @@ import { Activity, BarChart3, Brain, Calculator, Crosshair, Download, Eye, FileC
 import { KineticsPanel, type KineticsApi } from "./kinetics/KineticsPanel";
 import { LayerToggle } from "./ui/LayerToggle";
 import { type TripleWindowRequest, TripleWindowCard } from "./ui/TripleWindowCard";
-import { addRims, regionOnGrid, regionTable, tripleWindow } from "./edit/tripleWindow";
+import { regionTable, smoothTripleWindow } from "./edit/tripleWindow";
+import { gaussianSmooth } from "./edit/filters";
 import { GlRenderer } from "./viewer/gl/renderer";
 import { type ImcalcJob, ImcalcPanel } from "./ui/ImcalcPanel";
 import { combine, groupMeanSd, linear, product, quotient, zScore } from "./imcalc/imcalc";
@@ -1217,20 +1218,20 @@ function App() {
       const ow2v = w2vById.get(organs.id);
       if (!ow2v) throw new Error("Organkarte und CT liegen nicht im selben Raum.");
       const v = ct.dataset.current;
-      // One byte per CT voxel, read straight from the organ labels (no resampled float copy of the organ map).
-      const region = await regionOnGrid(organs.dataset.current, transformedWorldToVoxel(ow2v, invert4(ct.matrix)), v, regionTable(organs.dataset.atlas.labels));
-      const minSp = Math.min(...v.geometry.spacing);
-      const dims: [number, number, number] = [v.nx, v.ny, v.nz];
-      setTripleStatus("Ränder an Lunge und Knochen …");
-      // Black rims at the window borders (bone outside, lung on both sides of the pleura line).
-      await addRims(region, dims, Math.round(r.marginMm.lung / minSp), Math.round(r.marginMm.bone / minSp));
+      // Soft lung/bone masks: smoothed on the coarse organ grid, sampled trilinearly per CT voxel (no staircase,
+      // no full-resolution mask in memory).
       setTripleStatus("Fenster werden umgerechnet …");
-      const data = await tripleWindow(v.data, region, r.windows);
-      let nLung = 0, nBone = 0;
-      for (const x of region) {
-        if (x === 1) nLung++;
-        else if (x === 2) nBone++;
-      }
+      const organVol = organs.dataset.current;
+      const res = await smoothTripleWindow(
+        v,
+        organVol,
+        transformedWorldToVoxel(ow2v, invert4(ct.matrix)),
+        regionTable(organs.dataset.atlas.labels),
+        (ind, fwhm) => gaussianSmooth(organVol.withData(ind), fwhm),
+        { windows: r.windows, smoothMm: r.smoothMm, rimLungMm: r.marginMm.lung, rimBoneMm: r.marginMm.bone },
+        (f) => setTripleStatus(`Fenster werden umgerechnet … ${Math.round(f * 100)} %`),
+      );
+      const data = res.data;
       const vol = v.withData(data);
       // Replacing the CT as base: free its GPU texture before the new volume is uploaded (two CT-sized
       // float textures at once can exhaust the GPU memory of weaker graphics cards).
@@ -1256,8 +1257,8 @@ function App() {
       setEntries((prev) => [...prev, { id, dataset, display: { window: r.windows.soft, lut: "gray", opacity: 1, visible: true }, matrix: ct.matrix, tag: ct.tag ? `${ct.tag} 3W` : undefined }]);
       // Shown instead of the CT when the CT is the base of the view (same grid and placement).
       if (reference?.id === ct.id) setReferenceId(id);
-      const ml = (n: number) => ((n * v.geometry.spacing[0] * v.geometry.spacing[1] * v.geometry.spacing[2]) / 1e6).toFixed(1);
-      setTripleStatus(`Angelegt: Lunge ${ml(nLung)} l, Skelett ${ml(nBone)} l im eigenen Fenster${reference?.id === ct.id ? " – als Basis der Ansicht eingesetzt" : " – über „Ebenen“ einblenden"}.`);
+      const l = (ml: number) => (ml / 1000).toFixed(1);
+      setTripleStatus(`Angelegt: Lunge ${l(res.lungMl)} l, Skelett ${l(res.boneMl)} l im eigenen Fenster${reference?.id === ct.id ? " – als Basis der Ansicht eingesetzt" : " – über „Ebenen“ einblenden"}.`);
     } catch (e) {
       setTripleStatus(null);
       setTripleError(e instanceof Error ? e.message : String(e));
