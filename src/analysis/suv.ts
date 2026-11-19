@@ -47,7 +47,7 @@ function parseDt(dt: string | undefined): number | undefined {
  * Radiopharmaceutical Information Sequence). Supports DecayCorrection START (reference = series
  * start) and ADMIN (reference = injection). Assumes a tissue density of 1 g/ml.
  */
-export function computeSuv(ds: DataSet): SuvResult {
+export function computeSuv(ds: DataSet, opts: { halfLifeSec?: number } = {}): SuvResult {
   const modality = str(ds, "x00080060");
   if (modality !== "PT") return { ok: false, reason: `Modality ${modality ?? "unbekannt"} (SUV nur für PET).` };
   const units = str(ds, "x00541001");
@@ -58,7 +58,7 @@ export function computeSuv(ds: DataSet): SuvResult {
   const rp = ds.elements["x00540016"]?.items?.[0]?.dataSet;
   if (!rp) return { ok: false, reason: "Radiopharmaceutical Information Sequence fehlt." };
   const dose = num(rp, "x00181074");
-  const halfLife = num(rp, "x00181075");
+  const halfLife = opts.halfLifeSec ?? num(rp, "x00181075");
   if (!dose || !halfLife) return { ok: false, reason: "Injizierte Dosis oder Halbwertszeit fehlt." };
 
   const decayCorrection = str(ds, "x00541102") ?? "START";

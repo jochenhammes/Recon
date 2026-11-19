@@ -88,8 +88,8 @@ export function isAnatomical(source: VolumeSource): boolean {
   return m === "CT" || m === "MR";
 }
 
-export function suvForSource(source: VolumeSource): SuvResult | null {
-  return source.kind === "dicom" ? computeSuv(source.files[0].dataSet) : null;
+export function suvForSource(source: VolumeSource, opts: { halfLifeSec?: number } = {}): SuvResult | null {
+  return source.kind === "dicom" ? computeSuv(source.files[0].dataSet, opts) : null;
 }
 
 export function rawUnitLabel(source: VolumeSource): string {

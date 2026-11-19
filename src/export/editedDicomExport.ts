@@ -93,7 +93,7 @@ export function buildEditedDicomFiles(volume: Volume3D, source: DicomSource, opt
   const anon = opts.anonymize ? createAnonymizeContext(opts.anonymize) : undefined;
   const files = source.files.map((file, i) => {
     const { overrides, warning } = buildFileOverrides(file, encodedFiles[i], seriesUid, series, opts, anon);
-    applyHeaderEdits(overrides, opts.headerEdits, i);
+    applyHeaderEdits(overrides, opts.headerEdits, i, file);
     if (warning) warnings.push(anon ? `Datei ${i + 1}: ${warning.slice(file.fileName.length + 2)}` : warning);
     const name = anon ? `IM${String(i + 1).padStart(5, "0")}.dcm` : uniqueName(file.fileName, usedNames);
     return { name, bytes: rewriteDicom(file, overrides) };

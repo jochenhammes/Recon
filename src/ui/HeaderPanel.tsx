@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import type { LoadedDataset } from "../dataset/types";
 import { IMPLICIT_VR_LE } from "../export/dicomRewriter";
 import { formatTag, lookupTag, parseTag } from "../header/dictionary";
+import { NUCLIDES, RP_SEQUENCE, currentNuclide, nuclideEdit, readNuclideEdit } from "../header/radionuclide";
+import { Card } from "./Card";
 import { EDITABLE_VRS, type HeaderEdit, type HeaderRow, headerRows, lockReason, validateValue } from "../header/headerModel";
 
 export interface HeaderPanelProps {
@@ -14,7 +16,7 @@ export interface HeaderPanelProps {
 /** The edit that applies to a tag in a given file (last matching edit wins). */
 function effectiveEdit(edits: HeaderEdit[], tag: string, fileIndex: number): HeaderEdit | undefined {
   let hit: HeaderEdit | undefined;
-  for (const e of edits) if (e.tag === tag && (e.scope === "all" || e.scope === fileIndex)) hit = e;
+  for (const e of edits) if (e.tag === tag && e.vr !== "SQ" && (e.scope === "all" || e.scope === fileIndex)) hit = e;
   return hit;
 }
 
@@ -38,7 +40,7 @@ export function HeaderPanel({ dataset, onEditsChange }: HeaderPanelProps) {
   const existing = new Set(rows.map((r) => r.tag));
   const added: HeaderRow[] = [];
   for (const e of edits)
-    if (!existing.has(e.tag) && !added.some((r) => r.tag === e.tag) && effectiveEdit(edits, e.tag, fileIndex)?.value != null)
+    if (e.vr !== "SQ" && !existing.has(e.tag) && !added.some((r) => r.tag === e.tag) && effectiveEdit(edits, e.tag, fileIndex)?.value != null)
       added.push({ tag: e.tag, name: lookupTag(e.tag)?.name ?? "", vr: e.vr, value: "", editable: true });
   const allRows = [...rows, ...added].sort((a, b) => (a.tag < b.tag ? -1 : 1));
 
@@ -78,6 +80,8 @@ export function HeaderPanel({ dataset, onEditsChange }: HeaderPanelProps) {
         <InfoText details="Gesperrt sind Tags, die der Export selbst setzt (Pixeldaten, Geometrie, Instanz-UIDs, Meta-Header).">Änderungen wirken beim DICOM-Export.</InfoText>
       </section>
 
+      <NuclideCard dataSet={file.dataSet} edits={edits} onChange={onEditsChange} />
+
       <div className="tag-table" role="table" aria-label="DICOM-Header">
         {visible.map((r) => (
           <TagRowView
@@ -114,7 +118,13 @@ export function HeaderPanel({ dataset, onEditsChange }: HeaderPanelProps) {
               <li key={`${e.tag}-${e.scope}-${i}`}>
                 <span>
                   <code>{formatTag(e.tag)}</code> {lookupTag(e.tag)?.name ?? ""}:{" "}
-                  {e.value === null ? <em>löschen</em> : <strong>{e.value || "(leer)"}</strong>}
+                  {e.vr === "SQ" && e.tag === RP_SEQUENCE ? (
+                    <strong>Radionuklid {readNuclideEdit([e])?.nuclide ?? "?"}</strong>
+                  ) : e.value === null ? (
+                    <em>löschen</em>
+                  ) : (
+                    <strong>{e.value || "(leer)"}</strong>
+                  )}
                   <span className="scope-note">{e.scope === "all" ? " · alle Dateien" : ` · nur Datei ${e.scope + 1}`}</span>
                 </span>
                 <button className="icon-btn small" title="Änderung verwerfen" aria-label="Änderung verwerfen" onClick={() => onEditsChange(edits.filter((_, j) => j !== i))}>
@@ -296,5 +306,69 @@ function AddTagForm({ seriesSize, fileIndex, onAdd }: { seriesSize: number; file
         Hinzufügen
       </button>
     </section>
+  );
+}
+
+/** Radionuclide of the series: shows the current one, sets another one (with half-life etc.) for the export. */
+function NuclideCard({ dataSet, edits, onChange }: { dataSet: import("dicom-parser").DataSet; edits: HeaderEdit[]; onChange: (e: HeaderEdit[]) => void }) {
+  const cur = useMemo(() => currentNuclide(dataSet), [dataSet]);
+  const pending = readNuclideEdit(edits);
+  const [choice, setChoice] = useState(pending?.nuclide ?? cur.match?.id ?? "F-18");
+  const [pharma, setPharma] = useState(pending?.radiopharmaceutical ?? "");
+  const n = NUCLIDES.find((x) => x.id === choice)!;
+  const fmtHl = (sec?: number) => (sec ? `${sec.toLocaleString("de-DE", { maximumFractionDigits: 1 })} s` : "–");
+  const others = edits.filter((e) => !(e.tag === RP_SEQUENCE && e.vr === "SQ"));
+  return (
+    <Card
+      title={<>Radionuklid</>}
+      status={pending ? { text: `→ ${pending.nuclide}`, tone: "run" } : cur.match ? { text: cur.match.id, tone: "info" } : null}
+      info={
+        <>
+          <p>
+            Ändert das Radionuklid der Serie in der <em>Radiopharmaceutical Information Sequence</em> (0054,0016): Nuklid-Code (0054,0300), Halbwertszeit
+            (0018,1075) und Positronenanteil (0018,1076), optional das Radiopharmazeutikum (0018,0031). Dosis, Injektionszeit und alle übrigen Angaben
+            bleiben unverändert.
+          </p>
+          <p>
+            Wirkt beim DICOM-Export auf alle Dateien der Serie und sofort auf die SUV-Berechnung in der App (Zerfallskorrektur mit der neuen
+            Halbwertszeit). Der Nuklid-Code wird mit der Standard-Bezeichnung (z. B. „^18^Fluorine“) und dem privaten Kodierschema „99RECON“ geschrieben.
+          </p>
+        </>
+      }
+    >
+      <p className="tool-hint">
+        Aktuell: {cur.meaning ?? "kein Nuklid-Code"} · T½ {fmtHl(cur.halfLifeSec)}
+        {cur.positronFraction !== undefined ? ` · β⁺ ${cur.positronFraction.toLocaleString("de-DE")}` : ""}
+        {cur.radiopharmaceutical ? ` · ${cur.radiopharmaceutical}` : ""}
+      </p>
+      <label className="field">
+        Neues Radionuklid
+        <select value={choice} onChange={(e) => setChoice(e.target.value)}>
+          {NUCLIDES.map((x) => (
+            <option key={x.id} value={x.id}>
+              {x.id} – T½ {x.halfLifeText}
+              {x.positronFraction >= 0.01 ? `, β⁺ ${Math.round(x.positronFraction * 1000) / 10} %` : ""}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="tool-hint">
+        Wird geschrieben: {n.meaning} · Halbwertszeit {fmtHl(n.halfLifeSec)} · Positronenanteil {n.positronFraction.toLocaleString("de-DE")}
+      </p>
+      <label className="field">
+        Radiopharmazeutikum (optional, z. B. PSMA-1007)
+        <input type="text" value={pharma} maxLength={64} placeholder={cur.radiopharmaceutical ?? ""} onChange={(e) => setPharma(e.target.value)} />
+      </label>
+      <div className="button-row">
+        <button className="secondary-btn" onClick={() => onChange([...others, nuclideEdit({ nuclide: choice, ...(pharma.trim() ? { radiopharmaceutical: pharma.trim() } : {}) })])}>
+          {pending ? "Änderung aktualisieren" : "Nuklid übernehmen"}
+        </button>
+        {pending && (
+          <button className="secondary-btn" onClick={() => onChange(others)}>
+            Verwerfen
+          </button>
+        )}
+      </div>
+    </Card>
   );
 }

@@ -1,6 +1,7 @@
 import type { DataSet, Element } from "dicom-parser";
 import { type TagOverrides, stringValue, usArrayValue } from "../export/dicomRewriter";
 import { lookupTag } from "./dictionary";
+import { RP_SEQUENCE, radiopharmaceuticalSequence, readNuclideEdit } from "./radionuclide";
 
 /** One header row for display. */
 export interface HeaderRow {
@@ -134,11 +135,23 @@ export function validateValue(vr: string, value: string): string | null {
 }
 
 /** Applies header edits for one file (index) to an override map; locked tags are ignored. */
-export function applyHeaderEdits(overrides: TagOverrides, edits: HeaderEdit[] | undefined, fileIndex: number): void {
+export function applyHeaderEdits(
+  overrides: TagOverrides,
+  edits: HeaderEdit[] | undefined,
+  fileIndex: number,
+  /** File the edits apply to (needed to rebuild sequences, e.g. the radionuclide). */
+  file?: { bytes: Uint8Array; dataSet: DataSet; transferSyntax?: string },
+): void {
   if (!edits) return;
   for (const e of edits) {
     if (e.scope !== "all" && e.scope !== fileIndex) continue;
     if (lockReason(e.tag)) continue;
+    if (e.vr === "SQ") {
+      // Radionuclide: rebuild the Radiopharmaceutical Information Sequence of this file.
+      const choice = e.tag === RP_SEQUENCE && e.value ? readNuclideEdit([e]) : null;
+      if (choice && file) overrides.set(e.tag, radiopharmaceuticalSequence(file, choice));
+      continue;
+    }
     if (e.value === null) overrides.set(e.tag, null);
     else if (e.vr === "US") overrides.set(e.tag, usArrayValue(e.value.split("\\").map((v) => Number(v.trim()))));
     else overrides.set(e.tag, stringValue(e.vr, e.value));

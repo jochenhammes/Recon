@@ -310,3 +310,42 @@ describe("sameLengthUid", () => {
     }
   });
 });
+
+describe("radionuclide header edit", () => {
+  const rpItem = concatBytes([
+    enc({ tag: [0x0018, 0x0031], vr: "LO", value: s("LO", "FDG") }, true),
+    enc({ tag: [0x0018, 0x1072], vr: "TM", value: s("TM", "081500") }, true),
+    enc({ tag: [0x0018, 0x1074], vr: "DS", value: s("DS", "350000000") }, true),
+    enc({ tag: [0x0018, 0x1075], vr: "DS", value: s("DS", "6586.2") }, true),
+    enc({ tag: [0x0018, 0x1076], vr: "DS", value: s("DS", "0.9673") }, true),
+    enc({ tag: [0x0054, 0x0300], vr: "SQ", value: item(concatBytes([
+      enc({ tag: [0x0008, 0x0100], vr: "SH", value: s("SH", "C-111A1") }, true),
+      enc({ tag: [0x0008, 0x0102], vr: "SH", value: s("SH", "SRT") }, true),
+      enc({ tag: [0x0008, 0x0104], vr: "LO", value: s("LO", "^18^Fluorine") }, true),
+    ])) }, true),
+  ]);
+  const extra: El[] = [{ tag: [0x0054, 0x0016], vr: "SQ", value: item(rpItem) }];
+  const mk = (n: number) => asFile(buildPart10({ rows: 2, cols: 2, frames: 1, pixels: [n, n, n, n], instanceNumber: n, extra }), `rp${n}.dcm`);
+
+  it("rewrites nuclide code, half-life and positron fraction and keeps dose and time", async () => {
+    const { nuclideEdit, currentNuclide, editedHalfLife } = await import("../header/radionuclide");
+    const loaded = await loadVolumeFromFiles([mk(1), mk(2)]);
+    const src = loaded.source as DicomSource;
+    expect(currentNuclide(src.files[0].dataSet).match?.id).toBe("F-18");
+    const edits = [nuclideEdit({ nuclide: "Ga-68", radiopharmaceutical: "PSMA-11" })];
+    expect(editedHalfLife(edits)).toBeCloseTo(4062.6, 1);
+    const { files } = buildEditedDicomFiles(loaded.volume, src, { headerEdits: edits });
+    for (const f of files) {
+      const ds = dicomParser.parseDicom(f.bytes);
+      const rp = ds.elements["x00540016"].items![0].dataSet!;
+      expect(rp.string("x00181074")).toBe("350000000");
+      expect(rp.string("x00181072")).toBe("081500");
+      expect(rp.string("x00180031")).toBe("PSMA-11");
+      expect(Number(rp.string("x00181075"))).toBeCloseTo(4062.6, 1);
+      expect(rp.string("x00181076")).toBe("0.8891");
+      const code = rp.elements["x00540300"].items![0].dataSet!;
+      expect(code.string("x00080104")).toBe("^68^Gallium");
+      expect(currentNuclide(ds).match?.id).toBe("Ga-68");
+    }
+  });
+});

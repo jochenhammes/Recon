@@ -4,6 +4,7 @@ import { Card } from "./ui/Card";
 import { Activity, BarChart3, Brain, Calculator, Crosshair, Download, Eye, FileCode2, FolderOpen, Gauge, Target, Wand2 } from "lucide-react";
 import { KineticsPanel, type KineticsApi } from "./kinetics/KineticsPanel";
 import { LayerToggle } from "./ui/LayerToggle";
+import { editedHalfLife } from "./header/radionuclide";
 import { type TripleWindowRequest, TripleWindowCard } from "./ui/TripleWindowCard";
 import { regionTable, smoothTripleWindow } from "./edit/tripleWindow";
 import { gaussianSmooth } from "./edit/filters";
@@ -317,10 +318,11 @@ function App() {
 
   // ── Units: SUV for every PET dataset with the needed header information. ──
   // Only the datasets' sources matter; `entries` changes on every display/edit update.
-  const sourceKey = entries.map((e) => e.id).join("|");
+  const sourceKey = entries.map((e) => `${e.id}:${editedHalfLife(e.dataset.headerEdits) ?? ""}`).join("|");
   const suvById = useMemo(() => {
     const m = new Map<string, SuvResult | null>();
-    for (const e of entries) m.set(e.id, suvForSource(unitSource(e.dataset)));
+    // A radionuclide changed in the header editor applies to the SUV right away (half-life for the decay correction).
+    for (const e of entries) m.set(e.id, suvForSource(unitSource(e.dataset), { halfLifeSec: editedHalfLife(e.dataset.derivedFrom ? undefined : e.dataset.headerEdits) }));
     return m;
   }, [sourceKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const unitFor = (e: Entry | undefined) => {
