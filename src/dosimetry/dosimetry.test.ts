@@ -3,7 +3,7 @@ import type { VolumeGeometry } from "../core/geometry";
 import { Volume3D } from "../viewer/volume";
 import { countsToMBq, recoveryFor } from "./calibration";
 import { measureRegions } from "./dose";
-import { localDepositionDose } from "./nuclideData";
+import { DEFAULT_ENERGIES, THERAPY_NUCLIDES, localDepositionDose } from "./nuclideData";
 import { fitTac, hanscheid, madsen, trapezoid } from "./tacFit";
 
 const I = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
@@ -72,7 +72,17 @@ describe("calibration and dose", () => {
 
   it("local deposition: 1 GBq Y-90 fully decaying in 1 kg ≈ 49.7 Gy", () => {
     const tia = (1000 * 64.053) / Math.LN2;
-    expect(localDepositionDose(tia, 933.7, 1)).toBeCloseTo(49.8, 0);
+    expect(localDepositionDose(tia, DEFAULT_ENERGIES["Y-90"].electronKeV, 1)).toBeCloseTo(49.7, 0);
+  });
+
+  it("ICRP 107 energies are present, checked and consistent (β⁻ ≤ electrons total)", () => {
+    for (const id of THERAPY_NUCLIDES) {
+      const e = DEFAULT_ENERGIES[id];
+      expect(e.verified).toBe(true);
+      expect(e.betaKeV!).toBeLessThanOrEqual(e.electronKeV);
+      expect(e.electronKeV - e.betaKeV!).toBeLessThan(50);
+    }
+    expect(DEFAULT_ENERGIES["Lu-177"].electronKeV).toBe(147.92);
   });
 
   it("region activity and mass from SPECT, labels and CT on different grids", () => {

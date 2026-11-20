@@ -481,6 +481,14 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
           </label>
         </div>
         {!energyChecked && <p className="tool-hint tool-warning">Vorgabewert {DEFAULT_ENERGIES[nuclideId]?.electronKeV} keV ist ungeprüft – bitte gegen ICRP 107 (oder NNDC NuDat) prüfen und eintragen.</p>}
+        {DEFAULT_ENERGIES[nuclideId] && (
+          <p className="tool-hint">
+            {setup.energyOverride[nuclideId] !== undefined ? `Eigener Wert; Vorgabe ${DEFAULT_ENERGIES[nuclideId].electronKeV} keV. ` : ""}
+            Elektronen {DEFAULT_ENERGIES[nuclideId].electronKeV} keV/Zerfall
+            {DEFAULT_ENERGIES[nuclideId].betaKeV !== undefined ? ` (β⁻ ${DEFAULT_ENERGIES[nuclideId].betaKeV} keV)` : ""}
+            {DEFAULT_ENERGIES[nuclideId].photonKeV !== undefined ? `, Photonen ${DEFAULT_ENERGIES[nuclideId].photonKeV} keV/Zerfall (nur mit Kernel berücksichtigt)` : ""} · Quelle: {DEFAULT_ENERGIES[nuclideId].source}
+          </p>
+        )}
         <ProfileEditor profiles={profiles} current={profile} nuclide={nuclideId} onSelect={(p) => set((s) => ({ ...s, profile: p }))} onSave={saveProfile}
           onDelete={(id) => {
             const list = profiles.filter((p) => p.id !== id);

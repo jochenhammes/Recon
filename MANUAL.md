@@ -393,8 +393,10 @@ nicht geeignet.
      Labelbilder des Zeitpunkts werden mitbewegt. Nötig für die Voxel-Dosiskarte und für Regionen, die für alle
      Zeitpunkte gelten.
 2. **Nuklid und Kalibrierung:**
-   - Nuklid (Vorschlag aus dem Header) und mittlere Elektronenenergie pro Zerfall. Die Vorgabewerte sind als
-     *ungeprüft* markiert, bis ein geprüfter Wert (ICRP 107 oder NNDC NuDat, „Dose“ der Elektronen) eingetragen ist.
+   - Nuklid (Vorschlag aus dem Header) und mittlere Elektronenenergie pro Zerfall (β⁻ + Konversions- und
+     Auger-Elektronen) nach ICRP Publication 107 (Summen nach MIRDspecs): Lu-177 147,92 keV, Tb-161 202,48 keV,
+     I-131 191,84 keV, Y-90 933,1 keV. Ein eigener Wert kann eingetragen werden. Die Photonenenergie (Lu-177 35,09,
+     Tb-161 36,52, I-131 382,75 keV/Zerfall) wird angezeigt, geht aber nur über einen Dosis-Voxel-Kernel ein.
    - **Kamera-Profil**: Name, Kalibrierfaktor in cps/MBq (Kamera + Kollimator + Energiefenster + Rekonstruktion),
      optional Recovery-Koeffizienten aus einem Kugelphantom („Volumen ml : RC; …“). Profile werden im Browser
      gespeichert, das gewählte auch in der Projektdatei; Import/Export als JSON.
@@ -432,7 +434,8 @@ Knochenmark sowie Speichel- und Tränendrüsen sind nicht in der CT-Segmentierun
 
 **Quellen:** MIRD-Pamphlet 23 und 26 (quantitative Lu-177-SPECT), EANM-Empfehlungen 2022 zur Dosimetrie von
 Lu-177-SSTR- und PSMA-Liganden, EANM-Leitfaden 2018 zur Unsicherheitsanalyse; Hänscheid et al. und Madsen et al.
-(ein Zeitpunkt); Lanconelli et al., Phys Med Biol 2012 (Voxel-S-Werte).
+(ein Zeitpunkt); Lanconelli et al., Phys Med Biol 2012 (Voxel-S-Werte); ICRP Publication 107 (Eckerman & Endo 2008,
+Zerfallsdaten).
 
 ---
 

@@ -1,17 +1,17 @@
 import { NUCLIDES, type Nuclide } from "../header/radionuclide";
 
 /**
- * Energy emitted per decay for absorbed-dose calculation.
+ * Mean energy emitted per nuclear transformation for absorbed-dose calculation (ICRP Publication 107,
+ * summed values from the MIRDspecs data sets).
  *
  * `electronKeV`: β⁻ mean energy + conversion + Auger electrons (non-penetrating, deposited locally).
- *
- * The defaults are literature values that still have to be checked against ICRP Publication 107: they are
- * editable in the dosimetry panel and marked as unchecked until replaced.
  */
 export interface NuclideEnergy {
   id: string;
   electronKeV: number;
-  /** Photons (γ + X), informative; their dose needs a kernel (local deposition ignores them). */
+  /** β⁻ part of `electronKeV` (rounded literature value, for plausibility). */
+  betaKeV?: number;
+  /** Photons (γ + X); their dose needs a kernel (local deposition ignores them). */
   photonKeV?: number;
   /** Whether the value was checked against a reference table. */
   verified: boolean;
@@ -20,11 +20,13 @@ export interface NuclideEnergy {
 
 export const THERAPY_NUCLIDES = ["Lu-177", "Tb-161", "I-131", "Y-90"] as const;
 
+const ICRP107 = "ICRP Publication 107 (Eckerman & Endo 2008), Summen nach MIRDspecs";
+
 export const DEFAULT_ENERGIES: Record<string, NuclideEnergy> = {
-  "Lu-177": { id: "Lu-177", electronKeV: 147.9, verified: false, source: "Literaturwert, gegen ICRP 107 prüfen" },
-  "Tb-161": { id: "Tb-161", electronKeV: 202.5, verified: false, source: "Literaturwert, gegen ICRP 107 prüfen" },
-  "I-131": { id: "I-131", electronKeV: 191.6, verified: false, source: "Literaturwert, gegen ICRP 107 prüfen" },
-  "Y-90": { id: "Y-90", electronKeV: 933.7, verified: false, source: "Literaturwert, gegen ICRP 107 prüfen" },
+  "Lu-177": { id: "Lu-177", electronKeV: 147.92, betaKeV: 133.3, photonKeV: 35.09, verified: true, source: ICRP107 },
+  "Tb-161": { id: "Tb-161", electronKeV: 202.48, betaKeV: 154.3, photonKeV: 36.52, verified: true, source: ICRP107 },
+  "I-131": { id: "I-131", electronKeV: 191.84, betaKeV: 181.9, photonKeV: 382.75, verified: true, source: ICRP107 },
+  "Y-90": { id: "Y-90", electronKeV: 933.1, betaKeV: 932.9, photonKeV: 0, verified: true, source: ICRP107 },
 };
 
 export function nuclideById(id: string | undefined): Nuclide | undefined {
