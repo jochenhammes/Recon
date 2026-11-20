@@ -53,7 +53,16 @@ export function rotateVolume90(volume: Volume3D, turns: number): Volume3D {
         else [si, sj] = [nx - 1 - j, i];
         out[(k * my + j) * mx + i] = data[(k * ny + sj) * nx + si];
       }
-  const g = volume.geometry;
+  const g = rotatedGeometry(volume.geometry, [nx, ny, nz], t);
+  return new Volume3D(out, nz, my, mx, [g.spacing[2], g.spacing[1], g.spacing[0]], g);
+}
+
+/** Geometry after `rotateVolume90` (center kept, in-plane spacing swapped for odd turns). */
+export function rotatedGeometry(g: VolumeGeometry, dims: Vec3, turns: number): VolumeGeometry {
+  const t = ((turns % 4) + 4) % 4;
+  const [nx, ny, nz] = dims;
+  const odd = t % 2 === 1;
+  const [mx, my] = odd ? [ny, nx] : [nx, ny];
   const [sx, sy, sz] = g.spacing;
   const spacing: Vec3 = odd ? [sy, sx, sz] : [sx, sy, sz];
   const center = voxelToWorld(g, (nx - 1) / 2, (ny - 1) / 2, (nz - 1) / 2);
@@ -61,11 +70,26 @@ export function rotateVolume90(volume: Volume3D, turns: number): Volume3D {
     add(add(center, scale(g.axes[0], (-spacing[0] * (mx - 1)) / 2)), scale(g.axes[1], (-spacing[1] * (my - 1)) / 2)),
     scale(g.axes[2], (-spacing[2] * (nz - 1)) / 2),
   );
-  return new Volume3D(out, nz, my, mx, [spacing[2], spacing[1], spacing[0]], { ...g, origin, spacing });
+  return { ...g, origin, spacing };
+}
+
+/**
+ * Where a (fractional) voxel of the input lands after a flip or quarter-turn rotation, as voxel index of
+ * the output (inverse of the source lookup in `flipVolume` / `rotateVolume90`).
+ */
+export function mapVoxel(dims: Vec3, op: { type: "flip"; axis: 0 | 1 | 2 } | { type: "rotate90"; turns: number }, p: Vec3): Vec3 {
+  const [nx, ny] = dims;
+  if (op.type === "flip") return p.map((v, a) => (a === op.axis ? dims[a] - 1 - v : v)) as Vec3;
+  const t = ((op.turns % 4) + 4) % 4;
+  const [si, sj, k] = p;
+  if (t === 1) return [ny - 1 - sj, si, k];
+  if (t === 2) return [nx - 1 - si, ny - 1 - sj, k];
+  if (t === 3) return [sj, nx - 1 - si, k];
+  return p;
 }
 
 /** Resamples to a new voxel size (mm) with trilinear interpolation, keeping the volume's outer extent. */
-export function resampleVolume(volume: Volume3D, spacing: Vec3): Volume3D {
+export function resampleVolume(volume: Volume3D, spacing: Vec3, nearest = false): Volume3D {
   const g = volume.geometry;
   const oldDims = [volume.nx, volume.ny, volume.nz];
   const newDims = oldDims.map((n, a) => Math.max(1, Math.round((n * g.spacing[a]) / spacing[a])));
@@ -73,7 +97,7 @@ export function resampleVolume(volume: Volume3D, spacing: Vec3): Volume3D {
   let dims = [...oldDims];
   for (let axis = 0; axis < 3; axis++) {
     if (newDims[axis] === dims[axis] && spacing[axis] === g.spacing[axis]) continue;
-    buf = resampleAxis(buf, dims, axis, newDims[axis], g.spacing[axis], spacing[axis]);
+    buf = resampleAxis(buf, dims, axis, newDims[axis], g.spacing[axis], spacing[axis], nearest);
     dims = dims.map((d, a) => (a === axis ? newDims[axis] : d));
   }
   // Align outer edges: the first new voxel center sits half a new voxel inside the old edge.
@@ -86,7 +110,7 @@ export function resampleVolume(volume: Volume3D, spacing: Vec3): Volume3D {
   });
 }
 
-function resampleAxis(src: Float32Array, dims: number[], axis: number, n: number, oldSpacing: number, newSpacing: number): Float32Array {
+function resampleAxis(src: Float32Array, dims: number[], axis: number, n: number, oldSpacing: number, newSpacing: number, nearest = false): Float32Array {
   const outDims = dims.map((d, a) => (a === axis ? n : d));
   const out = new Float32Array(outDims[0] * outDims[1] * outDims[2]);
   const inStride = [1, dims[0], dims[0] * dims[1]];
@@ -97,7 +121,7 @@ function resampleAxis(src: Float32Array, dims: number[], axis: number, n: number
   const pos = new Float64Array(n);
   for (let i = 0; i < n; i++) pos[i] = ((i + 0.5) * newSpacing) / oldSpacing - 0.5;
   const ratio = newSpacing / oldSpacing;
-  const downsample = ratio > 1.01;
+  const downsample = !nearest && ratio > 1.01;
   for (let p = 0; p < dims[a2]; p++)
     for (let q = 0; q < dims[a1]; q++) {
       const inBase = p * inStride[a2] + q * inStride[a1];
@@ -117,6 +141,11 @@ function resampleAxis(src: Float32Array, dims: number[], axis: number, n: number
           }
           out[outBase + i * outStride[axis]] = w > 0 ? s / w : src[inBase + (m - 1) * inStride[axis]];
         }
+        continue;
+      }
+      if (nearest) {
+        // Label images: no mixing of label values.
+        for (let i = 0; i < n; i++) out[outBase + i * outStride[axis]] = src[inBase + Math.min(m - 1, Math.max(0, Math.round(pos[i]))) * inStride[axis]];
         continue;
       }
       for (let i = 0; i < n; i++) {

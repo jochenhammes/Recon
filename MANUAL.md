@@ -522,6 +522,15 @@ Bereich **Bearbeiten** (wirkt auf den aktiven Datensatz):
    „Triple-Window (kuenstlich, nicht diagnostisch)“, Fenster 40/400.
 4. **Filter**: Gauß-Glättung (FWHM in mm).
 5. **Geometrie**: Spiegeln (R↔L, A↔P, H↔F), Drehen (↻ 90° / ↺ 90°), Resampling auf neue Voxelgröße.
+   Die Schritte wirken auf **alle geladenen Datensätze**; einzelne lassen sich in der Liste *Betroffene Datensätze*
+   abwählen (Vorlagen sind vorab abgewählt, dynamische Daten nicht möglich).
+   - Gespiegelt und gedreht wird um die Mitte des aktiven Datensatzes und entlang der Patientenachsen, so dass
+     übereinanderliegende Datensätze (z. B. PET und CT mit unterschiedlichem Raster oder Bildausschnitt)
+     deckungsgleich bleiben. Datensätze im Standardraum werden um ihre eigene Mitte bearbeitet.
+   - Drehen setzt axiale Schichten voraus; andere Datensätze werden übersprungen und genannt.
+   - Resampling gibt allen angehakten Datensätzen dieselbe Voxelgröße; Labelbilder werden dabei mit nächstem Nachbarn
+     interpoliert.
+   - *Rückgängig* nimmt einen gemeinsamen Schritt in allen beteiligten Datensätzen zurück.
 6. **Verlauf**: *Rückgängig* nimmt den letzten Schritt zurück, *Original* verwirft alle Bearbeitungen
    (neu berechnet aus dem Original, keine Kopien im Speicher).
 

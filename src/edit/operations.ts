@@ -1,5 +1,5 @@
 import type { Vec3 } from "../core/geometry";
-import type { Volume3D } from "../viewer/volume";
+import { Volume3D } from "../viewer/volume";
 import { gaussianSmooth } from "./filters";
 import { cropVolume, flipVolume, resampleVolume, rotateVolume90 } from "./geometryOps";
 import { type VoiShape, voiMask } from "./voi";
@@ -24,9 +24,9 @@ export type EditOp =
   | { type: "voi"; voi: VoiShape; region: "inside" | "outside"; action: VoiAction }
   | { type: "gaussian"; fwhmMm: number }
   | { type: "crop"; min: Vec3; max: Vec3 }
-  | { type: "flip"; axis: 0 | 1 | 2 }
-  | { type: "rotate90"; turns: number }
-  | { type: "resample"; spacing: Vec3 };
+  | { type: "flip"; axis: 0 | 1 | 2; patientAxis?: 0 | 1 | 2; shift?: Vec3; group?: string }
+  | { type: "rotate90"; turns: number; shift?: Vec3; group?: string }
+  | { type: "resample"; spacing: Vec3; nearest?: boolean; group?: string };
 
 export interface EditResult {
   volume: Volume3D;
@@ -78,16 +78,23 @@ export function applyEdit(volume: Volume3D, op: EditOp): EditResult {
       return { volume: v, affected: v.data.length };
     }
     case "flip":
-      return { volume: flipVolume(volume, op.axis), affected: volume.data.length };
+      return { volume: shifted(flipVolume(volume, op.axis), op.shift), affected: volume.data.length };
     case "rotate90":
-      return { volume: rotateVolume90(volume, op.turns), affected: volume.data.length };
+      return { volume: shifted(rotateVolume90(volume, op.turns), op.shift), affected: volume.data.length };
     case "resample": {
-      const v = resampleVolume(volume, op.spacing);
+      const v = resampleVolume(volume, op.spacing, op.nearest);
       return { volume: v, affected: v.data.length };
     }
     default:
       return { volume, affected: 0 };
   }
+}
+
+/** Moves the volume by `shift` (mm, world) – keeps a common mirror/rotation center for several datasets. */
+function shifted(v: Volume3D, shift: Vec3 | undefined): Volume3D {
+  if (!shift || shift.every((s) => Math.abs(s) < 1e-9)) return v;
+  const g = v.geometry;
+  return new Volume3D(v.data, v.nz, v.ny, v.nx, v.voxelSpacingMm, { ...g, origin: [g.origin[0] + shift[0], g.origin[1] + shift[1], g.origin[2] + shift[2]] });
 }
 
 /** Replays a list of edits on the original volume. */
@@ -185,7 +192,7 @@ export function describeEdit(op: EditOp, unit: DisplayUnit = { scale: 1, label: 
     case "crop":
       return `Zugeschnitten auf ${op.max[0] - op.min[0] + 1} × ${op.max[1] - op.min[1] + 1} × ${op.max[2] - op.min[2] + 1} Voxel`;
     case "flip":
-      return `Gespiegelt (${["Rechts↔Links", "Anterior↔Posterior", "Kopf↔Fuß"][op.axis]})`;
+      return `Gespiegelt (${["Rechts↔Links", "Anterior↔Posterior", "Kopf↔Fuß"][op.patientAxis ?? op.axis]})`;
     case "rotate90":
       return `Um ${(((op.turns % 4) + 4) % 4) * 90}° gedreht (axial)`;
     case "resample":

@@ -68,7 +68,8 @@ import { RegistrationPanel } from "./ui/RegistrationPanel";
 import { CT_PRESETS, datasetModality, defaultDisplay, isAnatomical, middleEllipsis, modalityLabel, rawUnitLabel, shortName, suvForSource, unitSource } from "./dataset/describe";
 import { BUNDLED_MNI, BUNDLED_PET_TEMPLATES, SPM_TEMPLATE_ATTRIBUTION, SPM_TEMPLATE_LICENSE, type TemplateKind, loadBundledMni, loadBundledPetTemplate, loadPetTemplate } from "./normalization/templates";
 import { AnalysisPanel } from "./components/AnalysisPanel";
-import { type BrushState, FilterSection, GeometrySection, HistorySection, ValueSection, VoiSection, type VoiTool } from "./components/EditTools";
+import { type BrushState, FilterSection, type GeometryAction, GeometrySection, type GeometryTarget, HistorySection, ValueSection, VoiSection, type VoiTool } from "./components/EditTools";
+import { type GroupTarget, groupEditFor, referenceCenter, rotationSense } from "./edit/groupGeometry";
 import { runEdits } from "./edit/runner";
 import { type VoiShape, maskBounds, paintDisc, voiMask, voiStats } from "./edit/voi";
 import { computeStats } from "./analysis/stats";
@@ -766,10 +767,77 @@ function App() {
     void commit(active.id, dataset, "current", [op], [...dataset.edits, op]);
   }
 
-  function handleUndo() {
+  /** Space a dataset lives in: common mirror/rotation center only within the same space. */
+  const spaceOf = (e: Entry) => (e.dataset.template ? "standard" : e.dataset.derivedFrom && e.dataset.derivedFrom.space !== "nativ" ? "standard" : "patient");
+  const groupTarget = (e: Entry): GroupTarget => {
+    const v = e.dataset.current;
+    return { geometry: v.geometry, dims: [v.nx, v.ny, v.nz], matrix: e.matrix, labels: !!e.dataset.atlas };
+  };
+
+  const geometryTargets: GeometryTarget[] = entries.map((e) => ({
+    id: e.id,
+    label: entryLabel(e),
+    defaultOn: !e.dataset.template,
+    disabledReason: e.dataset.dynamic ? "dynamisch – nicht möglich" : undefined,
+    note: e.dataset.template ? "Vorlage" : active && spaceOf(e) !== spaceOf(active) ? "anderer Raum: eigene Mitte" : undefined,
+  }));
+
+  /** Flip / rotate / resample several datasets together (one undo step per dataset, linked by a group id). */
+  async function handleGeometry(action: GeometryAction, ids: string[]) {
+    if (!active || editBusy) return;
+    const group = `geo-${Date.now()}`;
+    const center = referenceCenter(groupTarget(active));
+    const sense = rotationSense(groupTarget(active));
+    const skipped: string[] = [];
+    setEditBusy(true);
+    setError(null);
+    try {
+      for (const id of ids) {
+        const e = byId(id);
+        if (!e || e.dataset.dynamic) continue;
+        const op = groupEditFor(groupTarget(e), action.kind === "rotate" ? { ...action, sense } : action, spaceOf(e) === spaceOf(active) ? center : null, group);
+        if (!op) {
+          skipped.push(entryLabel(e));
+          continue;
+        }
+        const { volume: next } = await runEdits(e.dataset.current, [op]);
+        updateEntry(id, { dataset: { ...e.dataset, current: next, edits: [...e.dataset.edits, op] } });
+      }
+      setVoi(null);
+      if (skipped.length) setError(`Nicht gedreht (Schichten nicht axial): ${skipped.join(", ")}`);
+    } catch (err) {
+      setError(`Bearbeitung fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
+  async function handleUndo() {
     if (!dataset || !active || dataset.edits.length === 0 || editBusy) return;
-    const edits = dataset.edits.slice(0, -1);
-    void commit(active.id, dataset, "original", edits, edits);
+    const last = dataset.edits[dataset.edits.length - 1];
+    const group = "group" in last ? last.group : undefined;
+    if (!group) {
+      const edits = dataset.edits.slice(0, -1);
+      void commit(active.id, dataset, "original", edits, edits);
+      return;
+    }
+    // A common geometry step: undo it in every dataset whose last step it is.
+    setEditBusy(true);
+    setError(null);
+    try {
+      for (const e of entries) {
+        const l = e.dataset.edits[e.dataset.edits.length - 1];
+        if (!l || !("group" in l) || l.group !== group) continue;
+        const edits = e.dataset.edits.slice(0, -1);
+        const { volume: next } = await runEdits(e.dataset.original, edits);
+        updateEntry(e.id, { dataset: { ...e.dataset, current: next, edits } });
+      }
+      setVoi(null);
+    } catch (err) {
+      setError(`Rückgängig fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setEditBusy(false);
+    }
   }
 
   function handleReset() {
@@ -2840,7 +2908,14 @@ function App() {
             onRun={(r) => void createTripleWindow(r)}
           />
           <FilterSection busy={editBusy} onApply={handleApplyEdit} />
-          <GeometrySection key={`${volume.nx}x${volume.ny}x${volume.nz}`} volume={volume} busy={editBusy} onApply={handleApplyEdit} />
+          <GeometrySection
+            key={`${active?.id}:${volume.nx}x${volume.ny}x${volume.nz}`}
+            volume={volume}
+            targets={geometryTargets}
+            activeId={active?.id ?? ""}
+            busy={editBusy}
+            onApply={(a, ids) => void handleGeometry(a, ids)}
+          />
           <HistorySection scale={scale} unitLabel={unitLabel} edits={dataset.edits} busy={editBusy} onUndo={handleUndo} onReset={handleReset} />
           {error && <div className="error-banner">{error}</div>}
         </>

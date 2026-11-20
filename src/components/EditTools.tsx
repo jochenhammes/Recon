@@ -361,33 +361,109 @@ export function FilterSection({ busy, onApply }: { busy: boolean; onApply: (op: 
   );
 }
 
-export function GeometrySection({ volume, busy, onApply }: { volume: Volume3D; busy: boolean; onApply: (op: EditOp) => void }) {
+export interface GeometryTarget {
+  id: string;
+  label: string;
+  /** Default selection (templates are left out by default). */
+  defaultOn: boolean;
+  /** Reason the dataset cannot take part (e.g. dynamic data). */
+  disabledReason?: string;
+  /** Hint shown next to the dataset (e.g. "Standardraum: eigene Mitte"). */
+  note?: string;
+}
+
+export type GeometryAction = { kind: "flip"; patientAxis: 0 | 1 | 2 } | { kind: "rotate"; turns: number } | { kind: "resample"; spacing: Vec3 };
+
+export function GeometrySection({
+  volume,
+  targets,
+  activeId,
+  busy,
+  onApply,
+}: {
+  volume: Volume3D;
+  targets: GeometryTarget[];
+  activeId: string;
+  busy: boolean;
+  onApply: (action: GeometryAction, ids: string[]) => void;
+}) {
   const [spacing, setSpacing] = useState(() => volume.geometry.spacing.map((s) => String(Number(s.toPrecision(4)))));
+  const [excluded, setExcluded] = useState<Set<string>>(() => new Set());
+  const [included, setIncluded] = useState<Set<string>>(() => new Set());
+  const isOn = (t: GeometryTarget) => !t.disabledReason && (t.defaultOn ? !excluded.has(t.id) : included.has(t.id));
+  const toggle = (t: GeometryTarget, on: boolean) => {
+    const upd = (set: Set<string>, add: boolean) => {
+      const n = new Set(set);
+      if (add) n.add(t.id);
+      else n.delete(t.id);
+      return n;
+    };
+    if (t.defaultOn) setExcluded((s) => upd(s, !on));
+    else setIncluded((s) => upd(s, on));
+  };
+  const ids = targets.filter(isOn).map((t) => t.id);
+  const none = ids.length === 0;
+  const run = (a: GeometryAction) => onApply(a, ids);
+
   const parsed = spacing.map(parseInput) as Vec3;
   const valid = parsed.every((s) => s > 0);
-  const unchanged = parsed.every((s, a) => Math.abs(s - volume.geometry.spacing[a]) < 1e-3);
   const dims = valid ? [volume.nx, volume.ny, volume.nz].map((n, a) => Math.max(1, Math.round((n * volume.geometry.spacing[a]) / parsed[a]))) : null;
+  const usable = targets.filter((t) => !t.disabledReason);
   return (
-    <Card title={<>Geometrie</>} info="Spiegeln und Drehen verändern die Bildlage im Patientenkoordinatensystem." defaultOpen={false} persistKey="edit-geometry">
+    <Card
+      title={<>Geometrie</>}
+      info="Spiegeln, Drehen und Resampling wirken auf alle angehakten Datensätze gemeinsam: Gespiegelt bzw. gedreht wird um die Mitte des aktiven Datensatzes, so dass übereinanderliegende Datensätze (z. B. PET und CT) deckungsgleich bleiben. Datensätze in einem anderen Raum (Standardraum) werden um ihre eigene Mitte bearbeitet. Rückgängig macht den Schritt in allen beteiligten Datensätzen rückgängig."
+      status={targets.length > 1 ? { text: `${ids.length} von ${usable.length}`, tone: "info" } : null}
+      defaultOpen={false}
+      persistKey="edit-geometry"
+    >
+      {targets.length > 1 && (
+        <>
+          <div className="export-list-head">
+            <span>Betroffene Datensätze</span>
+            <span>
+              <button className="link-btn" disabled={busy} onClick={() => { setExcluded(new Set()); setIncluded(new Set(targets.map((t) => t.id))); }}>
+                alle
+              </button>{" "}
+              ·{" "}
+              <button className="link-btn" disabled={busy} onClick={() => { setExcluded(new Set(targets.map((t) => t.id))); setIncluded(new Set()); }}>
+                keine
+              </button>
+            </span>
+          </div>
+          <div className="imcalc-list export-list">
+            {targets.map((t) => (
+              <label key={t.id} className="checkbox-field" title={t.disabledReason ?? t.note}>
+                <input type="checkbox" disabled={!!t.disabledReason || busy} checked={isOn(t)} onChange={(e) => toggle(t, e.target.checked)} />
+                <span className="export-item-name">
+                  {t.label}
+                  {t.id === activeId ? " (aktiv)" : ""}
+                </span>
+                {(t.disabledReason || t.note) && <em className="export-item-grid">{t.disabledReason ?? t.note}</em>}
+              </label>
+            ))}
+          </div>
+        </>
+      )}
       <div className="chip-row">
-        <button className="chip-btn" disabled={busy} onClick={() => onApply({ type: "flip", axis: 0 })}>
+        <button className="chip-btn" disabled={busy || none} onClick={() => run({ kind: "flip", patientAxis: 0 })}>
           Spiegeln R↔L
         </button>
-        <button className="chip-btn" disabled={busy} onClick={() => onApply({ type: "flip", axis: 1 })}>
+        <button className="chip-btn" disabled={busy || none} onClick={() => run({ kind: "flip", patientAxis: 1 })}>
           Spiegeln A↔P
         </button>
-        <button className="chip-btn" disabled={busy} onClick={() => onApply({ type: "flip", axis: 2 })}>
+        <button className="chip-btn" disabled={busy || none} onClick={() => run({ kind: "flip", patientAxis: 2 })}>
           Spiegeln H↔F
         </button>
       </div>
       <div className="chip-row">
-        <button className="chip-btn" disabled={busy} onClick={() => onApply({ type: "rotate90", turns: 1 })}>
+        <button className="chip-btn" disabled={busy || none} onClick={() => run({ kind: "rotate", turns: 1 })}>
           ↻ 90°
         </button>
-        <button className="chip-btn" disabled={busy} onClick={() => onApply({ type: "rotate90", turns: 3 })}>
+        <button className="chip-btn" disabled={busy || none} onClick={() => run({ kind: "rotate", turns: 3 })}>
           ↺ 90°
         </button>
-        <button className="chip-btn" disabled={busy} onClick={() => onApply({ type: "rotate90", turns: 2 })}>
+        <button className="chip-btn" disabled={busy || none} onClick={() => run({ kind: "rotate", turns: 2 })}>
           180°
         </button>
       </div>
@@ -403,10 +479,11 @@ export function GeometrySection({ volume, busy, onApply }: { volume: Volume3D; b
       </div>
       {dims && (
         <p className="tool-hint">
-          Neue Matrix: {dims.join(" × ")} (bisher {volume.nx} × {volume.ny} × {volume.nz})
+          Neue Matrix (aktiver Datensatz): {dims.join(" × ")} (bisher {volume.nx} × {volume.ny} × {volume.nz})
+          {ids.length > 1 ? " · alle angehakten Datensätze erhalten diese Voxelgröße" : ""}
         </p>
       )}
-      <button className="primary-btn" disabled={!valid || unchanged || busy} onClick={() => onApply({ type: "resample", spacing: parsed })}>
+      <button className="primary-btn" disabled={!valid || busy || none} onClick={() => run({ kind: "resample", spacing: parsed })}>
         Resampling
       </button>
     </Card>
