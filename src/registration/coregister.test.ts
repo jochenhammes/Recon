@@ -90,6 +90,15 @@ describe("coregister", () => {
     expect(meanError(fixed, r.matrix, scaled)).toBeLessThan(1);
   }, 60000);
 
+  it("keeps a landmark start position far outside the coarse grid (keepStart)", () => {
+    // 120° about z plus 40 mm: unreachable for the ±30° grid, but the landmark start is close.
+    const big = matrixFromParams({ ...IDENTITY_PARAMS, tx: 40, ty: -10, rz: 120 }, center);
+    const moving = movedCopy(fixed, big);
+    const start = matrixFromParams({ ...IDENTITY_PARAMS, tx: 44, ty: -6, rz: 112 }, center);
+    const r = coregister(image(fixed), image(moving), { dof: 6, cost: "ncc", levels: [8, 4, 3], coarseSearch: true, keepStart: true, initial: start });
+    expect(meanError(fixed, r.matrix, big)).toBeLessThan(2);
+  });
+
   it("finds a large misrotation with the coarse search", () => {
     const rotated = matrixFromParams({ ...IDENTITY_PARAMS, tx: 15, ty: -10, rz: 25, rx: -10 }, center);
     const moving = movedCopy(fixed, rotated);

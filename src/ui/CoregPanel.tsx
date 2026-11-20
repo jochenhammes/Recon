@@ -9,6 +9,8 @@ export interface CoregSettings {
   cost: CostChoice;
   levels: number[];
   coarseSearch: boolean;
+  /** Coarse search only around the start position (e.g. after landmark alignment). */
+  keepStart?: boolean;
 }
 
 const LEVEL_PRESETS: { label: string; levels: number[] }[] = [
@@ -75,6 +77,12 @@ export function CoregPanel(props: CoregPanelProps) {
         <input type="checkbox" checked={settings.coarseSearch} disabled={running} onChange={(e) => set({ coarseSearch: e.target.checked })} />
         Grobsuche (Schwerpunkt + Rotationsraster ±30°) – für Daten aus verschiedenen Untersuchungen
       </label>
+      {settings.coarseSearch && (
+        <label className="checkbox-field">
+          <input type="checkbox" checked={!!settings.keepStart} disabled={running} onChange={(e) => set({ keepStart: e.target.checked })} />
+          Startlage beibehalten (nach Landmarken-Ausrichtung): Grobsuche nur ±10° / ±10 mm um die aktuelle Lage, ohne Sprung auf den Schwerpunkt
+        </label>
+      )}
       {props.error && <div className="error-banner">{props.error}</div>}
       <h3>Transformation{props.focusLabel ? `: ${props.focusLabel}` : ""}</h3>
       <div className="button-row">
@@ -108,7 +116,8 @@ export function CoregPanel(props: CoregPanelProps) {
           robust skaliert, je Auflösungsstufe geglättet und auf einem Gitter abgetastet. Das Powell-Verfahren sucht die
           Transformation, die das Ähnlichkeitsmaß maximiert – Mutual Information für unterschiedliche Modalitäten
           (PET/CT, PET/MRT), Kreuzkorrelation für gleiche (PET/PET). Startpunkt ist die aktuelle Ausrichtung
-          (Patientenkoordinaten bzw. manuelle Korrektur). Rigide = Verschiebung und Drehung, affin zusätzlich Skalierung
+          (Patientenkoordinaten, Landmarken bzw. manuelle Korrektur). Passen die Koordinatensysteme nicht zusammen (z. B.
+          NIfTI und DICOM), zuerst unter „Ursprung &amp; Landmarken“ grob ausrichten. Rigide = Verschiebung und Drehung, affin zusätzlich Skalierung
           und Scherung.
         </p>
       )}

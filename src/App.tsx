@@ -15,7 +15,7 @@ import { type ImcalcJob, ImcalcPanel } from "./ui/ImcalcPanel";
 import { combine, groupMeanSd, linear, product, quotient, zScore } from "./imcalc/imcalc";
 import { PROJECT_EXTENSION, ProjectError, loadProject, saveProject } from "./project/project";
 import { InfoText } from "./ui/Info";
-import { type DisplayCandidate, type DisplayDecision, decideDisplay, gridBox, gridKey } from "./dataset/autoDisplay";
+import { type DisplayCandidate, type DisplayDecision, boxOverlap, decideDisplay, gridBox, gridKey } from "./dataset/autoDisplay";
 import { type Activity as JobActivity, ActivityBar } from "./ui/ActivityBar";
 import { FrameSlider } from "./ui/FrameSlider";
 import { runKineticsJob } from "./kinetics/runner";
@@ -72,6 +72,8 @@ import { BUNDLED_MNI, BUNDLED_PET_TEMPLATES, SPM_TEMPLATE_ATTRIBUTION, SPM_TEMPL
 import { AnalysisPanel } from "./components/AnalysisPanel";
 import { type BrushState, FilterSection, type GeometryAction, GeometrySection, type GeometryTarget, HistorySection, ValueSection, VoiSection, type VoiTool } from "./components/EditTools";
 import { type GroupTarget, groupEditFor, referenceCenter, rotationSense } from "./edit/groupGeometry";
+import { type Landmark, alignByLandmark, landmarkPairs, originShift, reorientPlan, rigidFromPairs } from "./registration/landmarks";
+import { LandmarkCard, type LandmarkSide } from "./ui/LandmarkCard";
 import { runEdits } from "./edit/runner";
 import { type VoiShape, maskBounds, paintDisc, voiMask, voiStats } from "./edit/voi";
 import { computeStats } from "./analysis/stats";
@@ -102,6 +104,7 @@ import {
   type TransformFile,
   matrixFromParams,
   multiply4,
+  transformGeometry,
   paramsFromMatrix,
   parseTransformFile,
   transformedWorldToVoxel,
@@ -121,6 +124,8 @@ interface Entry {
   matrix: Mat4;
   /** User tag (e.g. "Baseline") shown wherever the dataset is named. */
   tag?: string;
+  /** Anatomical landmarks in the dataset's own (native) coordinates. */
+  landmarks?: Landmark[];
   /** Label images: labels shown in the viewer (undefined = all). */
   labelFilter?: number[];
   /** Dynamic datasets: frame shown in the viewer (undefined = time-weighted mean). */
@@ -207,6 +212,9 @@ function App() {
   const [newValue, setNewValue] = useState("0");
   const [unitMode, setUnitMode] = useState<UnitMode>("raw");
   const [cursor, setCursor] = useState<Vec3 | null>(null);
+  const [landmarkName, setLandmarkName] = useState("Nasenspitze");
+  const [landmarkFollow, setLandmarkFollow] = useState(true);
+  const [rotPivot, setRotPivot] = useState<"landmark" | "center">("landmark");
   const [layout, setLayout] = useState<LayoutKind>("grid");
   const [focusView, setFocusView] = useState<ViewKind>("axial");
   const [activeTab, setActiveTab] = useState("data");
@@ -2267,9 +2275,110 @@ function App() {
     ];
   };
 
-  // Manual registration of the moving dataset relative to the reference (parameters about its center).
-  const movingCenter = moving ? centerOf(moving.dataset.current) : null;
+  // Manual registration of the moving dataset relative to the reference: parameters about its center or about the
+  // selected landmark (its "origin").
+  const movingLandmark = moving?.landmarks?.find((l) => l.name === landmarkName) ?? moving?.landmarks?.[0];
+  const movingCenter = moving ? (rotPivot === "landmark" && movingLandmark ? movingLandmark.p : centerOf(moving.dataset.current)) : null;
   const movingParams = moving && movingCenter ? (paramsFromMatrix(moving.matrix, movingCenter) ?? IDENTITY_PARAMS) : IDENTITY_PARAMS;
+
+  // ── Landmarks / origin ──
+  const sameFrame = (a: Entry, b: Entry) => {
+    const fa = a.dataset.current.geometry.frameOfReferenceUid, fb = b.dataset.current.geometry.frameOfReferenceUid;
+    return !!fa && fa === fb && a.id !== b.id;
+  };
+  const followers = (e: Entry) => entries.filter((x) => sameFrame(x, e) && x.id !== reference?.id);
+  const nativeOf = (e: Entry, p: Vec3): Vec3 => applyMat4(invert4(e.matrix), p);
+  const sideEntry = (side: LandmarkSide) => (side === "base" ? reference : moving);
+  const placementMismatch = (() => {
+    if (!moving || !reference) return false;
+    const box = (e: Entry) => gridBox(transformGeometry(e.dataset.current.geometry, e.matrix), [e.dataset.current.nx, e.dataset.current.ny, e.dataset.current.nz]);
+    return boxOverlap(box(moving), box(reference)) < 0.1;
+  })();
+
+  /** New placement of the moving dataset; datasets of the same acquisition follow (same relative pose). */
+  function placeMoving(next: Mat4) {
+    if (!moving) return;
+    const delta = multiply4(next, invert4(moving.matrix));
+    const follow = landmarkFollow ? new Set(followers(moving).map((x) => x.id)) : new Set<string>();
+    setEntries((prev) => prev.map((x) => (x.id === moving.id ? { ...x, matrix: next } : follow.has(x.id) ? { ...x, matrix: multiply4(delta, x.matrix) } : x)));
+    discardResultOnly(moving.id);
+  }
+
+  function setLandmark(side: LandmarkSide) {
+    const e = sideEntry(side);
+    if (!e) return;
+    const p = nativeOf(e, cursor ?? applyMat4(e.matrix, centerOf(e.dataset.current)));
+    const list = [...(e.landmarks ?? []).filter((l) => l.name !== landmarkName), { name: landmarkName, p }];
+    updateEntry(e.id, { landmarks: list });
+  }
+
+  function showOnly(which: LandmarkSide | "both") {
+    if (!moving || !reference) return;
+    makeOverlay(moving.id);
+    setEntries((prev) =>
+      prev.map((x) =>
+        x.id === reference.id ? { ...x, display: { ...x.display, visible: which !== "moving" } } : x.id === moving.id ? { ...x, display: { ...x.display, visible: which !== "base" } } : x,
+      ),
+    );
+  }
+
+  function alignOrigins() {
+    if (!moving || !reference) return;
+    const lb = reference.landmarks?.find((l) => l.name === landmarkName);
+    const lm = moving.landmarks?.find((l) => l.name === landmarkName);
+    if (!lb || !lm) return;
+    placeMoving(alignByLandmark(applyMat4(reference.matrix, lb.p), lm.p, moving.matrix));
+    setRotPivot("landmark");
+    setCoregSettings((s) => ({ ...s, keepStart: true }));
+    setCursor(applyMat4(reference.matrix, lb.p));
+  }
+
+  const rigidFit = moving && reference ? rigidFromPairs(landmarkPairs(reference.landmarks ?? [], reference.matrix, moving.landmarks ?? [])) : null;
+
+  function alignRigid() {
+    if (!rigidFit) return;
+    placeMoving(rigidFit.matrix);
+    setCoregSettings((s) => ({ ...s, keepStart: true }));
+  }
+
+  /** Takes the coordinate change T into the datasets `ids`; all placements are compensated (see reorientPlan). */
+  function applyReorient(ids: Set<string>, T: Mat4) {
+    if (!reference) return;
+    const r = reorientPlan(entries.map((e) => ({ id: e.id, matrix: e.matrix, geometry: e.dataset.current.geometry, landmarks: e.landmarks })), ids, T, reference.id);
+    const move = (v: Volume3D) => new Volume3D(v.data, v.nz, v.ny, v.nx, v.voxelSpacingMm, transformGeometry(v.geometry, T));
+    setEntries((prev) =>
+      prev.map((e) => {
+        const matrix = r.matrices.get(e.id) ?? e.matrix;
+        if (!ids.has(e.id)) return { ...e, matrix };
+        const prevT = e.dataset.reoriented ?? IDENTITY_MAT4;
+        const total = multiply4(T, prevT);
+        const isIdentity = total.every((v, i) => Math.abs(v - IDENTITY_MAT4[i]) < 1e-9);
+        const original = move(e.dataset.original);
+        const current = e.dataset.current === e.dataset.original ? original : move(e.dataset.current);
+        return { ...e, matrix, landmarks: r.landmarks.get(e.id) ?? e.landmarks, dataset: { ...e.dataset, original, current, reoriented: isIdentity ? undefined : total } };
+      }),
+    );
+    if (cursor) setCursor(applyMat4(r.world, cursor));
+    setVoi(null);
+    setCoregResults({});
+  }
+
+  function reorientTo(side: LandmarkSide, sameFrameToo: boolean) {
+    const e = sideEntry(side);
+    const l = e?.landmarks?.find((x) => x.name === landmarkName);
+    if (!e || !l) return;
+    const ids = new Set([e.id, ...(sameFrameToo ? entries.filter((x) => sameFrame(x, e)).map((x) => x.id) : [])]);
+    if (!window.confirm(`Ursprung (0,0,0) von ${ids.size === 1 ? "„" + entryLabel(e) + "“" : `${ids.size} Datensätzen`} auf „${landmarkName}“ legen? Die Lage zu den anderen Datensätzen bleibt erhalten.`)) return;
+    applyReorient(ids, originShift(l.p));
+  }
+
+  function resetOrigin(side: LandmarkSide) {
+    const e = sideEntry(side);
+    if (!e?.dataset.reoriented) return;
+    const key = JSON.stringify(e.dataset.reoriented);
+    const ids = new Set([e.id, ...entries.filter((x) => sameFrame(x, e) && JSON.stringify(x.dataset.reoriented) === key).map((x) => x.id)]);
+    applyReorient(ids, invert4(e.dataset.reoriented));
+  }
 
   let frameNote: string | undefined;
   if (moving && reference) {
@@ -2600,6 +2709,44 @@ function App() {
       />
       {moving && movingCenter && (
         <>
+          <LandmarkCard
+            baseLabel={entryLabel(reference)}
+            movingLabel={entryLabel(moving)}
+            baseLandmarks={reference.landmarks ?? []}
+            movingLandmarks={moving.landmarks ?? []}
+            name={landmarkName}
+            onNameChange={setLandmarkName}
+            cursorNative={{ base: cursor ? nativeOf(reference, cursor) : null, moving: cursor ? nativeOf(moving, cursor) : null }}
+            onSet={setLandmark}
+            onRemove={(side, name) => {
+              const e = sideEntry(side);
+              if (e) updateEntry(e.id, { landmarks: (e.landmarks ?? []).filter((l) => l.name !== name) });
+            }}
+            onGoTo={(side, name) => {
+              const e = sideEntry(side);
+              const l = e?.landmarks?.find((x) => x.name === name);
+              if (e && l) {
+                setLandmarkName(name);
+                setCursor(applyMat4(e.matrix, l.p));
+              }
+            }}
+            onShow={showOnly}
+            onCursorToCenter={(side) => {
+              const e = sideEntry(side);
+              if (e) setCursor(applyMat4(e.matrix, centerOf(e.dataset.current)));
+            }}
+            onAlignOrigin={alignOrigins}
+            rigidRms={rigidFit ? rigidFit.rms : null}
+            onAlignRigid={alignRigid}
+            follow={landmarkFollow}
+            onFollowChange={setLandmarkFollow}
+            followCount={followers(moving).length}
+            mismatch={placementMismatch}
+            onReorient={reorientTo}
+            onResetOrigin={resetOrigin}
+            reoriented={{ base: !!reference.dataset.reoriented, moving: !!moving.dataset.reoriented }}
+            running={coregRunning}
+          />
           <CoregPanel
             focusLabel={entryLabel(moving)}
             autoCost={autoCost}
@@ -2617,10 +2764,10 @@ function App() {
           <RegistrationPanel
             title={`Manuelle Korrektur: ${entryLabel(moving)} → Basis`}
             params={movingParams}
-            onChange={(p) => {
-              updateEntry(moving.id, { matrix: matrixFromParams(p, movingCenter) });
-              discardResultOnly(moving.id);
-            }}
+            onChange={(p) => placeMoving(matrixFromParams(p, movingCenter))}
+            pivots={movingLandmark ? [{ id: "landmark", label: `Ursprung: ${movingLandmark.name}` }, { id: "center", label: "Volumenmitte" }] : undefined}
+            pivot={rotPivot}
+            onPivotChange={(v) => setRotPivot(v as "landmark" | "center")}
           >
             {!isRigid(movingParams) && (
               <p className="tool-hint">

@@ -34,6 +34,11 @@ export interface CoregOptions {
   initial: Mat4;
   /** Max. number of sample points per level. */
   maxSamples?: number;
+  /**
+   * Keep the start position (e.g. from landmarks): the coarse search does not jump to the center of mass and
+   * only looks at small rotations/shifts around the start.
+   */
+  keepStart?: boolean;
   /** Optional mask on the fixed image grid (> 0.5 = use): only these regions are sampled. */
   fixedMask?: Float32Array;
 }
@@ -311,7 +316,7 @@ export function coregister(
     const evaluator = new CostEvaluator(samples, movingL, opts.cost);
     const report = (stage: string, iteration: number, cost: number) => onProgress?.({ level: li + 1, levels: levels.length, stage, iteration, cost });
 
-    if (li === 0 && opts.coarseSearch) params = coarseSearch(evaluator, params, center, fixedL, movingL, sep, report, shouldStop);
+    if (li === 0 && opts.coarseSearch) params = coarseSearch(evaluator, params, center, fixedL, movingL, sep, report, shouldStop, opts.keepStart);
 
     params = optimize(evaluator, params, center, RIGID_KEYS, sep, report, "rigide", shouldStop).params;
     if (opts.dof === 12 && (li > 0 || levels.length === 1)) params = optimize(evaluator, params, center, AFFINE_KEYS, sep, report, "affin", shouldStop).params;
@@ -337,6 +342,7 @@ function coarseSearch(
   sep: number,
   report: (stage: string, iteration: number, cost: number) => void,
   shouldStop?: () => boolean,
+  keepStart = false,
 ): TransformParams {
   const candidates: { params: TransformParams; cost: number }[] = [];
   const consider = (p: TransformParams) => candidates.push({ params: p, cost: evaluator.evaluate(matrixFromParams(p, center)) });
@@ -345,7 +351,7 @@ function coarseSearch(
   const cf = centerOfMass(fixed);
   const cm = centerOfMass(moving);
   let base = start;
-  if (cf && cm) {
+  if (cf && cm && !keepStart) {
     const M = matrixFromParams(start, center);
     const mapped: Vec3 = [
       M[0] * cm[0] + M[1] * cm[1] + M[2] * cm[2] + M[3],
@@ -357,9 +363,9 @@ function coarseSearch(
   }
   // Rotations about the center plus shifts along z and y: the center of mass is unreliable when the field
   // of view differs (e.g. an MRI including the neck against a brain-only template).
-  const angles = [-30, -15, 0, 15, 30];
-  const shiftsZ = [-40, -20, 0, 20];
-  const shiftsY = [-20, 0, 20];
+  const angles = keepStart ? [-10, 0, 10] : [-30, -15, 0, 15, 30];
+  const shiftsZ = keepStart ? [-10, 0, 10] : [-40, -20, 0, 20];
+  const shiftsY = keepStart ? [-10, 0, 10] : [-20, 0, 20];
   for (const dz of shiftsZ)
     for (const dy of shiftsY)
       for (const rx of angles)

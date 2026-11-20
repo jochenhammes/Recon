@@ -58,7 +58,11 @@ export function DatasetDetails({ dataset, onModalityChange, children }: DatasetD
           {sx.toFixed(2)} × {sy.toFixed(2)} × {sz.toFixed(2)} mm
         </dd>
         <dt>Patientenkoordinaten</dt>
-        <dd>{v.hasPatientGeometry ? "vorhanden" : "nicht bekannt"}</dd>
+        <dd>{src.kind === "nifti" ? niftiPlacement(src.nifti.headerBytes, src.nifti.littleEndian) : v.hasPatientGeometry ? "vorhanden" : "nicht bekannt"}</dd>
+        <dt>Ursprung</dt>
+        <dd title="Weltkoordinaten (LPS, mm) des ersten Voxels">
+          {v.geometry.origin.map((c) => c.toFixed(1)).join(" / ")} mm{dataset.reoriented ? " · neu gesetzt (Landmarke)" : ""}
+        </dd>
         {dataset.dynamic && (
           <>
             <dt>Dynamisch</dt>
@@ -77,4 +81,15 @@ export function DatasetDetails({ dataset, onModalityChange, children }: DatasetD
       {children}
     </div>
   );
+}
+
+/** Placement information of a NIfTI header: sform/qform codes (0 = not set → only voxel size, origin 0). */
+function niftiPlacement(header: Uint8Array, le: boolean): string {
+  if (header.length < 256) return "nicht bekannt";
+  const view = new DataView(header.buffer, header.byteOffset, header.byteLength);
+  const q = view.getInt16(252, le), s = view.getInt16(254, le);
+  const code = (c: number) => ["unbekannt", "Scanner", "ausgerichtet", "Talairach", "MNI"][c] ?? String(c);
+  if (s > 0) return `sform (${code(s)})${q > 0 ? `, qform (${code(q)})` : ""}`;
+  if (q > 0) return `qform (${code(q)})`;
+  return "keine Lageangaben im NIfTI – nur Voxelgröße, Ursprung 0 (Landmarken setzen)";
 }
