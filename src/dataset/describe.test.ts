@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { Volume3D } from "../viewer/volume";
-import { guessNiftiModality, middleEllipsis, modalityLabel, shortName } from "./describe";
+import { autoModality, guessNiftiModality, isAnatomical, middleEllipsis, modalityLabel, shortName } from "./describe";
+import type { VolumeSource } from "./types";
+import { autoMipId } from "../viewer/mipChoice";
 
 const vol = (fill: (i: number) => number) => new Volume3D(Float32Array.from({ length: 1000 }, (_, i) => fill(i)), 10, 10, 10, [2, 2, 2]);
 const positive = vol((i) => (i % 7) * 3);
@@ -45,5 +47,28 @@ describe("display names", () => {
     expect(m).toContain("…");
     expect(m.startsWith("kinetik")).toBe(true);
     expect(m.endsWith("long")).toBe(true);
+  });
+});
+
+describe("modality override", () => {
+  it("the chosen modality wins for reconstructions and NIfTI; isAnatomical follows", () => {
+    const rec: VolumeSource = { kind: "reconstruction" };
+    expect(modalityLabel(rec)).toBe("SPECT");
+    expect(modalityLabel({ ...rec, modality: "CT" })).toBe("CT");
+    expect(isAnatomical({ ...rec, modality: "CT" })).toBe(true);
+    expect(autoModality({ ...rec, modality: "CT" })).toBe("SPECT");
+    const nii = { kind: "nifti", fileName: "x.nii", nifti: {} as never, modalityGuess: "PT" } as VolumeSource;
+    expect(modalityLabel(nii)).toBe("PT");
+    expect(modalityLabel({ ...nii, modality: "MR" } as VolumeSource)).toBe("MR");
+  });
+});
+
+describe("automatic MIP dataset", () => {
+  it("PET before SPECT before CT, shown first, labels excluded, else the base", () => {
+    expect(autoMipId([{ id: "ct", modality: "CT" }, { id: "spect", modality: "NM" }, { id: "pet", modality: "PT" }], "ct")).toBe("pet");
+    expect(autoMipId([{ id: "ct", modality: "CT" }, { id: "rec", modality: "SPECT" }], "ct")).toBe("rec");
+    expect(autoMipId([{ id: "mr", modality: "MR" }, { id: "ct", modality: "CT" }], "mr")).toBe("ct");
+    expect(autoMipId([{ id: "lab", modality: "PT", excluded: true }, { id: "mr", modality: "MR" }], "mr")).toBe("mr");
+    expect(autoMipId([{ id: "pet1", modality: "PT" }, { id: "pet2", modality: "PT" }], undefined)).toBe("pet1");
   });
 });

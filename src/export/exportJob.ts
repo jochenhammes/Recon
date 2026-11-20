@@ -3,6 +3,7 @@ import { umlaut, withPatientId } from "../core/exportName";
 import { type Mat4, isIdentityMat4, worldToVoxelThrough } from "../core/transform";
 import { datasetModality } from "../dataset/describe";
 import type { LoadedDataset } from "../dataset/types";
+import type { HeaderEdit } from "../header/headerModel";
 import { changesGrid, describeEdit } from "../edit/operations";
 import type { ReconParams } from "../recon/volume";
 import { INTERPOLATION_LABELS, type Interpolation, type TargetGrid } from "../resample/resample";
@@ -15,6 +16,13 @@ import { buildNiftiFile, buildNiftiFromOriginalHeader } from "./niftiWriter";
 import { buildTemplateSeries } from "./templateDicomWriter";
 import { buildZip } from "./zip";
 import { derivedFrameOfReference } from "../registration/landmarks";
+
+/** Header edits of a dataset plus the modality chosen in the app (0008,0060), if it differs from the header. */
+export function headerEditsFor(d: LoadedDataset): HeaderEdit[] {
+  const m = d.source.kind === "dicom" ? d.source.modality : undefined;
+  if (!m || d.source.kind !== "dicom" || d.source.files[0].dataSet.string("x00080060")?.trim() === m) return d.headerEdits;
+  return [...d.headerEdits.filter((e) => e.tag !== "x00080060"), { tag: "x00080060", vr: "CS", value: m, scope: "all" }];
+}
 
 /** Frame of reference written for a dataset: a new (deterministic) UID after an origin change. */
 function frameOfReferenceFor(d: LoadedDataset): string | undefined {
@@ -122,7 +130,7 @@ export async function exportDatasetFiles(
       derivationDescription: `Resampelt in den Raum von ${target.dataset.displayName} (${INTERPOLATION_LABELS[method].split(" (")[0]})${edits ? `; ${edits}` : ""}`,
       frameOfReferenceUid: frameOfReferenceFor(target.dataset),
       anonymize: settings.anonymize,
-      headerEdits: d.headerEdits,
+      headerEdits: headerEditsFor(d),
     });
     return { files: series(files, `${base}_${spaceTag}`), warnings: [...warnings, ...w] };
   }
@@ -148,7 +156,7 @@ export async function exportDatasetFiles(
       derivationDescription: edited ? editDescription : undefined,
       adjustWindow: edited && settings.adjustWindow,
       anonymize: settings.anonymize,
-      headerEdits: d.headerEdits,
+      headerEdits: headerEditsFor(d),
     });
     return { files: series(files, base), warnings: [...warnings, ...w] };
   }
@@ -158,7 +166,7 @@ export async function exportDatasetFiles(
       derivationDescription: [editDescription, d.reoriented ? "Koordinatenursprung neu gesetzt" : ""].filter(Boolean).join("; "),
       frameOfReferenceUid: frameOfReferenceFor(d),
       anonymize: settings.anonymize,
-      headerEdits: d.headerEdits,
+      headerEdits: headerEditsFor(d),
     });
     return { files: series(files, base), warnings: [...warnings, d.reoriented && !d.edits.some(changesGrid) ? `${item.label}: neue Serie mit neuem Koordinatenursprung (neue FrameOfReference).` : `${item.label}: neue Serie mit verändertem Voxelraster.`, ...w] };
   }

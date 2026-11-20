@@ -1,17 +1,23 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import type { LoadedDataset } from "../dataset/types";
-import { NIFTI_MODALITIES, modalityLabel, seriesDescription, shortName } from "../dataset/describe";
+import { MODALITIES, autoModality, modalityLabel, modalityName, seriesDescription, shortName } from "../dataset/describe";
 
 /** Details of a loaded dataset (modality, source, matrix, voxel size, geometry); shown when a list row is expanded. */
 export interface DatasetDetailsProps {
   dataset: LoadedDataset;
-  /** NIfTI: the user picks the modality (undefined = keep the automatic guess). */
+  /** The user picks the modality (undefined = automatic: DICOM header, NIfTI guess, reconstruction = SPECT). */
   onModalityChange?: (modality: string | undefined) => void;
+  /** New name (part of export file names); empty = original file name. */
+  onNameChange?: (name: string) => void;
+  /** Original name (file or series) for the hint below the name field. */
+  originalName?: string;
+  isBase?: boolean;
+  onMakeBase?: () => void;
   /** Extra controls below the summary (e.g. tag input). */
   children?: ReactNode;
 }
 
-export function DatasetDetails({ dataset, onModalityChange, children }: DatasetDetailsProps) {
+export function DatasetDetails({ dataset, onModalityChange, onNameChange, originalName, isBase, onMakeBase, children }: DatasetDetailsProps) {
   const v = dataset.current;
   const [sx, sy, sz] = v.geometry.spacing;
   const src = dataset.source;
@@ -19,17 +25,25 @@ export function DatasetDetails({ dataset, onModalityChange, children }: DatasetD
   return (
     <div className="dataset-details">
       <dl className="summary-list">
+        <dt>Bezeichnung</dt>
+        <dd>
+          {onNameChange ? (
+            <NameField value={dataset.displayName} original={originalName} onCommit={onNameChange} />
+          ) : (
+            <span title={dataset.displayName}>{shortName(dataset.displayName)}</span>
+          )}
+        </dd>
         <dt>Modalität</dt>
         <dd>
-          {src.kind === "nifti" && onModalityChange && !dataset.atlas && !dataset.template ? (
+          {onModalityChange && !dataset.atlas && !dataset.template ? (
             <select
               className="inline-select"
               value={src.modality ?? ""}
-              title="NIfTI-Dateien enthalten keine Modalität – automatisch erkannt (Dateiname, BIDS-JSON, Wertebereich) oder hier wählen."
+              title="Modalität für Anzeige, Auswertung und Export – automatisch aus DICOM-Header bzw. Erkennung, oder hier wählen."
               onChange={(e) => onModalityChange(e.target.value || undefined)}
             >
-              <option value="">automatisch ({NIFTI_MODALITIES.find((m) => m.code === (src.modalityGuess ?? "NIfTI"))?.label ?? src.modalityGuess})</option>
-              {NIFTI_MODALITIES.map((m) => (
+              <option value="">automatisch ({modalityName(autoModality(src))})</option>
+              {MODALITIES.map((m) => (
                 <option key={m.code} value={m.code}>
                   {m.label}
                 </option>
@@ -38,9 +52,8 @@ export function DatasetDetails({ dataset, onModalityChange, children }: DatasetD
           ) : (
             <span className="badge">{modalityLabel(src)}</span>
           )}
+          {dataset.kindLabel && <span className="row-note"> {dataset.kindLabel}</span>}
         </dd>
-        <dt>Quelle</dt>
-        <dd title={dataset.displayName}>{shortName(dataset.displayName)}</dd>
         {seriesDescription(src) && (
           <>
             <dt>Serie</dt>
@@ -78,6 +91,11 @@ export function DatasetDetails({ dataset, onModalityChange, children }: DatasetD
           </>
         )}
       </dl>
+      {onMakeBase && (
+        <button className="secondary-btn" disabled={isBase} onClick={onMakeBase} title="Die Basis definiert den Raum der Ansicht; die anderen Datensätze werden darüber gezeigt.">
+          {isBase ? "Ist Basis der Ansicht" : "Als Basis der Ansicht"}
+        </button>
+      )}
       {children}
     </div>
   );
@@ -92,4 +110,30 @@ function niftiPlacement(header: Uint8Array, le: boolean): string {
   if (s > 0) return `sform (${code(s)})${q > 0 ? `, qform (${code(q)})` : ""}`;
   if (q > 0) return `qform (${code(q)})`;
   return "keine Lageangaben im NIfTI – nur Voxelgröße, Ursprung 0 (Landmarken setzen)";
+}
+
+/** Name field: applied on Enter or when leaving the field; empty → original name. */
+function NameField({ value, original, onCommit }: { value: string; original?: string; onCommit: (name: string) => void }) {
+  const [text, setText] = useState(value);
+  useEffect(() => setText(value), [value]);
+  const commit = () => {
+    const v = text.trim();
+    if (v !== value) onCommit(v);
+  };
+  return (
+    <span className="name-field">
+      <input
+        type="text"
+        value={text}
+        title="Wird Teil der Exportdateinamen. Leer = Originalname."
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          if (e.key === "Escape") setText(value);
+        }}
+      />
+      {original && original !== value && <small className="muted" title={original}>Original: {shortName(original)}</small>}
+    </span>
+  );
 }

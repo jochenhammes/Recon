@@ -14,7 +14,7 @@ Beispieldaten (keine Patientendaten).
 8. [Kinetik (dynamisches PET)](#8-kinetik-dynamisches-pet)
    – [8a. Dosimetrie (SPECT/CT)](#8a-dosimetrie-spectct)
 9. [CT-Organsegmentierung](#9-ct-organsegmentierung)
-10. [Tumorlast (MTV)](#10-tumorlast-mtv)
+10. [Segmentierung & MTV](#10-segmentierung--mtv)
 11. [Analyse und Label-Analyse](#11-analyse-und-label-analyse)
     – [IMCALC: voxelweise Rechnung](#imcalc-voxelweise-rechnung)
 12. [Bearbeiten](#12-bearbeiten)
@@ -29,7 +29,7 @@ Beispieldaten (keine Patientendaten).
 ![Startbildschirm](docs/images/01-start.jpg)
 
 - **Linke Leiste**: die Arbeitsbereiche *Daten, Ansicht, Koregistrierung, Standardraum, Centiloid & SUVR (SUVR), Kinetik,
-  Tumorlast, Analyse, IMCALC, Bearbeiten, Header, Export*. Ein Klick auf den aktiven Bereich klappt das Seitenpanel ein und aus
+  Dosimetrie, Segmentierung & MTV, Analyse, IMCALC, Bearbeiten, Header, Export*. Ein Klick auf den aktiven Bereich klappt das Seitenpanel ein und aus
   (ebenso das Symbol unten links). Ausgegraute Bereiche nennen im Tooltip den Grund (z. B. „Header nur für DICOM“).
   Beim Wechsel des Bereichs bleibt alles erhalten – laufende Berechnungen, Ergebnisse, aufgeklappte Karten.
 - **Seitenpanel**: Die Breite lässt sich am rechten Rand mit der Maus ziehen (Doppelklick = Standardbreite; mit
@@ -82,8 +82,8 @@ Alles wird lokal im Browser berechnet; Daten werden nirgendwohin hochgeladen.
    - DICOM: Einzeldatei, Serie oder Multi-Frame, auch Dateien ohne Endung (macOS-Exporte).
    - NIfTI: `.nii` oder `.nii.gz`.
    - Mehrere Serien in einem Upload werden **getrennt** geladen; nicht lesbare Dateien werden übersprungen und gemeldet.
-3. **Was eingeblendet wird**: Der erste Datensatz ist die Basis der Ansicht; ein CT/MRT derselben Körperregion wird
-   Basis, ein PET/SPECT derselben Region (oder mit gleichem Frame of Reference) wird darüber eingeblendet, ebenso
+3. **Was eingeblendet wird**: Der erste Datensatz ist die Basis der Ansicht. **Ein CT wird beim Laden immer Basis**
+   (sofern die Basis noch kein CT ist), ein MRT derselben Körperregion ersetzt eine PET/SPECT-Basis; ein PET/SPECT derselben Region (oder mit gleichem Frame of Reference) wird darüber eingeblendet, ebenso
    Labelbilder auf dem Raster eines angezeigten Datensatzes. Alles andere – z. B. ein zweites PET, ein T1 neben einem
    Ganzkörper-CT, Daten einer anderen Region – wird geladen, aber **nicht eingeblendet**; ein Hinweis unten rechts nennt
    diese Datensätze. Einblenden über **Ebenen** im Viewer oder das Auge in der Datensatzliste.
@@ -91,13 +91,18 @@ Alles wird lokal im Browser berechnet; Daten werden nirgendwohin hochgeladen.
    (`P0815_…nii`, `P0815_…csv`, auch in ZIP-Archiven solcher Dateien); DICOM-Exporte bleiben unverändert. Die ID wird im
    Projekt mitgespeichert.
 4. **Datensatzliste**: eine Zeile je Datensatz mit Modalität (farbig), Schlagwort, Name und *Basis*-Markierung.
-   - Klick auf die Zeile: Details (Modalität, Quelle, Matrix, Voxelgröße, Koordinaten, Dynamik) und Schlagwort.
+   - Klick auf die Zeile: Details (Bezeichnung, Modalität, Matrix, Voxelgröße, Koordinaten, Dynamik) und Schlagwort.
    - 👁 ein-/ausblenden · ✎ **aktiv** setzen – darauf beziehen sich Analyse, Bearbeiten, Header und Export.
    - ⋯: *Als Basis der Ansicht*, *Datensatz entfernen*.
-   - **Modalität bei NIfTI**: NIfTI-Dateien enthalten keine Modalität. Recon Studio erkennt sie aus einer
-     BIDS-JSON-Datei, dem Dateinamen (`_pet`, `_T1w`, `ct`, `spect` …), dynamischen Daten (→ PET) oder dem
-     Wertebereich (Luft und Knochen → CT). Die Auswahl *Modalität* in der Karte korrigiert eine falsche Erkennung;
-     davon hängen u. a. Anzeige-Basis, CT-Fensterpresets und die Vorauswahl in Registrierung, Centiloid und Tumorlast ab.
+   - **Bezeichnung** ändern (Details): Der Name wird Teil der Exportdateinamen; leer = Originalname (bleibt darunter
+     sichtbar).
+   - **Modalität** ändern (Details, alle Datensätze außer Labelbildern): PET, SPECT, CT, MRT oder Sonstige;
+     *automatisch* nimmt den Wert aus dem DICOM-Header bzw. die Erkennung. NIfTI-Dateien enthalten keine Modalität –
+     Recon Studio erkennt sie aus einer BIDS-JSON-Datei, dem Dateinamen (`_pet`, `_T1w`, `ct`, `spect` …),
+     dynamischen Daten (→ PET) oder dem Wertebereich (Luft und Knochen → CT). Davon hängen u. a. CT-Fensterpresets, SUV
+     und die Vorauswahl in Registrierung, Centiloid und Segmentierung & MTV ab. Beim DICOM-Export wird die gewählte
+     Modalität in den Header (0008,0060) geschrieben.
+   - **Als Basis der Ansicht** (Details oder ⋯): jeder Datensatz, gleich welcher Modalität, kann Basis sein.
    - **Schlagwort** eintragen (z. B. *Baseline*, *Follow-up*, *CT nativ*) – es erscheint überall in Auswahllisten,
      Statuszeile und Ebenen.
 5. **Labelbilder** (Atlas, CT-Organe, Läsionsmasken) werden beim Laden automatisch erkannt und als farbiges
@@ -117,7 +122,7 @@ Karte **Projekt** im Bereich *Daten*:
   - alle Datensätze (DICOM-Originaldateien mit Header, NIfTI-Volumen, Bearbeitungen, dynamische Frames,
     Labelbilder mit Regionsnamen, Vorlagen);
   - Registrierungen, Schlagworte, Anzeige (Basis, Ebenen, Fenster, Farbtabellen) und die Normalisierung;
-  - Centiloid- und Tumorlast-Ergebnisse.
+  - Centiloid- und MTV-Ergebnisse.
 - Kinetik-Tabellen und Label-Analysen werden nach dem Öffnen per Klick neu berechnet.
 - **Projekt öffnen …** (auch auf der Startseite oder per Ziehen der `.recon`-Datei ins Ladefeld) ersetzt die
   aktuelle Sitzung nach Rückfrage.
@@ -161,10 +166,15 @@ Bereich **Ansicht** – eine Karte je angezeigter Ebene (oben = oberste Ebene):
 Label-Ebenen werden ohne Interpolation (nächster Nachbar) dargestellt.
 
 **Ebenen-Schnellwahl im Viewer:** Der Knopf **Ebenen** oben rechts im Viewer blendet eine kleine Liste über den
-Schnittbildern ein – in jedem Bereich, z. B. während Kinetik, Tumorlast oder Analyse. Häkchen = Ebene sichtbar,
+Schnittbildern ein – in jedem Bereich, z. B. während Kinetik, Segmentierung & MTV oder Analyse. Häkchen = Ebene sichtbar,
 Regler = Deckkraft. Datensätze unter *nicht eingeblendet* werden per Häkchen als Overlay hinzugefügt. Der **Papierkorb**
 am Zeilenende entfernt einen Datensatz: erster Klick → *Löschen?*, zweiter Klick innerhalb von 3 s bestätigt. Der Knopf
 schaltet die Liste wieder aus; der Zustand bleibt gespeichert.
+
+**MIP** (unten in der Ebenen-Liste): Datensatz und Farbtabelle der MIP-Ansicht lassen sich getrennt wählen – auch ein
+Datensatz, der in den Schnittbildern ausgeblendet ist. *Automatisch* nimmt PET, sonst SPECT, sonst CT (eingeblendete
+zuerst), sonst die Basis; *LUT wie Datensatz* übernimmt dessen Farbtabelle. Das Fenster wird mit dem Datensatz geteilt
+(Ziehen in der MIP ändert es). Die Wahl wird in der Projektdatei gespeichert.
 
 ![Ebenen-Schnellwahl im Viewer](docs/images/11b-ebenen-overlay.jpg)
 
@@ -460,7 +470,7 @@ nicht geeignet.
    - Umrechnung: MBq = Counts / (Dauer × Kalibrierfaktor), mit Korrektur des Zerfalls während der Aufnahme
      (λT / (1 − e^−λT)), außer das Bild ist bereits zerfallskorrigiert.
 3. **Regionen:** Automatisch übernommene Labelbilder sind angehakt; weitere anhaken (CT-Organe, Läsionen aus der
-   Tumorlast, eigene Segmentierungen als NIfTI), abgewählte werden nicht erneut übernommen. Je Labelbild
+   Segmentierung & MTV, eigene Segmentierungen als NIfTI), abgewählte werden nicht erneut übernommen. Je Labelbild
    den Zeitpunkt oder *alle Zeitpunkte* (nach der Registrierung) wählen. Regionen gleichen Namens werden über die
    Zeitpunkte verbunden; vorausgewählt sind Nieren, Leber, Milz, Harnblase und Läsionen. *RC* wendet den
    Recovery-Koeffizienten an (Läsionen). *Aktivitäten messen* integriert die Aktivitätskonzentration über jede Region;
@@ -501,7 +511,7 @@ Zerfallsdaten).
 
 ![Segmentierung läuft](docs/images/20-ct-segmentierung-laeuft.jpg)
 
-1. CT laden, Bereich **Tumorlast** öffnen.
+1. CT laden, Bereich **Segmentierung & MTV** öffnen.
 2. Karte **CT-Organsegmentierung**: CT wählen → **Organe segmentieren**.
    - Beim ersten Mal wird das Modell (≈ 66 MB) geladen und im Browser gespeichert.
    - Mit WebGPU (Chrome/Edge) läuft es auf der Grafikkarte, sonst auf der CPU (Hinweis in Gelb).
@@ -510,18 +520,18 @@ Zerfallsdaten).
 
 ![Organe und Regionsliste](docs/images/21-ct-organe.jpg)
 
-4. **Regionsliste** (Karte *Regionen* unter dem Tumorlast-Ergebnis bzw. in der Ebenenkarte im Bereich *Ansicht*): Suche, Häkchen blenden Regionen ein/aus (*alle* / *keine* / *nur Treffer*), Klick auf eine Region
+4. **Regionsliste** (Karte *Regionen* unter dem MTV-Ergebnis bzw. in der Ebenenkarte im Bereich *Ansicht*): Suche, Häkchen blenden Regionen ein/aus (*alle* / *keine* / *nur Treffer*), Klick auf eine Region
    setzt das Fadenkreuz hinein; Volumen je Region in ml.
-5. Die Organe stehen danach in Tumorlast und Label-Analyse zur Verfügung und lassen sich als NIfTI exportieren
+5. Die Organe stehen danach in Segmentierung & MTV und Label-Analyse zur Verfügung und lassen sich als NIfTI exportieren
    (Regionsnamen bleiben beim Wiederladen erhalten).
 
 ---
 
-## 10. Tumorlast (MTV)
+## 10. Segmentierung & MTV
 
 ![Einstellungen Tumorlast](docs/images/22-tumorlast-einstellungen.jpg)
 
-1. PET (und optional CT mit Organsegmentierung) laden; Bereich **Tumorlast**.
+1. PET (und optional CT mit Organsegmentierung) laden; Bereich **Segmentierung & MTV**.
 2. Indikation wählen: **Lymphom (FDG)** oder **PSMA** – setzt passende Methoden und Ausschlussorgane.
 3. **PET** wählen. Bei DICOM mit Dosis/Gewicht wird in SUV gerechnet; sonst erscheint ein Hinweis
    (Werte werden direkt als SUV interpretiert).

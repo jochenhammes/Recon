@@ -1,6 +1,6 @@
 import { Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { lutGradient } from "../viewer/volume";
+import { LUT_CHOICES, lutGradient } from "../viewer/volume";
 import type { ColorLut } from "../viewer/volume";
 
 export interface LayerToggleRow {
@@ -16,13 +16,27 @@ export interface LayerToggleRow {
   locked?: boolean;
 }
 
+/** MIP view: its own dataset and color table. */
+export interface MipSettings {
+  options: { id: string; label: string; title?: string }[];
+  /** Chosen dataset; null = automatic. */
+  value: string | null;
+  /** Label of the automatic choice (e.g. "PT · Patient"). */
+  autoLabel: string;
+  lut: ColorLut | null;
+  onChange: (id: string | null) => void;
+  onLutChange: (lut: ColorLut | null) => void;
+}
+
 /** Compact layer list for the viewer: show/hide layers from any tab. */
 export function LayerToggle({
   rows,
   onVisibleChange,
   onOpacityChange,
   onRemove,
+  mip,
 }: {
+  mip?: MipSettings;
   rows: LayerToggleRow[];
   onVisibleChange: (id: string, visible: boolean) => void;
   onOpacityChange: (id: string, opacity: number) => void;
@@ -84,6 +98,29 @@ export function LayerToggle({
         <>
           <div className="layer-toggle-sep">nicht eingeblendet</div>
           <ul>{hidden.map(row)}</ul>
+        </>
+      )}
+      {mip && (
+        <>
+          <div className="layer-toggle-sep">MIP</div>
+          <div className="layer-mip">
+            <select value={mip.value ?? ""} aria-label="Datensatz der MIP" onChange={(e) => mip.onChange(e.target.value || null)}>
+              <option value="">automatisch ({mip.autoLabel})</option>
+              {mip.options.map((o) => (
+                <option key={o.id} value={o.id} title={o.title}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <select value={mip.lut ?? ""} aria-label="Farbtabelle der MIP" onChange={(e) => mip.onLutChange((e.target.value || null) as ColorLut | null)}>
+              <option value="">LUT wie Datensatz</option>
+              {LUT_CHOICES.filter((l) => l.value !== "labels").map((l) => (
+                <option key={l.value} value={l.value}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </>
       )}
     </div>

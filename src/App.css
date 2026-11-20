@@ -2574,3 +2574,23 @@ tr.focus-row td {
   color: var(--text-dim);
   margin-bottom: 6px;
 }
+
+.layer-mip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 4px 4px;
+}
+.layer-mip select {
+  font-size: 12px;
+  max-width: 100%;
+}
+.name-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.name-field input {
+  width: 100%;
+  font: inherit;
+}

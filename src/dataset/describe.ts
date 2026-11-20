@@ -6,19 +6,29 @@ import type { LoadedDataset, VolumeSource } from "./types";
 /** Short modality label for chips and the status bar. */
 export function modalityLabel(source: VolumeSource | undefined): string {
   if (!source) return "Volumen";
+  return source.modality ?? autoModality(source);
+}
+
+/** Modality without the user's choice: header (DICOM), guess (NIfTI) or "SPECT" (own reconstruction). */
+export function autoModality(source: VolumeSource): string {
   if (source.kind === "reconstruction") return "SPECT";
-  if (source.kind === "nifti") return source.modality ?? source.modalityGuess ?? "NIfTI";
+  if (source.kind === "nifti") return source.modalityGuess ?? "NIfTI";
   return source.files[0].dataSet.string("x00080060")?.trim() || "DICOM";
 }
 
-/** Modalities offered for NIfTI files (DICOM codes, so the rest of the app treats them like DICOM data). */
-export const NIFTI_MODALITIES: { code: string; label: string }[] = [
+/** Modalities the user can choose (DICOM codes, so the rest of the app treats every source alike). */
+export const MODALITIES: { code: string; label: string }[] = [
   { code: "PT", label: "PET" },
   { code: "NM", label: "SPECT" },
   { code: "CT", label: "CT" },
   { code: "MR", label: "MRT" },
-  { code: "NIfTI", label: "unbekannt" },
+  { code: "OT", label: "Sonstige" },
 ];
+
+/** Display name of a modality code. */
+export function modalityName(code: string): string {
+  return MODALITIES.find((m) => m.code === code)?.label ?? (code === "NIfTI" ? "unbekannt" : code);
+}
 
 /**
  * Guesses the modality of a NIfTI file from a BIDS sidecar, the file name, dynamics and the value range.
@@ -89,7 +99,7 @@ export function isAnatomical(source: VolumeSource): boolean {
 }
 
 export function suvForSource(source: VolumeSource, opts: { halfLifeSec?: number } = {}): SuvResult | null {
-  return source.kind === "dicom" ? computeSuv(source.files[0].dataSet, opts) : null;
+  return source.kind === "dicom" ? computeSuv(source.files[0].dataSet, { ...opts, modality: source.modality }) : null;
 }
 
 export function rawUnitLabel(source: VolumeSource): string {

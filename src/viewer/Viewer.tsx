@@ -29,6 +29,8 @@ export interface ViewerProps {
   activeLayerId: string;
   /** Layer shown in the MIP view (default: the active layer). */
   mipLayerId?: string;
+  /** MIP layer given directly (may be hidden in the slices; own color table). */
+  mipLayer?: ViewerLayer;
   cursor: Vec3 | null;
   onCursorChange: (p: Vec3) => void;
   onWindowChange: (layerId: string, window: [number, number]) => void;
@@ -233,7 +235,7 @@ export function Viewer(props: ViewerProps) {
       return !o;
     });
   const active = layers.find((l) => l.id === activeLayerId) ?? layers[layers.length - 1];
-  const mipLayer = visible.find((l) => l.id === (props.mipLayerId ?? activeLayerId)) ?? visible[visible.length - 1];
+  const mipLayer = props.mipLayer ?? visible.find((l) => l.id === (props.mipLayerId ?? activeLayerId)) ?? visible[visible.length - 1];
   const mipVolume = mipLayer?.volume;
   // Free GPU textures of volumes that are no longer shown (plus the MIP source of the MIP layer).
   useEffect(() => {

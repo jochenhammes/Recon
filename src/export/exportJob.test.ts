@@ -6,7 +6,10 @@ import { buildNiftiFile } from "./niftiWriter";
 import { originShift } from "../registration/landmarks";
 import { createDataset } from "../dataset/types";
 import { Volume3D } from "../viewer/volume";
-import { parseNifti1 } from "../viewer/volumeLoader";
+import { loadVolumeFromFiles, parseNifti1 } from "../viewer/volumeLoader";
+import * as dicomParser from "dicom-parser";
+import { asFile, buildPart10 } from "../test/dicomFixtures";
+import type { DicomSource } from "./editedDicomExport";
 import { type ExportItem, type ExportSettings, exportDatasetFiles, packageFiles } from "./exportJob";
 
 const vol = new Volume3D(Float32Array.from({ length: 4 * 5 * 6 }, (_, i) => i), 6, 5, 4, [3, 2, 2]);
@@ -73,5 +76,17 @@ describe("export without resampling", () => {
     expect(z.type).toBe("application/zip");
     const names = listZip(z.bytes.buffer as ArrayBuffer).map((e) => e.name).sort();
     expect(names).toEqual(["CT_b/IM1.dcm", "CT_b/IM2.dcm", "PT_a.nii", "PT_a_2.nii"]);
+  });
+
+  it("writes the modality chosen in the app into the DICOM header and uses the edited name in the file name", async () => {
+    const loaded = await loadVolumeFromFiles([asFile(buildPart10({ rows: 2, cols: 2, frames: 1, pixels: [1, 2, 3, 4], instanceNumber: 1 }), "a.dcm")]);
+    const src = { ...(loaded.source as DicomSource), modality: "PT" };
+    const d = { ...createDataset(loaded.volume, src, "Neuer Name"), originalName: "a.dcm" };
+    const dicom: ExportSettings = { ...nifti, format: "dicom" };
+    const { files } = await exportDatasetFiles({ ...item(), dataset: d, w2v: worldToVoxelTransform(loaded.volume.geometry) }, dicom, 0);
+    expect(dicomParser.parseDicom(files[0].bytes).string("x00080060")).toBe("PT");
+    expect(files[0].name).toMatch(/Neuer_Name/);
+    const n = await exportDatasetFiles({ ...item(), dataset: d, w2v: worldToVoxelTransform(loaded.volume.geometry) }, nifti, 0);
+    expect(n.files[0].name).toMatch(/^PT_Neuer_Name/);
   });
 });

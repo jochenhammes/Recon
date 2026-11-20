@@ -14,6 +14,8 @@ export interface DisplayCandidate {
   gridKey: string;
   /** DICOM FrameOfReferenceUID, if known. */
   frameOfReference?: string;
+  /** CT: becomes the base by default. */
+  ct?: boolean;
 }
 
 export type DisplayDecision = "base" | "newBase" | "overlay" | "hidden";
@@ -55,7 +57,7 @@ export const MIN_OVERLAP = 0.3;
 
 /**
  * Decides how a newly loaded dataset is displayed, so loading several datasets does not pile everything on top
- * of each other: the first dataset is the base; a CT/MR replaces a functional base it overlaps; label images are
+ * of each other: the first dataset is the base; a CT replaces any non-CT base, an MR a functional base it overlaps; label images are
  * shown on top of a dataset on the same grid; one functional dataset (PET/SPECT) is shown over the base if it covers
  * the same region; everything else is loaded but not displayed.
  */
@@ -64,6 +66,8 @@ export function decideDisplay(next: DisplayCandidate, base: DisplayCandidate | n
   const sameRegion = (a: DisplayCandidate, b: DisplayCandidate) =>
     (a.frameOfReference !== undefined && a.frameOfReference === b.frameOfReference) || boxOverlap(a.box, b.box) >= MIN_OVERLAP;
   if (next.labels) return [base, ...shown].some((s) => s.gridKey === next.gridKey) || boxOverlap(next.box, base.box) >= 0.8 ? "overlay" : "hidden";
+  // CT is the default base: a newly loaded CT replaces any non-CT base (PET, SPECT, MR …).
+  if (next.ct) return base.ct ? "hidden" : "newBase";
   if (next.anatomical) return !base.anatomical && sameRegion(next, base) ? "newBase" : "hidden";
   const functionalShown = shown.some((s) => !s.anatomical && !s.labels);
   // With a functional base (no CT/MR), the base itself is the functional image.

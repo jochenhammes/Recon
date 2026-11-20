@@ -41,7 +41,12 @@ export interface NiftiSourceInfo {
 }
 
 export type VolumeSource =
-  | { kind: "reconstruction"; reconParams?: ReconParams }
+  | {
+      kind: "reconstruction";
+      reconParams?: ReconParams;
+      /** Modality chosen by the user (DICOM code); default "SPECT". */
+      modality?: string;
+    }
   | {
       kind: "nifti";
       fileName: string;
@@ -51,7 +56,13 @@ export type VolumeSource =
       /** Modality chosen by the user; overrides the guess. */
       modality?: string;
     }
-  | { kind: "dicom"; layout: "multiframe" | "series"; files: DicomSourceFile[] };
+  | {
+      kind: "dicom";
+      layout: "multiframe" | "series";
+      files: DicomSourceFile[];
+      /** Modality chosen by the user (DICOM code); overrides (0008,0060) in the app and on DICOM export. */
+      modality?: string;
+    };
 
 /** Frames of a dynamic (4D) acquisition; the dataset's volume is their time-weighted mean. */
 export interface DynamicInfo {
@@ -96,6 +107,8 @@ export interface LoadedDataset {
   };
   source: VolumeSource;
   displayName: string;
+  /** Name on loading, kept when the user renames the dataset. */
+  originalName?: string;
   /** Label shown instead of the modality (e.g. "IMCALC", "Z" for computed images). */
   kindLabel?: string;
   /** Unit of the stored values when the source does not define one (e.g. "z" for IMCALC z-score maps). */

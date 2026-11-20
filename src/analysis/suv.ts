@@ -47,8 +47,8 @@ function parseDt(dt: string | undefined): number | undefined {
  * Radiopharmaceutical Information Sequence). Supports DecayCorrection START (reference = series
  * start) and ADMIN (reference = injection). Assumes a tissue density of 1 g/ml.
  */
-export function computeSuv(ds: DataSet, opts: { halfLifeSec?: number } = {}): SuvResult {
-  const modality = str(ds, "x00080060");
+export function computeSuv(ds: DataSet, opts: { halfLifeSec?: number; modality?: string } = {}): SuvResult {
+  const modality = opts.modality ?? str(ds, "x00080060");
   if (modality !== "PT") return { ok: false, reason: `Modality ${modality ?? "unbekannt"} (SUV nur für PET).` };
   const units = str(ds, "x00541001");
   if (units !== "BQML") return { ok: false, reason: `Einheit ${units ?? "unbekannt"} statt BQML.` };

@@ -221,7 +221,7 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
       {props.loadError && <div className="error-banner">{props.loadError}</div>}
 
       {props.labelSets.length === 0 ? (
-        <p className="tool-hint">Noch keine Labels geladen – CT-Segmentierung (Tab „Tumorlast“), Atlas oder ein Labelbild laden.</p>
+        <p className="tool-hint">Noch keine Labels geladen – CT-Segmentierung (Bereich „Segmentierung & MTV“), Atlas oder ein Labelbild laden.</p>
       ) : (
         <>
           <label className="field">

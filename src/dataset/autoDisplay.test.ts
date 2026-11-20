@@ -47,4 +47,13 @@ describe("automatic display on loading", () => {
     expect(boxOverlap([[0, 0, 0], [10, 10, 10]], [[5, 0, 0], [15, 10, 10]])).toBeCloseTo(0.5);
     expect(gridBox(identityGeometry([2, 2, 2]), [10, 10, 10])).toEqual([[-1, -1, -1], [19, 19, 19]]);
   });
+
+  it("a CT becomes the base over PET or MR (any region); a second CT stays hidden", () => {
+    const ct = { ...body, ct: true };
+    expect(decideDisplay(ct, abdomenPet, [])).toBe("newBase");
+    expect(decideDisplay(ct, brainT1, [])).toBe("newBase");
+    expect(decideDisplay({ ...ct, gridKey: "ct2" }, ct, [])).toBe("hidden");
+    // An MR does not replace a CT base.
+    expect(decideDisplay(brainT1, ct, [])).toBe("hidden");
+  });
 });

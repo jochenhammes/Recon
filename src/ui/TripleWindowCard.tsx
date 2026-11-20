@@ -68,7 +68,7 @@ export function TripleWindowCard(props: {
             der Lungen (inkl. Trachea) werden so umgerechnet, dass sie wie im Lungenfenster erscheinen, Voxel des Skeletts wie im Knochenfenster.
           </p>
           <p>
-            Grundlage ist die Organkarte der CT-Segmentierung (Bereich Tumorlast, 3-mm-Raster). Damit an den Grenzen keine Treppen entstehen, werden
+            Grundlage ist die Organkarte der CT-Segmentierung (Bereich Segmentierung & MTV, 3-mm-Raster). Damit an den Grenzen keine Treppen entstehen, werden
             Lungen- und Skelettmaske weichgezeichnet (Kantenglättung) und für jedes CT-Voxel interpoliert; die Fenster gehen über ±0,75 mm weich
             ineinander über. Optional markiert ein schwarzer Rand die Grenze (Lunge: beidseits, Knochen: außen; 0 mm = ohne). Die Werte sind keine echten HU mehr – nicht für Messungen oder Diagnostik verwenden.
           </p>
@@ -76,7 +76,7 @@ export function TripleWindowCard(props: {
       }
     >
       {props.cts.length === 0 || props.organSets.length === 0 ? (
-        <p className="tool-hint">Benötigt ein CT und seine Organkarte (Tumorlast → CT-Organsegmentierung).</p>
+        <p className="tool-hint">Benötigt ein CT und seine Organkarte (Segmentierung & MTV → CT-Organsegmentierung).</p>
       ) : (
         <>
           <label className="field">

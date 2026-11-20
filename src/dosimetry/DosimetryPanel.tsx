@@ -558,7 +558,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
 
       <Card title={<>Regionen</>} persistKey="dos-reg" status={labelNames.size ? { text: `${[...labelNames.keys()].filter((k) => regionOpts(k).enabled).length} aktiv`, tone: "info" } : null}
         info="Labelbilder (CT-Organsegmentierung, Läsionen, eigene Segmentierungen). Ein Labelbild gilt für seinen Zeitpunkt oder – nach der Registrierung – für alle Zeitpunkte. Regionen gleichen Namens werden über die Zeitpunkte verbunden. Speichel- und Tränendrüsen sind nicht im CT-Modell: als eigene Segmentierung oder VOI laden.">
-        {labelCandidates.length === 0 && <p className="tool-hint">Noch keine Labelbilder: Organe auf dem CT segmentieren (oben) oder Läsionen unter Tumorlast.</p>}
+        {labelCandidates.length === 0 && <p className="tool-hint">Noch keine Labelbilder: Organe auf dem CT segmentieren (oben) oder Läsionen unter Segmentierung & MTV.</p>}
         {labelCandidates.map((e) => {
           const ls = setup.labelSets.find((l) => l.id === e.id);
           return (

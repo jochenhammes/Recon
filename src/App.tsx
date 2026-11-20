@@ -82,7 +82,7 @@ import { type VoiShape, maskBounds, paintDisc, voiMask, voiStats } from "./edit/
 import { computeStats } from "./analysis/stats";
 import type { SuvResult } from "./analysis/suv";
 import { type UnitMode, formatInput, formatValue, parseInput } from "./components/format";
-import { type LoadedDataset, createDataset } from "./dataset/types";
+import { type LoadedDataset, type VolumeSource, createDataset } from "./dataset/types";
 import { type EditOp, type VoiAction, changesGrid, countAffected } from "./edit/operations";
 import { type LoadedVolume, decompressGzip, loadVolumeFromFiles } from "./viewer/volumeLoader";
 import { UploadPanel } from "./components/UploadPanel";
@@ -92,8 +92,9 @@ import { ExportPanel } from "./components/ExportPanel";
 import { buildSinogram } from "./recon/sinogram";
 import type { ReconParams } from "./recon/volume";
 import { reconstructVolume } from "./workers/workerPool";
-import { Volume3D, migrateLut } from "./viewer/volume";
+import { type ColorLut, Volume3D, migrateLut } from "./viewer/volume";
 import { Viewer, type ViewerProps } from "./viewer/Viewer";
+import { autoMipId } from "./viewer/mipChoice";
 import { useShallowStable } from "./viewer/useShallowStable";
 import type { LayerDisplay, LayoutKind, ViewKind, ViewerLayer } from "./viewer/types";
 import { type Vec3, type WorldToVoxel, applyWorldToVoxel, voxelToWorld, volumeCenter, worldToVoxelTransform } from "./core/geometry";
@@ -215,6 +216,7 @@ function App() {
   const [newValue, setNewValue] = useState("0");
   const [unitMode, setUnitMode] = useState<UnitMode>("raw");
   const [cursor, setCursor] = useState<Vec3 | null>(null);
+  const [mipChoice, setMipChoice] = useState<{ id: string | null; lut: ColorLut | null }>({ id: null, lut: null });
   const [landmarkMode, setLandmarkMode] = useState(false);
   const [landmarkView, setLandmarkView] = useState<LandmarkSide>("base");
   /** Open tab of the "Ausrichten" card and the last landmark step, per target dataset. */
@@ -456,6 +458,7 @@ function App() {
       const dims: [number, number, number] = [v.nx, v.ny, v.nz];
       return {
         anatomical: isAnatomical(d.source) || d.template?.kind === "T1",
+        ct: !d.template && !d.atlas && modalityLabel(d.source) === "CT",
         labels: !!d.atlas,
         box: gridBox(v.geometry, dims),
         gridKey: gridKey(v.geometry, dims),
@@ -608,6 +611,7 @@ function App() {
       tumorTargetId,
       liverRef,
       dosimetry,
+      mipChoice,
     };
   }
 
@@ -668,6 +672,7 @@ function App() {
       setTumorTargetId(st.tumorTargetId ?? null);
       setLiverRef(st.liverRef ?? null);
       setDosimetry({ ...emptySetup(), ...(st.dosimetry ?? {}) });
+      setMipChoice(st.mipChoice ?? { id: null, lut: null });
       setVoi(null);
       setCoregResults({});
       setProjectionSet(null);
@@ -2482,14 +2487,25 @@ function App() {
   }
 
   /** NIfTI: user-chosen modality; switching to/from CT also switches between CT and automatic window. */
-  function setNiftiModality(id: string, modality: string | undefined) {
+  /** Modality chosen in the dataset details (undefined = automatic); switching to/from CT also switches the window. */
+  function setModality(id: string, modality: string | undefined) {
     const e = byId(id);
-    if (!e || e.dataset.source.kind !== "nifti") return;
-    const dataset: LoadedDataset = { ...e.dataset, source: { ...e.dataset.source, modality } };
+    if (!e) return;
+    const dataset: LoadedDataset = { ...e.dataset, source: { ...e.dataset.source, modality } as VolumeSource };
     const wasCt = modalityLabel(e.dataset.source) === "CT";
     const isCt = modalityLabel(dataset.source) === "CT";
     const display = wasCt === isCt ? e.display : { ...e.display, window: defaultDisplay(dataset.current, dataset.source).window };
     updateEntry(id, { dataset, display });
+  }
+
+  /** New dataset name (part of export file names); empty = name on loading. */
+  function renameDataset(id: string, name: string) {
+    const e = byId(id);
+    if (!e) return;
+    const originalName = e.dataset.originalName ?? e.dataset.displayName;
+    const displayName = name || originalName;
+    const derivedFrom = e.dataset.derivedFrom && !e.dataset.derivedFrom.label ? { ...e.dataset.derivedFrom, name: displayName } : e.dataset.derivedFrom;
+    updateEntry(id, { dataset: { ...e.dataset, displayName, originalName, ...(derivedFrom ? { derivedFrom } : {}) } });
   }
 
   const dataTab = (
@@ -2544,7 +2560,14 @@ function App() {
             const e = byId(id);
             return (
               e && (
-                <DatasetDetails dataset={e.dataset} onModalityChange={(m) => setNiftiModality(e.id, m)}>
+                <DatasetDetails
+                  dataset={e.dataset}
+                  onModalityChange={(m) => setModality(e.id, m)}
+                  onNameChange={(n) => renameDataset(e.id, n)}
+                  originalName={e.dataset.originalName}
+                  isBase={e.id === reference?.id}
+                  onMakeBase={entries.length > 1 ? () => changeBase(e.id) : undefined}
+                >
                   <TagInput value={e.tag ?? ""} onChange={(t) => updateEntry(e.id, { tag: t || undefined })} />
                 </DatasetDetails>
               )
@@ -3126,8 +3149,8 @@ function App() {
     },
     {
       id: "tumor",
-      label: "Tumorlast",
-      shortLabel: "Tumor\u00adlast",
+      label: "Segmentierung & MTV",
+      shortLabel: "Segm. & MTV",
       icon: Target,
       disabled: tumorTargets.length === 0 && ctEntries.length === 0,
       disabledReason: "Erst ein PET oder CT laden",
@@ -3399,7 +3422,7 @@ function App() {
       tab: "tumor",
     },
   );
-  act(tumorBusy && { id: "tumor", label: "Tumorlast", detail: "Segmentierung", tab: "tumor" });
+  act(tumorBusy && { id: "tumor", label: "Segmentierung & MTV", detail: "Segmentierung", tab: "tumor" });
   act(fusionBusy && { id: "fusion", label: "Fusionsexport", tab: "view" });
   act(editBusy && { id: "edit", label: "Bearbeiten", tab: "edit" });
   act((templateBusy || atlasBusy) && { id: "bundled", label: templateBusy ? "Vorlage laden" : "Atlas laden", tab: templateBusy ? "normalization" : "analysis" });
@@ -3412,9 +3435,33 @@ function App() {
   act(normError && !normRunning && { id: "norm-error", label: "Normalisierung", error: normError, tab: "normalization" });
   act(coregError && !coregRunning && { id: "coreg-error", label: "Koregistrierung", error: coregError, tab: "registration" });
   act(centiloidError && !centiloidRunning && { id: "centiloid-error", label: "Centiloid", error: centiloidError, tab: "suvr" });
-  act(tumorError && !tumorBusy && { id: "tumor-error", label: "Tumorlast", error: tumorError, tab: "tumor" });
+  act(tumorError && !tumorBusy && { id: "tumor-error", label: "Segmentierung & MTV", error: tumorError, tab: "tumor" });
   // MIP of the topmost visible functional image (not of label images or CT/MR).
-  const mipLayerId = [...overlays].reverse().concat(reference ? [reference] : []).find((e) => e.display.visible && !e.dataset.atlas && !isAnatomical(e.dataset.source))?.id ?? reference?.id;
+  // MIP: own dataset (automatic: PET → SPECT → CT, shown datasets first) and own color table.
+  const mipCandidates = [
+    ...[...overlays].reverse().filter((e) => e.display.visible),
+    ...(reference ? [reference] : []),
+    ...entries.filter((e) => e.id !== reference?.id && !overlays.some((o) => o.id === e.id && o.display.visible)),
+  ];
+  const mipAutoId = autoMipId(
+    mipCandidates.map((e) => ({ id: e.id, modality: modalityLabel(unitSource(e.dataset)), excluded: !!(e.dataset.atlas || e.dataset.template || e.dataset.kindLabel) })),
+    reference?.id,
+  );
+  const mipEntry = byId(mipChoice.id) ?? byId(mipAutoId ?? null);
+  const mipW2v = mipEntry ? w2vById.get(mipEntry.id) : undefined;
+  const mipLayer: ViewerLayer | undefined =
+    mipEntry && mipW2v
+      ? {
+          id: mipEntry.id,
+          label: entryShort(mipEntry),
+          title: entryLabel(mipEntry),
+          volume: frameVolume(mipEntry),
+          w2v: mipW2v,
+          display: { ...mipEntry.display, lut: mipChoice.lut ?? mipEntry.display.lut, visible: true, opacity: 1 },
+          unit: layerUnits.get(mipEntry.id),
+        }
+      : undefined;
+  const mipLayerId = mipLayer?.id;
 
   // Landmark mode (registration): the viewer shows only the dataset whose landmarks are being set.
   const landmarkSideEntry = landmarkMode && activeTab === "registration" && alignTab === "landmarks" && moving && reference ? (landmarkView === "base" ? reference : moving) : null;
@@ -3491,6 +3538,7 @@ function App() {
           planeOverlay={landmarkOverlay}
           activeLayerId={active && displayedIds.includes(active.id) ? active.id : (reference?.id ?? "")}
           mipLayerId={mipLayerId}
+          mipLayer={mipLayer}
           paintMode={(brush.active && voiTool === "brush" && activeTab === "edit" && panelOpen) || (activeTab === "tumor" && panelOpen && !!tumor && (tumorMode === "add" || tumorMode === "erase"))}
           onPaint={activeTab === "tumor" ? tumorPaint : paint}
           cursor={cursor}
@@ -3513,8 +3561,19 @@ function App() {
             setFocusView(f);
           }}
           layerPanel={
-            entries.length > 1 && (
+            entries.length > 0 && (
               <LayerToggle
+                mip={{
+                  options: entries.filter((e) => !e.dataset.atlas).map((e) => ({ id: e.id, label: entryShort(e), title: entryLabel(e) })),
+                  value: mipChoice.id && byId(mipChoice.id) ? mipChoice.id : null,
+                  autoLabel: (() => {
+                    const a = byId(mipAutoId ?? null);
+                    return a ? entryShort(a) : "–";
+                  })(),
+                  lut: mipChoice.lut,
+                  onChange: (id) => setMipChoice((m) => ({ ...m, id })),
+                  onLutChange: (lut) => setMipChoice((m) => ({ ...m, lut })),
+                }}
                 rows={[
                   ...[...overlays].reverse().map((e) => ({ id: e.id, label: entryShort(e), title: entryLabel(e), lut: e.display.lut, visible: e.display.visible, opacity: e.display.opacity, role: "overlay" as const })),
                   ...(reference ? [{ id: reference.id, label: entryShort(reference), title: entryLabel(reference), lut: reference.display.lut, visible: reference.display.visible, role: "base" as const, locked: overlays.length === 0 }] : []),
