@@ -3140,6 +3140,8 @@ function App() {
       label: "Dosimetrie",
       shortLabel: "Dosi\u00admetrie",
       icon: Radiation,
+      disabled: !entries.some((e) => !e.dataset.atlas && !e.dataset.template && !isAnatomical(e.dataset.source)),
+      disabledReason: "Erst SPECT-Daten laden",
       content: <DosimetryPanel api={dosimetryApi} />,
     },
     {
