@@ -18,7 +18,10 @@ export interface Nuclide {
 
 const min = 60, h = 3600, d = 86400;
 
-/** Physical data after NNDC/DDEP (half-lives) and positron branching ratios. */
+/**
+ * Physical data: half-lives after NNDC/DDEP, for the therapy nuclides (Lu-177, Tb-161, I-131, Y-90) after
+ * ICRP Publication 107 so that the dosimetry uses one consistent decay data set; positron branching ratios.
+ */
 export const NUCLIDES: Nuclide[] = [
   { id: "F-18", code: "77004003", meaning: "^18^Fluorine", halfLifeSec: 109.77 * min, positronFraction: 0.9673, halfLifeText: "109,77 min" },
   { id: "C-11", code: "40565003", meaning: "^11^Carbon", halfLifeSec: 20.364 * min, positronFraction: 0.9975, halfLifeText: "20,364 min" },
@@ -26,10 +29,10 @@ export const NUCLIDES: Nuclide[] = [
   { id: "Ga-68", code: "35337001", meaning: "^68^Gallium", halfLifeSec: 67.71 * min, positronFraction: 0.8891, halfLifeText: "67,71 min" },
   { id: "Tc-99m", code: "72454006", meaning: "^99m^Technetium", halfLifeSec: 6.0067 * h, positronFraction: 0, halfLifeText: "6,0067 h" },
   { id: "I-123", code: "21572004", meaning: "^123^Iodine", halfLifeSec: 13.2235 * h, positronFraction: 0, halfLifeText: "13,2235 h" },
-  { id: "I-131", code: "1368003", meaning: "^131^Iodine", halfLifeSec: 8.0252 * d, positronFraction: 0, halfLifeText: "8,0252 d" },
-  { id: "Y-90", code: "14691008", meaning: "^90^Yttrium", halfLifeSec: 64.053 * h, positronFraction: 0.000032, halfLifeText: "64,053 h" },
-  { id: "Lu-177", code: "447553000", meaning: "^177^Lutetium", halfLifeSec: 6.6443 * d, positronFraction: 0, halfLifeText: "6,6443 d" },
-  { id: "Tb-161", meaning: "^161^Terbium", halfLifeSec: 6.953 * d, positronFraction: 0, halfLifeText: "6,953 d" },
+  { id: "I-131", code: "1368003", meaning: "^131^Iodine", halfLifeSec: 8.021 * d, positronFraction: 0, halfLifeText: "8,021 d" },
+  { id: "Y-90", code: "14691008", meaning: "^90^Yttrium", halfLifeSec: 64.1 * h, positronFraction: 0.000032, halfLifeText: "64,1 h" },
+  { id: "Lu-177", code: "447553000", meaning: "^177^Lutetium", halfLifeSec: 6.647 * d, positronFraction: 0, halfLifeText: "6,647 d" },
+  { id: "Tb-161", meaning: "^161^Terbium", halfLifeSec: 6.906 * d, positronFraction: 0, halfLifeText: "6,906 d" },
 ];
 
 /** Private coding scheme for nuclides without a SNOMED CT code in DICOM (Tb-161). */

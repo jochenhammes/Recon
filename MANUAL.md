@@ -397,6 +397,8 @@ nicht geeignet.
      Auger-Elektronen) nach ICRP Publication 107 (Summen nach MIRDspecs): Lu-177 147,92 keV, Tb-161 202,48 keV,
      I-131 191,84 keV, Y-90 933,1 keV. Ein eigener Wert kann eingetragen werden. Die Photonenenergie (Lu-177 35,09,
      Tb-161 36,52, I-131 382,75 keV/Zerfall) wird angezeigt, geht aber nur über einen Dosis-Voxel-Kernel ein.
+   - Halbwertszeiten ebenfalls nach ICRP 107: Lu-177 6,647 d, Tb-161 6,906 d, I-131 8,021 d, Y-90 64,1 h (gelten auch
+     für den Nuklid-Editor im DICOM-Header).
    - **Kamera-Profil**: Name, Kalibrierfaktor in cps/MBq (Kamera + Kollimator + Energiefenster + Rekonstruktion),
      optional Recovery-Koeffizienten aus einem Kugelphantom („Volumen ml : RC; …“). Profile werden im Browser
      gespeichert, das gewählte auch in der Projektdatei; Import/Export als JSON.

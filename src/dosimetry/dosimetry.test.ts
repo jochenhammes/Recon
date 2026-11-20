@@ -3,11 +3,11 @@ import type { VolumeGeometry } from "../core/geometry";
 import { Volume3D } from "../viewer/volume";
 import { countsToMBq, recoveryFor } from "./calibration";
 import { measureRegions } from "./dose";
-import { DEFAULT_ENERGIES, THERAPY_NUCLIDES, localDepositionDose } from "./nuclideData";
+import { DEFAULT_ENERGIES, THERAPY_NUCLIDES, localDepositionDose, nuclideById } from "./nuclideData";
 import { fitTac, hanscheid, madsen, trapezoid } from "./tacFit";
 
 const I = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
-const LU = { physHalfLifeH: 159.47 };
+const LU = { physHalfLifeH: 6.647 * 24 };
 
 describe("time-activity fit", () => {
   const ln2 = Math.LN2;
@@ -39,7 +39,7 @@ describe("time-activity fit", () => {
 
   it("washout is never slower than physical decay", () => {
     const r = fitTac([24, 96], [50, 60], "mono", LU);
-    expect(r.teffH!).toBeLessThanOrEqual(159.47 + 1e-6);
+    expect(r.teffH!).toBeLessThanOrEqual(6.647 * 24 + 1e-6);
   });
 
   it("single time point formulas", () => {
@@ -71,7 +71,7 @@ describe("calibration and dose", () => {
   });
 
   it("local deposition: 1 GBq Y-90 fully decaying in 1 kg ≈ 49.7 Gy", () => {
-    const tia = (1000 * 64.053) / Math.LN2;
+    const tia = (1000 * 64.1) / Math.LN2;
     expect(localDepositionDose(tia, DEFAULT_ENERGIES["Y-90"].electronKeV, 1)).toBeCloseTo(49.7, 0);
   });
 
@@ -83,6 +83,11 @@ describe("calibration and dose", () => {
       expect(e.electronKeV - e.betaKeV!).toBeLessThan(50);
     }
     expect(DEFAULT_ENERGIES["Lu-177"].electronKeV).toBe(147.92);
+    // Half-lives after ICRP 107 (consistent with the energies).
+    expect(nuclideById("Lu-177")!.halfLifeSec / 86400).toBeCloseTo(6.647, 6);
+    expect(nuclideById("Tb-161")!.halfLifeSec / 86400).toBeCloseTo(6.906, 6);
+    expect(nuclideById("I-131")!.halfLifeSec / 86400).toBeCloseTo(8.021, 6);
+    expect(nuclideById("Y-90")!.halfLifeSec / 3600).toBeCloseTo(64.1, 6);
   });
 
   it("region activity and mass from SPECT, labels and CT on different grids", () => {

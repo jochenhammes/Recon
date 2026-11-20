@@ -15,7 +15,7 @@ describe("voxel dose", () => {
     const ts = [24, 72];
     const tps = ts.map((t) => ({ spect: { volume: vol(1000 * Math.exp((-Math.LN2 * t) / teff)), matrix: I }, mbqPerCount: 1e-4, tH: t }));
     const ref = tps[0].spect;
-    const tia = await voxelTia(ref, tps, { physHalfLifeH: 159.5, electronKeV: 147.9, method: "mono" });
+    const tia = await voxelTia(ref, tps, { physHalfLifeH: 6.647 * 24, electronKeV: 147.9, method: "mono" });
     // A0 = 1000 counts × 1e-4 MBq / 0.064 ml = 1.5625 MBq/ml
     const expected = (1.5625 * teff) / Math.LN2;
     expect(tia[100]).toBeCloseTo(expected, 3);
