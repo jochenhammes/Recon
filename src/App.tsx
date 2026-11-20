@@ -2823,6 +2823,9 @@ function App() {
   const movingStatus = moving ? statusOf(moving) : null;
   const STATUS_TEXT: Record<RegStatusKind, string> = { scanner: "Patientenkoordinaten", registered: "✓ registriert", manual: "✎ manuell/Landmarken", pending: "◐ Ergebnis prüfen", running: "läuft …", queued: "wartet" };
 
+  /** Datasets that can be edited (VOI, values): all except standard-space templates. */
+  const editTargets = entries.filter((e) => !e.dataset.template).map((e) => ({ id: e.id, label: entryLabel(e) }));
+
   const registrationTab = reference && (
     <>
       <RegistrationSetup
@@ -3260,6 +3263,7 @@ function App() {
       disabled: imcalcInputs.length === 0,
       disabledReason: "Erst einen Datensatz laden",
       content: (
+        <>
         <ImcalcPanel
           datasets={imcalcInputs.map((e) => {
             const v = e.dataset.current;
@@ -3286,6 +3290,27 @@ function App() {
             setActiveId(id);
           }}
         />
+        {dataset && volume && stats && (
+          <>
+            <ValueSection
+              targets={editTargets}
+              targetId={active?.id ?? ""}
+              onTargetChange={switchActive}
+              volume={volume}
+              stats={stats}
+              scale={scale}
+              unitLabel={unitLabel}
+              threshold={threshold}
+              onThresholdChange={setThreshold}
+              value={newValue}
+              onValueChange={setNewValue}
+              busy={editBusy}
+              onApply={handleApplyEdit}
+            />
+            <HistorySection scale={scale} unitLabel={unitLabel} edits={dataset.edits} busy={editBusy} onUndo={handleUndo} onReset={handleReset} />
+          </>
+        )}
+        </>
       ),
     },
     {
@@ -3297,19 +3322,11 @@ function App() {
       badge: dataset?.edits.length,
       content: dataset && volume && stats && (
         <>
-          <ValueSection
-            volume={volume}
-            stats={stats}
-            scale={scale}
-            unitLabel={unitLabel}
-            threshold={threshold}
-            onThresholdChange={setThreshold}
-            value={newValue}
-            onValueChange={setNewValue}
-            busy={editBusy}
-            onApply={handleApplyEdit}
-          />
+
           <VoiSection
+            targets={editTargets}
+            targetId={active?.id ?? ""}
+            onTargetChange={switchActive}
             scale={scale}
             unitLabel={unitLabel}
             tool={voiTool}

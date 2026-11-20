@@ -47,6 +47,28 @@ function TextInput({ label, value, onChange }: { label: string; value: string; o
   );
 }
 
+/** Dataset an edit card works on (the active dataset). */
+export interface EditTarget {
+  targets: { id: string; label: string }[];
+  targetId: string;
+  onTargetChange: (id: string) => void;
+}
+
+function TargetSelect({ targets, targetId, onTargetChange, disabled }: EditTarget & { disabled?: boolean }) {
+  return (
+    <label className="field">
+      Datensatz
+      <select value={targetId} disabled={disabled} onChange={(e) => onTargetChange(e.target.value)}>
+        {targets.map((t) => (
+          <option key={t.id} value={t.id} title={t.label}>
+            {t.label.length > 44 ? `${t.label.slice(0, 43)}…` : t.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 // ─── Values ──────────────────────────────────────────────────────────────────
 
 type ValueMode = ValueRule["kind"];
@@ -59,7 +81,7 @@ const VALUE_MODES: { value: ValueMode; label: string }[] = [
   { value: "linear", label: "Linear umrechnen: a · x + b" },
 ];
 
-export interface ValueSectionProps extends Units {
+export interface ValueSectionProps extends Units, EditTarget {
   volume: Volume3D;
   stats: VolumeStats;
   /** Threshold text (display units), shared with the histogram marker. */
@@ -119,7 +141,8 @@ export function ValueSection(props: ValueSectionProps) {
   }
 
   return (
-    <Card title={<>Werte</>}>
+    <Card title={<>Werte</>} info="Werte des gewählten Datensatzes ersetzen, begrenzen oder linear umrechnen (in der angezeigten Einheit). Rückgängig im Verlauf unten.">
+      <TargetSelect targets={props.targets} targetId={props.targetId} onTargetChange={props.onTargetChange} disabled={busy} />
       <label className="field">
         Operation
         <select value={mode} onChange={(e) => changeMode(e.target.value as ValueMode)}>
@@ -180,7 +203,7 @@ export interface BrushState {
   erase: boolean;
 }
 
-export interface VoiSectionProps extends Units {
+export interface VoiSectionProps extends Units, EditTarget {
   tool: VoiTool;
   onToolChange: (t: VoiTool) => void;
   sphereRadius: number;
@@ -216,7 +239,8 @@ export function VoiSection(props: VoiSectionProps) {
   const affected = useMemo(() => (hasVoi && action ? countFor(region, action) : null), [hasVoi, region, action, countFor]);
 
   return (
-    <Card title={<>VOI (Volume of Interest)</>}>
+    <Card title={<>VOI (Volume of Interest)</>} info="VOI (Kugel, Quader oder Pinsel) auf dem gewählten Datensatz setzen; Werte innerhalb oder außerhalb ersetzen bzw. skalieren, oder auf die VOI zuschneiden. Ein Wechsel des Datensatzes verwirft die aktuelle VOI.">
+      <TargetSelect targets={props.targets} targetId={props.targetId} onTargetChange={props.onTargetChange} disabled={busy} />
       <div className="segmented-control" role="group" aria-label="VOI-Werkzeug">
         {(
           [

@@ -618,6 +618,11 @@ Bildraum der Eingaben – anzeigen, exportieren (NIfTI, mit Patient-ID), im Proj
   Patienten vorher normalisieren ([Abschnitt 6](#6-standardraum-mni-atlas-und-suvr)). Labelbilder sind ausgenommen;
   dynamische Serien gehen mit ihrem Mittelbild ein.
 - **Einheit:** gerechnet wird mit den angezeigten Werten (SUV, wenn eingestellt; sonst Originalwerte).
+- **Werte** (Karte unter den Rechnungen): Werte des gewählten **Datensatzes** direkt ändern – *Werte ≥ Grenzwert
+  ersetzen*, *Werte ≤ Grenzwert ersetzen*, *Werte in Bereich [a, b] ersetzen*, *Auf Bereich [min, max] begrenzen*,
+  *Linear umrechnen: a · x + b*. Eingabe in Originaleinheit oder SUV; angezeigt wird, wie viele Voxel betroffen sind;
+  *Anwenden*. Anders als die Rechnungen oben ändert das den Datensatz selbst (kein neuer Datensatz); *Rückgängig* und
+  *Original* im *Verlauf* darunter (derselbe Verlauf wie unter *Bearbeiten*).
 
 | Operation | Eingabe | Ergebnis |
 |---|---|---|
@@ -636,15 +641,15 @@ Differenzbilder ebenfalls mit symmetrischem Fenster. Namen werden vorgeschlagen 
 
 ![VOI-Kugel am Fadenkreuz](docs/images/40-bearbeiten-voi.jpg)
 
-Bereich **Bearbeiten** (wirkt auf den aktiven Datensatz):
+Bereich **Bearbeiten**. Die Werte-Operationen (Grenzwert ersetzen, begrenzen, linear umrechnen) stehen im Bereich
+**IMCALC** (Karte *Werte*, siehe unten).
 
-1. **Werte**: *Werte ≥ Grenzwert ersetzen*, *Werte ≤ Grenzwert ersetzen*, *Werte in Bereich [a, b] ersetzen*,
-   *Auf Bereich [min, max] begrenzen*, *Linear umrechnen: a · x + b*.
-   Eingabe in Originaleinheit oder SUV; angezeigt wird, wie viele Voxel betroffen sind; *Anwenden*.
-2. **VOI**: *Kugel* oder *Quader* am Fadenkreuz (Radius/Größe in mm) oder *Pinsel* (malen/radieren, schichtweise).
+1. **VOI**: oben in der Karte den **Datensatz** wählen, auf den die VOI-Operationen wirken (macht ihn zum aktiven
+   Datensatz; eine gesetzte VOI wird dabei verworfen). *Kugel* oder *Quader* am Fadenkreuz (Radius/Größe in mm) oder
+   *Pinsel* (malen/radieren, schichtweise).
    Statistik (Volumen, Mittel, Max, Min, Peak 1 ml); *Bereich innen/außen*, *Aktion* (Wert setzen, skalieren) →
    *Auf VOI anwenden*; *Auf VOI zuschneiden*; *VOI löschen*.
-3. **Triple-Window-CT** (Karte aufklappen; braucht ein CT und seine Organkarte aus der CT-Organsegmentierung,
+2. **Triple-Window-CT** (Karte aufklappen; braucht ein CT und seine Organkarte aus der CT-Organsegmentierung,
    [Abschnitt 9](#9-ct-organsegmentierung)): erzeugt einen künstlichen CT-Datensatz für den schnellen anatomischen
    Überblick in **einem** Fenster. Alle Voxel stehen im Weichteilfenster (Standard 40/400); Voxel der Lungen und der
    Trachea werden so umgerechnet, dass sie wie im Lungenfenster (−600/1500) erscheinen, Voxel des Skeletts wie im
@@ -655,8 +660,8 @@ Bereich **Bearbeiten** (wirkt auf den aktiven Datensatz):
    „CT 3W · Triple-Window …“ es dort (das Original bleibt unter *Ebenen*). Die Werte sind keine echten HU mehr
    (Einheit „HU*“) – nicht für Messungen oder Diagnostik; beim DICOM-Export heißt die Serie
    „Triple-Window (kuenstlich, nicht diagnostisch)“, Fenster 40/400.
-4. **Filter**: Gauß-Glättung (FWHM in mm).
-5. **Geometrie**: Spiegeln (R↔L, A↔P, H↔F), Drehen (↻ 90° / ↺ 90°), Resampling auf neue Voxelgröße.
+3. **Filter**: Gauß-Glättung (FWHM in mm).
+4. **Geometrie**: Spiegeln (R↔L, A↔P, H↔F), Drehen (↻ 90° / ↺ 90°), Resampling auf neue Voxelgröße.
    Die Schritte wirken auf **alle geladenen Datensätze**; einzelne lassen sich in der Liste *Betroffene Datensätze*
    abwählen (Vorlagen sind vorab abgewählt, dynamische Daten nicht möglich).
    - Gespiegelt und gedreht wird um die Mitte des aktiven Datensatzes und entlang der Patientenachsen, so dass
@@ -666,7 +671,7 @@ Bereich **Bearbeiten** (wirkt auf den aktiven Datensatz):
    - Resampling gibt allen angehakten Datensätzen dieselbe Voxelgröße; Labelbilder werden dabei mit nächstem Nachbarn
      interpoliert.
    - *Rückgängig* nimmt einen gemeinsamen Schritt in allen beteiligten Datensätzen zurück.
-6. **Verlauf**: *Rückgängig* nimmt den letzten Schritt zurück, *Original* verwirft alle Bearbeitungen
+5. **Verlauf**: *Rückgängig* nimmt den letzten Schritt zurück, *Original* verwirft alle Bearbeitungen
    (neu berechnet aus dem Original, keine Kopien im Speicher).
 
 ---
