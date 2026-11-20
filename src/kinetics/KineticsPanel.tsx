@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { umlaut, withPatientId } from "../core/exportName";
 import { BigTable } from "../ui/BigTable";
 import { Card } from "../ui/Card";
+import { InfoText } from "../ui/Info";
 import { type AtlasInfo, REFERENCE_PRESETS, presetIndices } from "../atlas/atlas";
 import { formatValue } from "../components/format";
 import { csvText, csvWithInfo } from "../core/csv";
@@ -277,7 +278,7 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
             </>
           } done={!!dyn?.inMni} status={info ? { text: `${info.frames.length} Frames${dyn?.inMni ? " · MNI" : ""}`, tone: dyn?.inMni ? "ok" : "info" } : { text: "keine Daten", tone: "warn" }}>
         {api.dynamics.length === 0 ? (
-          <p className="tool-hint">Keine dynamischen Daten – im Bereich „Daten“ eine dynamische DICOM-Serie oder ein 4D-NIfTI (+ BIDS-JSON) laden.</p>
+          <InfoText details="Im Bereich „Daten“ eine dynamische DICOM-Serie oder ein 4D-NIfTI (+ BIDS-JSON mit Frame-Zeiten) laden.">Keine dynamischen Daten</InfoText>
         ) : (
           <>
             <label className="field">
@@ -363,7 +364,11 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
             {info.motion && (
               <>
                 <Chart xLabel="Frame-Mitte (min)" yLabel="max. Verschiebung (mm)" series={[{ label: "Bewegung", x: frameMids({ start: minutes(info.start), duration: minutes(info.duration) }), y: info.motion.map((m) => m.maxShiftMm), style: "both", color: "#a78bfa" }]} />
-                {maxShift! > 2 && <p className="warning-banner">Bewegung bis {fmt(maxShift!, 1)} mm – korrigiert; Ergebnis bitte im Viewer prüfen.</p>}
+                {maxShift! > 2 && (
+                  <InfoText warn details="Die Bewegung wurde korrigiert; das Ergebnis bitte im Viewer prüfen (Frames durchblättern).">
+                    Bewegung bis {fmt(maxShift!, 1)} mm
+                  </InfoText>
+                )}
               </>
             )}
           </Card>
@@ -390,7 +395,9 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
                 <input value={regTo} placeholder={fmt((info.start.at(-1)! + info.duration.at(-1)!) / 60, 0)} disabled={!!busy} onChange={(e) => setRegTo(e.target.value)} />
               </label>
             </div>
-            {!t1Id && <p className="tool-hint">Ohne MRT deutlich ungenauer (Phantom: Putamen-BP_ND 1,3 statt 1,8) – wenn möglich ein T1 wählen.</p>}
+            {!t1Id && (
+              <InfoText warn details="Ohne MRT deutlich ungenauer (Phantom: Putamen-BP_ND 1,3 statt 1,8) – wenn möglich ein T1 wählen.">Ohne MRT ungenauer</InfoText>
+            )}
             <label className="field">
               T1-MRT
               <select value={t1Id} disabled={!!busy} onChange={(e) => setT1Id(e.target.value)}>
@@ -454,7 +461,7 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
                   <input value={tStar} disabled={!!busy} onChange={(e) => setTStar(e.target.value)} />
                 </label>
               ) : (
-                <p className="tool-hint">SRTM mit Basisfunktionen (Gunn 1997): BP_ND, R1, k2 – Gewichtung nach Frame-Dauer.</p>
+                <InfoText details="SRTM mit Basisfunktionen (Gunn 1997): BP_ND, R1, k2 – Gewichtung nach Frame-Dauer.">SRTM (Basisfunktionen)</InfoText>
               )}
               <label className="checkbox-field">
                 <input type="checkbox" checked={makeMaps} onChange={(e) => setMakeMaps(e.target.checked)} /> Parameterkarten (voxelweise) anlegen

@@ -221,7 +221,7 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
       {props.loadError && <div className="error-banner">{props.loadError}</div>}
 
       {props.labelSets.length === 0 ? (
-        <p className="tool-hint">Noch keine Labels geladen – CT-Segmentierung (Bereich „Segmentierung & MTV“), Atlas oder ein Labelbild laden.</p>
+        <InfoText details="Labels entstehen durch die CT-Organsegmentierung (Bereich „Segmentierung & MTV“), einen Atlas (Bereich „Analyse“ bzw. „Standardraum“) oder ein geladenes Labelbild.">Noch keine Labels</InfoText>
       ) : (
         <>
           <label className="field">
@@ -236,7 +236,7 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
           </label>
           {labelSet && unnamed(labelSet.atlas) && (
             <div className="warning-banner">
-              Diese Labels haben keine Namen (z. B. mit einer älteren Version exportiert).
+              <span title="Diese Labels haben keine Namen (z. B. mit einer älteren Version exportiert). Namen zuordnen:">Labels ohne Namen – zuordnen:</span>
               <div className="button-row">
                 {Math.max(...labelSet.atlas.labels.keys()) <= 117 && (
                   <button className="secondary-btn" onClick={() => props.onAssignNames(labelSet.id, "totalseg")}>

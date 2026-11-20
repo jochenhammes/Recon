@@ -102,7 +102,7 @@ export function DatasetOverview({ rows, selectedId, onSelect, voi }: DatasetOver
             </tbody>
           </table>
         </BigTable>
-        <p className="tool-hint">Klick auf eine Zeile wählt den Datensatz für die Detailanalyse (Histogramm) aus.</p>
+        <p className="tool-hint">Zeile anklicken = Detailanalyse</p>
       </Card>
       {voi && voiRows && (
         <Card title={<>VOI auf allen Datensätzen</>}>

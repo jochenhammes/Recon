@@ -48,7 +48,11 @@ export function AlignCard(props: AlignCardProps) {
           ))}
         </select>
       </label>
-      {props.mismatch && <p className="tool-hint tool-warning">Basis und Datensatz überlappen kaum – zuerst über Landmarken ausrichten.</p>}
+      {props.mismatch && (
+        <p className="tool-hint tool-warning" title="Basis und Datensatz überlappen kaum – die Koordinatensysteme passen nicht zusammen. Zuerst über Landmarken ausrichten.">
+          Koordinaten passen nicht → Landmarken
+        </p>
+      )}
       <div className="segmented-control align-tabs" role="tablist">
         {TABS.map((t) => (
           <button key={t.id} role="tab" aria-selected={props.tab === t.id} className={props.tab === t.id ? "active" : ""} title={t.title} onClick={() => props.onTabChange(t.id)}>

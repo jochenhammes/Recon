@@ -2,6 +2,7 @@ import type { VolumeStats } from "../analysis/stats";
 import type { SuvResult } from "../analysis/suv";
 import type { Volume3D } from "../viewer/volume";
 import { Histogram } from "./Histogram";
+import { InfoText } from "../ui/Info";
 import { type UnitMode, formatCount, formatValue } from "./format";
 
 export interface AnalysisPanelProps {
@@ -31,15 +32,21 @@ export function AnalysisPanel({ volume, stats, marker, scale, unitLabel, unitMod
               <option value="suv">SUV (Körpergewicht)</option>
             </select>
           </label>
-          <p className="tool-hint">
-            {suv.ok
-              ? `SUV 1 ≙ ${formatValue(1 / suv.info.factor)} Bq/ml · ${formatValue(suv.info.weightKg)} kg · ` +
+          {suv.ok ? (
+            <InfoText
+              details={
+                `SUV 1 ≙ ${formatValue(1 / suv.info.factor)} Bq/ml · Körpergewicht ${formatValue(suv.info.weightKg)} kg · ` +
                 `${formatValue(suv.info.injectedDoseBq / 1e6)} MBq injiziert, ` +
                 (suv.info.decayCorrection === "START"
-                  ? `${formatValue(suv.info.doseAtReferenceBq / 1e6)} MBq bei Serienstart (+${formatValue(Math.round(suv.info.minutesToReference))} min)`
-                  : "Zerfallskorrektur auf Injektionszeit")
-              : `SUV nicht verfügbar: ${suv.reason}`}
-          </p>
+                  ? `${formatValue(suv.info.doseAtReferenceBq / 1e6)} MBq bei Serienstart (+${formatValue(Math.round(suv.info.minutesToReference))} min).`
+                  : "Zerfallskorrektur auf Injektionszeit.")
+              }
+            >
+              SUV verfügbar
+            </InfoText>
+          ) : (
+            <InfoText details={`SUV nicht verfügbar: ${suv.reason}`}>SUV nicht verfügbar</InfoText>
+          )}
         </div>
       )}
       <dl className="summary-list">

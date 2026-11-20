@@ -8,6 +8,7 @@ import { currentNuclide } from "../header/radionuclide";
 import { Chart, type ChartSeries } from "../kinetics/Chart";
 import { BigTable } from "../ui/BigTable";
 import { Card } from "../ui/Card";
+import { InfoText } from "../ui/Info";
 import { type CameraProfile, countsToMBq, loadProfiles, parseProfiles, recoveryFor, saveProfiles, timePointFromHeader } from "./calibration";
 import { type Placed, measureRegions } from "./dose";
 import { DEFAULT_ENERGIES, THERAPY_NUCLIDES, localDepositionDose, nuclideById } from "./nuclideData";
@@ -407,10 +408,9 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
 
   return (
     <>
-      <p className="tool-hint">
-        Forschungswerkzeug, kein zertifiziertes Medizinprodukt. Grundlage: quantitative SPECT vom Gerät (OSEM mit Schwächungs-, Streu- und
-        Auflösungskorrektur) in Counts; die SPECT-Rekonstruktion dieser App ist dafür nicht geeignet.
-      </p>
+      <InfoText details="Forschungswerkzeug, kein zertifiziertes Medizinprodukt. Grundlage: quantitative SPECT vom Gerät (OSEM mit Schwächungs-, Streu- und Auflösungskorrektur) in Counts; die SPECT-Rekonstruktion dieser App ist dafür nicht geeignet.">
+        Forschungswerkzeug · SPECT vom Gerät
+      </InfoText>
 
       <Card title={<>Zeitpunkte</>} status={tps.length ? { text: `${tps.length}`, tone: "info" } : null} persistKey="dos-tp"
         info="SPECT-Datensätze der Therapie (1–4 Zeitpunkte) mit dem CT derselben Aufnahme. Der Zeitpunkt nach Injektion wird aus Aufnahme- und Injektionszeit im DICOM-Header berechnet und kann überschrieben werden; ebenso die Aufnahmedauer (Projektionen × Zeit pro Projektion × Detektoren).">
@@ -504,7 +504,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
             <button className="secondary-btn" disabled={!!busy || !tpViews[0].ctId} onClick={() => void register()}>
               Zeitpunkte registrieren (CT → CT von Zeitpunkt 1)
             </button>
-            <p className="tool-hint">Rigide CT-CT-Registrierung; SPECT und Labelbilder des Zeitpunkts werden mitbewegt. Nötig für Voxel-Dosiskarten und für Regionen, die für alle Zeitpunkte gelten.</p>
+            <InfoText details="Rigide CT-CT-Registrierung; SPECT und Labelbilder des Zeitpunkts werden mitbewegt. Nötig für Voxel-Dosiskarten und für Regionen, die für alle Zeitpunkte gelten.">Für Voxelkarte nötig</InfoText>
           </>
         )}
       </Card>
@@ -534,14 +534,17 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
               })} />
           </label>
         </div>
-        {!energyChecked && <p className="tool-hint tool-warning">Vorgabewert {DEFAULT_ENERGIES[nuclideId]?.electronKeV} keV ist ungeprüft – bitte gegen ICRP 107 (oder NNDC NuDat) prüfen und eintragen.</p>}
+        {!energyChecked && (
+          <InfoText warn details={`Vorgabewert ${DEFAULT_ENERGIES[nuclideId]?.electronKeV} keV ist ungeprüft – bitte gegen ICRP 107 (oder NNDC NuDat) prüfen und eintragen.`}>
+            Energie ungeprüft
+          </InfoText>
+        )}
         {DEFAULT_ENERGIES[nuclideId] && (
-          <p className="tool-hint">
-            {setup.energyOverride[nuclideId] !== undefined ? `Eigener Wert; Vorgabe ${DEFAULT_ENERGIES[nuclideId].electronKeV} keV. ` : ""}
-            Elektronen {DEFAULT_ENERGIES[nuclideId].electronKeV} keV/Zerfall
-            {DEFAULT_ENERGIES[nuclideId].betaKeV !== undefined ? ` (β⁻ ${DEFAULT_ENERGIES[nuclideId].betaKeV} keV)` : ""}
-            {DEFAULT_ENERGIES[nuclideId].photonKeV !== undefined ? `, Photonen ${DEFAULT_ENERGIES[nuclideId].photonKeV} keV/Zerfall (nur mit Kernel berücksichtigt)` : ""} · Quelle: {DEFAULT_ENERGIES[nuclideId].source}
-          </p>
+          <InfoText
+            details={`Elektronen ${DEFAULT_ENERGIES[nuclideId].electronKeV} keV/Zerfall${DEFAULT_ENERGIES[nuclideId].betaKeV !== undefined ? ` (davon β⁻ ${DEFAULT_ENERGIES[nuclideId].betaKeV} keV)` : ""}${DEFAULT_ENERGIES[nuclideId].photonKeV !== undefined ? `, Photonen ${DEFAULT_ENERGIES[nuclideId].photonKeV} keV/Zerfall (nur mit Kernel berücksichtigt)` : ""}. Quelle: ${DEFAULT_ENERGIES[nuclideId].source}.`}
+          >
+            {setup.energyOverride[nuclideId] !== undefined ? `Eigener Wert · Vorgabe ${DEFAULT_ENERGIES[nuclideId].electronKeV} keV` : "ICRP 107"}
+          </InfoText>
         )}
         <ProfileEditor profiles={profiles} current={profile} nuclide={nuclideId} onSelect={(p) => set((s) => ({ ...s, profile: p }))} onSave={saveProfile}
           onDelete={(id) => {
@@ -558,7 +561,9 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
 
       <Card title={<>Regionen</>} persistKey="dos-reg" status={labelNames.size ? { text: `${[...labelNames.keys()].filter((k) => regionOpts(k).enabled).length} aktiv`, tone: "info" } : null}
         info="Labelbilder (CT-Organsegmentierung, Läsionen, eigene Segmentierungen). Ein Labelbild gilt für seinen Zeitpunkt oder – nach der Registrierung – für alle Zeitpunkte. Regionen gleichen Namens werden über die Zeitpunkte verbunden. Speichel- und Tränendrüsen sind nicht im CT-Modell: als eigene Segmentierung oder VOI laden.">
-        {labelCandidates.length === 0 && <p className="tool-hint">Noch keine Labelbilder: Organe auf dem CT segmentieren (oben) oder Läsionen unter Segmentierung & MTV.</p>}
+        {labelCandidates.length === 0 && (
+          <InfoText details="Organe auf dem CT segmentieren (Karte Zeitpunkte) oder Läsionen im Bereich „Segmentierung & MTV“ erzeugen; eigene Segmentierungen als NIfTI laden.">Noch keine Labelbilder</InfoText>
+        )}
         {labelCandidates.map((e) => {
           const ls = setup.labelSets.find((l) => l.id === e.id);
           return (
@@ -607,7 +612,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
       <Card title={<>Kurven und Dosis</>} persistKey="dos-res" status={rows.length ? { text: `${rows.length} Regionen`, tone: "ok" } : null}
         info="Je Region: Aktivität (MBq, ggf. durch den Recovery-Koeffizienten geteilt) über der Zeit, Fit und zeitintegrierte Aktivität (TIA). Automatisch: 1 Zeitpunkt → Hänscheid (bzw. Madsen mit T_eff), 2 → monoexponentiell, ≥ 3 → biexponentiell mit Aufnahmephase, wenn die Aktivität zwischen den ersten Zeitpunkten noch steigt, sonst monoexponentiell. Die Auswaschung ist nie langsamer als der physikalische Zerfall. Dosis = TIA × Elektronenenergie / Masse (lokale Energiedeposition; Masse aus CT-Dichte). Nieren: BED für monoexponentielle Auswaschung.">
         {rows.length === 0 ? (
-          <p className="tool-hint">Noch keine Messwerte: Zeitpunkte, Kalibrierung und Regionen festlegen, dann „Aktivitäten messen“.</p>
+          <InfoText details="Zeitpunkte, Kalibrierung und Regionen festlegen, dann „Aktivitäten messen“.">Noch keine Messwerte</InfoText>
         ) : (
           <>
             {sel && (
@@ -726,7 +731,9 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
               </button>
             </>
           ) : (
-            <>Ohne Kernel: lokale Energiedeposition (Lu-177, Tb-161; für I-131 und Y-90 fehlen dann Photonen bzw. die β-Reichweite). Kernel-Tabelle: Zeilen „i j k S“ (z. B. Voxel-S-Werte nach Lanconelli 2012 für die passende Voxelgröße).</>
+            <span title="Ohne Kernel: lokale Energiedeposition (Lu-177, Tb-161; für I-131 und Y-90 fehlen dann Photonen bzw. die β-Reichweite). Kernel-Tabelle: Zeilen „i j k S“, z. B. Voxel-S-Werte nach Lanconelli 2012 für die passende Voxelgröße.">
+              Ohne Kernel: lokale Deposition
+            </span>
           )}
         </p>
         <button className="primary-btn" disabled={!!busy || !tpViews.length || !profile || energy === undefined} onClick={() => void doseMap()}>

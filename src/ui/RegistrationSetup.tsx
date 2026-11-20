@@ -1,6 +1,7 @@
 import type { CostName } from "../registration/cost";
 import { shortLabel } from "../core/shortLabel";
 import { Card } from "./Card";
+import { InfoText } from "./Info";
 
 export type RegStatusKind = "scanner" | "registered" | "manual" | "pending" | "running" | "queued";
 
@@ -181,7 +182,7 @@ export function RegistrationSetup(props: RegistrationSetupProps) {
         )}
         {anyPending && !props.running && (
           <>
-            <p className="tool-hint">Die Ansicht zeigt die Ergebnisse bereits – bitte prüfen (Zeile anklicken = als Overlay zeigen).</p>
+            <InfoText details="Die Ansicht zeigt die Ergebnisse bereits – bitte prüfen (Zeile anklicken = als Overlay zeigen), dann übernehmen oder verwerfen.">Ergebnisse prüfen</InfoText>
             <button className="primary-btn" onClick={props.onAcceptAll}>
               Alle Ergebnisse übernehmen
             </button>

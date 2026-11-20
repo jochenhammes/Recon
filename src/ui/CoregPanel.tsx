@@ -65,12 +65,12 @@ export function CoregSettingsForm(props: CoregSettingsFormProps) {
       </div>
       <label className="checkbox-field">
         <input type="checkbox" checked={settings.coarseSearch} disabled={running} onChange={(e) => set({ coarseSearch: e.target.checked })} />
-        <span>Grobsuche (Schwerpunkt + Rotationsraster ±30°) – für Daten aus verschiedenen Untersuchungen</span>
+        <span title="Schwerpunkt-Ausrichtung plus Rotationsraster ±30° auf der gröbsten Stufe – für Daten aus verschiedenen Untersuchungen">Grobsuche</span>
       </label>
       {settings.coarseSearch && (
         <label className="checkbox-field">
           <input type="checkbox" checked={!!settings.keepStart} disabled={running} onChange={(e) => set({ keepStart: e.target.checked })} />
-          <span>Startlage beibehalten (nach Landmarken): nur ±10° / ±10 mm um die aktuelle Lage suchen</span>
+          <span title="Nach Landmarken-Ausrichtung: nur ±10° / ±10 mm um die aktuelle Lage suchen, kein Sprung auf den Schwerpunkt">Startlage beibehalten</span>
         </label>
       )}
     </>

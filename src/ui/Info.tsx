@@ -16,11 +16,11 @@ export function CardTitle({ children, info }: { children: ReactNode; info?: Reac
 }
 
 /** Short visible text plus an ⓘ that unfolds the details (for places without a card heading). */
-export function InfoText({ children, details }: { children?: ReactNode; details: ReactNode }) {
+export function InfoText({ children, details, warn }: { children?: ReactNode; details: ReactNode; warn?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <p className="tool-hint info-line">
+      <p className={warn ? "tool-hint tool-warning info-line" : "tool-hint info-line"}>
         {children}
         <InfoButton open={open} onToggle={() => setOpen((o) => !o)} />
       </p>

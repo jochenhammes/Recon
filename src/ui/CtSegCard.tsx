@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Card } from "./Card";
+import { InfoText } from "./Info";
 import { tileTimeLimitSec } from "../segmentation/ctSegment";
 import { type SegmentProgress, inferenceEstimate } from "../segmentation/infer";
 import type { CtSegBackend } from "../workers/ctseg.worker";
@@ -97,12 +98,13 @@ export function CtSegCard(props: CtSegCardProps) {
               <option value="wasm">CPU</option>
             </select>
           </label>
-          <p className="tool-hint">
-            {firefox ? "In Firefox ist WebGPU mit dem Modell noch unzuverlässig – „Automatisch“ nutzt daher die CPU." : "Bei WebGPU-Fehlern wird automatisch auf der CPU weitergerechnet."}
-          </p>
-          {!props.webgpu && (
-            <p className="warning-banner">Kein WebGPU verfügbar: Die Berechnung läuft auf der CPU und kann für ein Ganzkörper-CT sehr lange dauern (Chrome/Edge mit aktueller Grafikkarte empfohlen).</p>
-          )}
+          {!props.webgpu ? (
+            <InfoText warn details="Kein WebGPU verfügbar: Die Berechnung läuft auf der CPU und kann für ein Ganzkörper-CT sehr lange dauern. Empfohlen: Chrome oder Edge mit aktueller Grafikkarte. Bei WebGPU-Fehlern wird automatisch auf der CPU weitergerechnet.">
+              CPU-Modus – langsam
+            </InfoText>
+          ) : firefox ? (
+            <InfoText details="In Firefox ist WebGPU mit diesem Modell noch unzuverlässig – „Automatisch“ nutzt daher die CPU. Bei WebGPU-Fehlern wird automatisch auf der CPU weitergerechnet.">Firefox: CPU</InfoText>
+          ) : null}
           {!props.running ? (
             <button className="primary-btn" disabled={!ct} onClick={() => ct && props.onRun(ct.id, backend)}>
               Organe segmentieren
@@ -119,15 +121,18 @@ export function CtSegCard(props: CtSegCardProps) {
                   ? `${p.stage} · Kachel ${Math.min(p.done + 1, p.total)}/${p.total}` +
                     (p.done < p.total ? ` läuft seit ${fmtTime(inference.since)}${inference.avg ? ` (bisher Ø ${fmtTime(inference.avg)})` : ""}` : "") +
                     ` · ${fmtTime(inference.elapsed)} vergangen` +
-                    (inference.remaining !== undefined ? ` · noch ca. ${fmtTime(inference.remaining)}` : p.done === 0 && p.backend === "webgpu" ? " · die erste Kachel dauert länger (Shader werden übersetzt)" : "")
+                    (inference.remaining !== undefined ? ` · noch ca. ${fmtTime(inference.remaining)}` : p.done === 0 && p.backend === "webgpu" ? " · erste Kachel langsamer" : "")
                   : p
                     ? p.stage
                     : "Vorbereitung …"}
               </p>
               {slow && p?.backend === "webgpu" && (
-                <p className="warning-banner">
-                  Diese Kachel dauert ungewöhnlich lange. Reagiert WebGPU nicht, wird nach {fmtTime(tileTimeLimitSec(p.done, p.elapsed ?? 0))} automatisch auf der CPU neu gestartet – oder jetzt abbrechen und „CPU“ wählen.
-                </p>
+                <InfoText
+                  warn
+                  details={`Diese Kachel dauert ungewöhnlich lange. Reagiert WebGPU nicht, wird nach ${fmtTime(tileTimeLimitSec(p.done, p.elapsed ?? 0))} automatisch auf der CPU neu gestartet – oder jetzt abbrechen und „CPU“ wählen.`}
+                >
+                  Kachel ungewöhnlich langsam
+                </InfoText>
               )}
               <button className="secondary-btn" onClick={props.onCancel}>
                 Abbrechen

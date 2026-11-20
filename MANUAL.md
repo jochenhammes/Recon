@@ -88,7 +88,7 @@ Alles wird lokal im Browser berechnet; Daten werden nirgendwohin hochgeladen.
    Ganzkörper-CT, Daten einer anderen Region – wird geladen, aber **nicht eingeblendet**; ein Hinweis unten rechts nennt
    diese Datensätze. Einblenden über **Ebenen** im Viewer oder das Auge in der Datensatzliste.
    **Patient-ID** (Feld oberhalb der Liste, optional): wird allen exportierten NIfTI- und CSV-Dateien vorangestellt
-   (`P0815_…nii`, `P0815_…csv`, auch in ZIP-Archiven solcher Dateien); DICOM-Exporte bleiben unverändert. Die ID wird im
+   (`P0815_…nii`, `P0815_…csv`, auch in ZIP-Archiven solcher Dateien) sowie der Projektdatei (`P0815_Recon-Projekt_….recon`); DICOM-Exporte bleiben unverändert. Die ID wird im
    Projekt mitgespeichert.
 4. **Datensatzliste**: eine Zeile je Datensatz mit Modalität (farbig), Schlagwort, Name und *Basis*-Markierung.
    - Klick auf die Zeile: Details (Bezeichnung, Modalität, Matrix, Voxelgröße, Koordinaten, Dynamik) und Schlagwort.

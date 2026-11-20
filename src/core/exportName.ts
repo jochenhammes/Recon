@@ -22,12 +22,12 @@ export function getExportPatientId(): string {
 }
 
 /** Adds the patient ID to NIfTI/CSV file names (and ZIPs of them with `archive`); other names are unchanged. */
-export function withPatientId(name: string, opts: { archive?: boolean } = {}): string {
+export function withPatientId(name: string, opts: { archive?: boolean; project?: boolean } = {}): string {
   if (!patientId) return name;
   const slash = name.lastIndexOf("/");
   const dir = name.slice(0, slash + 1);
   const file = name.slice(slash + 1);
-  const eligible = /\.(nii|nii\.gz|csv)$/i.test(file) || (opts.archive && /\.zip$/i.test(file));
+  const eligible = /\.(nii|nii\.gz|csv)$/i.test(file) || (opts.archive && /\.zip$/i.test(file)) || (opts.project && /\.recon$/i.test(file));
   if (!eligible || file.startsWith(`${patientId}_`)) return name;
   return `${dir}${patientId}_${file}`;
 }

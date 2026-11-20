@@ -625,7 +625,7 @@ function App() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `Recon-Projekt_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}${PROJECT_EXTENSION}`;
+      a.download = withPatientId(`Recon-Projekt_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}${PROJECT_EXTENSION}`, { project: true });
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -2534,11 +2534,9 @@ function App() {
           Patient-ID
           <input type="text" value={patientId} maxLength={64} placeholder="optional, z. B. P0815" onChange={(e) => setPatientId(e.target.value)} />
         </label>
-        <p className="tool-hint">
-          {sanitizePatientId(patientId)
-            ? `Exportierte NIfTI- und CSV-Dateien beginnen mit „${sanitizePatientId(patientId)}_“.`
-            : "Wird allen exportierten NIfTI- und CSV-Dateinamen vorangestellt."}
-        </p>
+        <InfoText details="Wird allen exportierten NIfTI- und CSV-Dateinamen vorangestellt (auch in ZIP-Archiven solcher Dateien) sowie dem Namen der Projektdatei (.recon); DICOM-Exporte bleiben unverändert. Wird im Projekt mitgespeichert.">
+          {sanitizePatientId(patientId) ? `Präfix „${sanitizePatientId(patientId)}_“` : "Präfix für Exportnamen"}
+        </InfoText>
       </section>
       {entries.length > 0 && (
         <DatasetList
@@ -2598,7 +2596,7 @@ function App() {
       />
       <details className="card collapsible">
         <summary>Standardraum-Vorlage</summary>
-        <p className="hint">Vorlage für die räumliche Normalisierung (Registrierung → Standardraum).</p>
+        <InfoText details="Vorlage für die räumliche Normalisierung im Bereich Standardraum (MNI): mitgelieferte MNI-/SPM-Vorlagen oder eine eigene Vorlage.">Für die Normalisierung</InfoText>
         <button
           className="secondary-btn"
           disabled={templateBusy || entries.some((e) => e.dataset.template?.name === BUNDLED_MNI.name)}
@@ -2980,11 +2978,9 @@ function App() {
               >
                 Auf Patientenkoordinaten zurücksetzen
               </button>
-              <p className="tool-hint">
-                Ursprung dauerhaft in die Datei übernehmen (wie SPM „Set origin“): Landmarke 1 wird zu (0,0,0); die Lage zu den anderen Datensätzen bleibt,
-                der Export enthält den neuen Ursprung (DICOM als neue Serie). Gilt auch für die Datensätze derselben Aufnahme. Vor einer Normalisierung
-                ausführen.
-              </p>
+              <InfoText details="Wie SPM „Set origin“: Landmarke 1 wird zum Koordinatenursprung (0,0,0) des Datensatzes. Die Lage zu den anderen Datensätzen bleibt, der Export enthält den neuen Ursprung (DICOM als neue Serie mit neuer FrameOfReference). Gilt auch für die Datensätze derselben Aufnahme. Vor einer Normalisierung ausführen.">
+                Ursprung dauerhaft übernehmen
+              </InfoText>
               <div className="button-row">
                 <button className="secondary-btn" disabled={coregRunning || !reference.landmarks?.some((l) => l.name === LANDMARK_1)} onClick={() => reorientTo("base", true)}>
                   Basis: Ursprung = Landmarke 1
@@ -3003,10 +2999,9 @@ function App() {
                   </p>
                 ) : null,
               )}
-              <p className="tool-hint">
-                Intensitätsbasierte Registrierung nach dem Vorbild von SPM (Coregister) und FSL FLIRT: Mutual Information für unterschiedliche Modalitäten,
-                Kreuzkorrelation für gleiche; Startpunkt ist die aktuelle Lage (Patientenkoordinaten, Landmarken oder manuelle Korrektur).
-              </p>
+              <InfoText details="Intensitätsbasierte Registrierung nach dem Vorbild von SPM (Coregister) und FSL FLIRT: Mutual Information für unterschiedliche Modalitäten, Kreuzkorrelation für gleiche; Startpunkt ist die aktuelle Lage (Patientenkoordinaten, Landmarken oder manuelle Korrektur). Grobsuche: Schwerpunkt + Rotationsraster ±30°; Startlage beibehalten: nur ±10° / ±10 mm.">
+                Wie funktioniert die Registrierung?
+              </InfoText>
             </>
           }
         />

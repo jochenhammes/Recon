@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { InfoText } from "./Info";
 import { Card } from "./Card";
 import { INTERPOLATION_LABELS, type Interpolation } from "../resample/resample";
 import type { Normalization } from "../normalization/model";
@@ -114,8 +115,14 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
             </select>
           </label>
         </div>
-        {template && template.kind !== props.subjectKind && <p className="warning-banner">Vorlage ({KIND_LABEL[template.kind]}) passt nicht zum Kontrast ({KIND_LABEL[props.subjectKind]}) – nur affin mit Mutual Information.</p>}
-        {props.subjectKind === "CT" && <p className="tool-hint">CT: nur Kopf-CT (Sichtfeld Kopf); bei Ganzkörper-CT vorher auf den Kopf zuschneiden (Bearbeiten → VOI/Zuschnitt).</p>}
+        {template && template.kind !== props.subjectKind && (
+          <InfoText warn details={`Vorlage (${KIND_LABEL[template.kind]}) passt nicht zum Kontrast (${KIND_LABEL[props.subjectKind]}) – nur affin mit Mutual Information.`}>
+            Vorlage passt nicht zum Kontrast
+          </InfoText>
+        )}
+        {props.subjectKind === "CT" && (
+          <InfoText details="CT: nur Kopf-CT (Sichtfeld Kopf); bei Ganzkörper-CT vorher auf den Kopf zuschneiden (Bearbeiten → VOI/Zuschnitt).">Nur Kopf-CT</InfoText>
+        )}
         <div className="segmented-control" role="group" aria-label="Methode">
           <button className={props.method === "affine" ? "active" : ""} disabled={running} onClick={() => props.onMethodChange("affine")}>
             Affin (12)

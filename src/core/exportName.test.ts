@@ -14,6 +14,8 @@ describe("patient ID in export file names", () => {
     expect(withPatientId("ordner/a.csv")).toBe("ordner/P-0815_a.csv");
     expect(withPatientId("IM0001.dcm")).toBe("IM0001.dcm");
     expect(withPatientId("P-0815_PET.nii")).toBe("P-0815_PET.nii");
+    expect(withPatientId("Recon-Projekt_2026-11-20-10-00.recon", { project: true })).toBe("P-0815_Recon-Projekt_2026-11-20-10-00.recon");
+    expect(withPatientId("Recon-Projekt.recon")).toBe("Recon-Projekt.recon");
   });
   it("sanitizes the ID", () => {
     expect(sanitizePatientId("  Müller, Hans / 12 ")).toBe("Müller,_Hans_12");

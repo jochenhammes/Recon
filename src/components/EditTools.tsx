@@ -507,7 +507,7 @@ export function HistorySection(props: Units & { edits: EditOp[]; busy: boolean; 
           ))}
         </ol>
       )}
-      {gridChanged && <p className="tool-hint">Das Voxelraster wurde verändert – der DICOM-Export erzeugt eine neue Serie.</p>}
+      {gridChanged && <p className="tool-hint" title="Das Voxelraster wurde verändert – der DICOM-Export erzeugt eine neue Serie.">Raster verändert → neue DICOM-Serie</p>}
       <div className="button-row">
         <button className="secondary-btn" disabled={edits.length === 0 || busy} onClick={props.onUndo}>
           Rückgängig

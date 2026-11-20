@@ -76,7 +76,7 @@ export function TripleWindowCard(props: {
       }
     >
       {props.cts.length === 0 || props.organSets.length === 0 ? (
-        <p className="tool-hint">Benötigt ein CT und seine Organkarte (Segmentierung & MTV → CT-Organsegmentierung).</p>
+        <p className="tool-hint" title="Organkarte: Bereich „Segmentierung & MTV“ → CT-Organsegmentierung">Benötigt CT + Organkarte</p>
       ) : (
         <>
           <label className="field">

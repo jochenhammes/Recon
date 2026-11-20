@@ -1,5 +1,6 @@
 import type { Vec3 } from "../core/geometry";
 import { LANDMARK_1, LANDMARK_2, type Landmark } from "../registration/landmarks";
+import { InfoText } from "./Info";
 
 export type LandmarkSide = "base" | "moving";
 
@@ -70,11 +71,9 @@ export function LandmarkPanel(props: LandmarkPanelProps) {
 
   return (
     <>
-      <p className="tool-hint">
-        Optional, aber hilfreich vor der automatischen Registrierung – vor allem, wenn die Koordinatensysteme nicht zusammenpassen oder der
-        Datensatz stark verdreht ist. In Basis und Datensatz dieselben zwei Punkte markieren, z. B. Landmarke 1 = Nasenspitze, Landmarke 2 =
-        Scheitel (Hirn: vordere und hintere Kommissur).
-      </p>
+      <InfoText details="Optional, aber hilfreich vor der automatischen Registrierung – vor allem, wenn die Koordinatensysteme nicht zusammenpassen oder der Datensatz stark verdreht ist. In Basis und Datensatz dieselben zwei Punkte markieren, z. B. Landmarke 1 = Nasenspitze, Landmarke 2 = Scheitel (Hirn: vordere und hintere Kommissur). „Ursprung setzen auf Landmarke 1“ verschiebt, „Mit Landmarke 2 ausrichten“ dreht zusätzlich um Landmarke 1; eine Restdrehung um diese Achse im Reiter „Manuell“ korrigieren.">
+        Zwei gleiche Punkte in Basis und Datensatz
+      </InfoText>
 
       {!props.mode ? (
         <>
@@ -85,9 +84,7 @@ export function LandmarkPanel(props: LandmarkPanelProps) {
         </>
       ) : (
         <div className="landmark-mode">
-          <p className="tool-hint">
-            Der Viewer zeigt nur den gewählten Datensatz. Auf den Punkt klicken (Fadenkreuz), dann „hier setzen“.
-          </p>
+          <InfoText details="Der Viewer zeigt nur den gewählten Datensatz. Im Viewer auf den Punkt klicken (Fadenkreuz), dann „Landmarke … hier setzen“. Markierungen: B1/B2 Basis (orange), D1/D2 Datensatz (türkis).">Punkt anklicken, dann setzen</InfoText>
           <div className="segmented-control" role="group" aria-label="Angezeigter Datensatz">
             {(["base", "moving"] as LandmarkSide[]).map((side) => (
               <button key={side} className={props.view === side ? "active" : ""} onClick={() => props.onViewChange(side)} title={side === "base" ? props.baseLabel : props.movingLabel}>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { BigTable } from "./BigTable";
 import { Card } from "./Card";
+import { InfoText } from "./Info";
 import { formatValue } from "../components/format";
 import type { TumorBurden } from "../tumor/metrics";
 import { EXCLUSION_PRESETS } from "../tumor/organs";
@@ -127,7 +128,9 @@ export function TumorPanel(props: TumorPanelProps) {
             ))}
           </select>
         </label>
-        <p className={props.suvAvailable ? "tool-hint" : "warning-banner"}>{props.unitInfo}</p>
+        <InfoText warn={!props.suvAvailable} details={props.unitInfo}>
+          {props.suvAvailable ? "Schwellen in SUV" : "Kein SUV – Werte als SUV gewertet"}
+        </InfoText>
         <label className="field">
           Methode
           <select value={active} disabled={props.busy} onChange={(e) => setPreset(e.target.value as PresetId)}>
@@ -157,11 +160,15 @@ export function TumorPanel(props: TumorPanelProps) {
               </label>
               <span />
             </div>
-            <p className="tool-hint">
-              {props.liver
-                ? `Leber-Referenz: SUV ${f(props.liver.mean)} ± ${f(props.liver.sd)} (${f(props.liver.ml, 1)} ml) → Schwelle SUV ${f(num(liverA) * props.liver.mean + num(liverB) * props.liver.sd)}`
-                : "Leber-Referenz fehlt: im Tab „Bearbeiten“ eine 3-cm-Kugel-VOI (Radius 15 mm) im rechten Leberlappen setzen und übernehmen."}
-            </p>
+            {props.liver ? (
+              <p className="tool-hint">
+                Leber SUV {f(props.liver.mean)} ± {f(props.liver.sd)} ({f(props.liver.ml, 1)} ml) → Schwelle SUV {f(num(liverA) * props.liver.mean + num(liverB) * props.liver.sd)}
+              </p>
+            ) : (
+              <InfoText warn details="Leber-Referenz (PERCIST): 3-cm-Kugel-VOI (Radius 15 mm) im rechten Leberlappen – automatisch aus der CT-Lebermaske oder im Bereich „Bearbeiten“ setzen und hier übernehmen.">
+                Leber-Referenz fehlt
+              </InfoText>
+            )}
             <div className="button-row">
               <button className="secondary-btn" disabled={!props.canAutoLiver} onClick={props.onAutoLiver} title="3-cm-Kugel im rechten Leberlappen aus der CT-Lebermaske">
                 Leber-VOI automatisch
@@ -189,10 +196,14 @@ export function TumorPanel(props: TumorPanelProps) {
               <input type="checkbox" checked={props.autoExclude} onChange={(e) => props.onAutoExcludeChange(e.target.checked)} />
               Physiologische Anreicherung ausschließen: {EXCLUSION_PRESETS[indication].map((n) => n.replace(/_/g, " ")).join(", ")}
             </label>
-            {indication === "psma" && <p className="tool-hint">Speichel- und Tränendrüsen sind im CT-Modell nicht enthalten – Kopf-Anreicherungen bitte per Klick ausschließen.</p>}
+            {indication === "psma" && (
+              <InfoText details="Speichel- und Tränendrüsen sind im CT-Modell nicht enthalten – Kopf-Anreicherungen bitte per Klick ausschließen.">Drüsen von Hand ausschließen</InfoText>
+            )}
           </>
         )}
-        {props.organOptions.length === 0 && <p className="tool-hint">Ohne Organmasken: oben „Organe segmentieren“ (CT nötig) – dann werden Niere, Blase usw. automatisch ausgeschlossen.</p>}
+        {props.organOptions.length === 0 && (
+          <InfoText details="Ohne Organmasken: oben „Organe segmentieren“ (CT nötig) – dann werden Niere, Blase usw. automatisch als physiologische Anreicherung ausgeschlossen.">Keine Organmasken</InfoText>
+        )}
         <label className="field">
           Mindestvolumen je Läsion (ml)
           <input value={minMl} onChange={(e) => setMinMl(e.target.value)} />
@@ -395,7 +406,7 @@ function ReviewBox({
           {cur.reviewed ? (cur.included ? "bestätigt" : "verworfen") : cur.included ? "offen" : "offen (ausgeschlossen)"}
         </p>
       ) : (
-        <p className="tool-hint">Jede Läsion ansehen und bestätigen oder verwerfen – die Ansicht springt jeweils zur nächsten offenen.</p>
+        <InfoText details="Jede Läsion ansehen und bestätigen oder verwerfen – die Ansicht springt jeweils zur nächsten offenen.">Läsionen prüfen</InfoText>
       )}
       {cur ? (
         <div className="review-buttons">
