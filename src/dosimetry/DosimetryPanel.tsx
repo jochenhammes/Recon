@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { formatValue } from "../components/format";
 import { umlaut, withPatientId } from "../core/exportName";
 import { csvText, csvWithInfo } from "../core/csv";
@@ -174,18 +174,53 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
     set((s) => ({ ...s, timePoints: s.timePoints.map((t) => (t.spectId === id ? { ...t, ...patch } : t)) }));
   }
 
+  /** Time point a label dataset belongs to: same FrameOfReference as its CT/SPECT, or the organ map of its CT. */
+  function tpOfLabelSet(id: string, timePoints: DosimetrySetup["timePoints"]): string | undefined {
+    const e = byId(id);
+    if (!e) return undefined;
+    const fo = e.dataset.current.geometry.frameOfReferenceUid;
+    return timePoints.find((t) => {
+      const ct = byId(t.ctId), sp = byId(t.spectId);
+      if (ct && e.dataset.displayName === `CT-Organe · ${ct.dataset.displayName}`) return true;
+      return !!fo && (ct?.dataset.current.geometry.frameOfReferenceUid === fo || sp?.dataset.current.geometry.frameOfReferenceUid === fo);
+    })?.spectId;
+  }
+
+  /** Existing organ map (CT segmentation) of a CT. */
+  function organSetOf(ctId: string): DosEntry | undefined {
+    const ct = byId(ctId);
+    if (!ct) return undefined;
+    const fo = ct.dataset.current.geometry.frameOfReferenceUid;
+    return (
+      labelCandidates.find((e) => e.dataset.displayName === `CT-Organe · ${ct.dataset.displayName}`) ??
+      labelCandidates.find((e) => /^CT-Organe/.test(e.dataset.displayName) && !!fo && e.dataset.current.geometry.frameOfReferenceUid === fo)
+    );
+  }
+
   function toggleLabelSet(id: string, on: boolean) {
     set((s) => {
-      if (!on) return { ...s, labelSets: s.labelSets.filter((l) => l.id !== id) };
-      const e = byId(id);
-      const fo = e?.dataset.current.geometry.frameOfReferenceUid;
-      const tp = s.timePoints.find((t) => {
-        const ct = byId(t.ctId), sp = byId(t.spectId);
-        return fo && (ct?.dataset.current.geometry.frameOfReferenceUid === fo || sp?.dataset.current.geometry.frameOfReferenceUid === fo);
-      });
-      return { ...s, labelSets: [...s.labelSets, { id, tp: s.timePoints.length > 1 && tp ? tp.spectId : "all" }] };
+      const dismissed = (s.labelSetsDismissed ?? []).filter((x) => x !== id);
+      if (!on) return { ...s, labelSets: s.labelSets.filter((l) => l.id !== id), labelSetsDismissed: [...dismissed, id] };
+      const tp = tpOfLabelSet(id, s.timePoints);
+      return { ...s, labelSetsDismissed: dismissed, labelSets: [...s.labelSets, { id, tp: s.timePoints.length > 1 && tp ? tp : "all" }] };
     });
   }
+
+  // Existing label datasets of the time points (organ maps, lesions, own segmentations on the same CT/SPECT) are
+  // used automatically, unless switched off; no new segmentation needed.
+  const labelKey = labelCandidates.map((e) => e.id).join() + "|" + setup.timePoints.map((t) => `${t.spectId}:${t.ctId ?? ""}`).join();
+  useEffect(() => {
+    if (!setup.timePoints.length) return;
+    const add = labelCandidates
+      .filter((e) => !setup.labelSets.some((l) => l.id === e.id) && !(setup.labelSetsDismissed ?? []).includes(e.id))
+      .map((e) => ({ id: e.id, tp: tpOfLabelSet(e.id, setup.timePoints) }))
+      .filter((x): x is { id: string; tp: string } => !!x.tp);
+    if (!add.length) return;
+    set((s) => ({
+      ...s,
+      labelSets: [...s.labelSets, ...add.filter((a) => !s.labelSets.some((l) => l.id === a.id)).map((a) => ({ id: a.id, tp: s.timePoints.length > 1 ? a.tp : "all" }))],
+    }));
+  }, [labelKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function saveProfile(p: CameraProfile) {
     const list = [...profiles.filter((x) => x.id !== p.id), p];
@@ -438,11 +473,30 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
               {tp.pctInjected !== undefined ? ` (${fmt(tp.pctInjected)} % der injizierten Aktivität)` : ""}
               {tp.headerNote.length ? ` · ${tp.headerNote.join(" · ")}` : ""}
             </p>
-            {tp.ctId && (
-              <button className="secondary-btn" disabled={api.segRunning} onClick={() => api.segmentCt(tp.ctId!)}>
-                {api.segRunning ? "Segmentierung läuft …" : "Organe auf diesem CT segmentieren"}
-              </button>
-            )}
+            {tp.ctId &&
+              (() => {
+                const organs = organSetOf(tp.ctId!);
+                if (!organs)
+                  return (
+                    <button className="secondary-btn" disabled={api.segRunning} onClick={() => api.segmentCt(tp.ctId!)}>
+                      {api.segRunning ? "Segmentierung läuft …" : "Organe auf diesem CT segmentieren"}
+                    </button>
+                  );
+                const used = setup.labelSets.some((l) => l.id === organs.id);
+                return (
+                  <p className="tool-hint">
+                    Organe vorhanden: {organs.label}
+                    {used ? " – wird verwendet" : " – abgewählt (unter Regionen)"}.{" "}
+                    <button
+                      className="link-btn"
+                      disabled={api.segRunning}
+                      onClick={() => window.confirm("Die Organe dieses CTs sind schon segmentiert. Trotzdem neu segmentieren?") && api.segmentCt(tp.ctId!)}
+                    >
+                      {api.segRunning ? "Segmentierung läuft …" : "neu segmentieren"}
+                    </button>
+                  </p>
+                );
+              })()}
           </div>
         ))}
         {tpViews.length > 1 && (

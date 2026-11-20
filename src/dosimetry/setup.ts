@@ -39,6 +39,8 @@ export interface DosimetrySetup {
   injection: { timeMs?: number; activityMBq?: number };
   timePoints: DosTimePoint[];
   labelSets: DosLabelSet[];
+  /** Label datasets the user switched off (not adopted automatically again). */
+  labelSetsDismissed?: string[];
   /** Per region name (lower case). */
   regions: Record<string, DosRegionOptions>;
   /** Measured per time point (SPECT id) and region name. */

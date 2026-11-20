@@ -388,7 +388,11 @@ nicht geeignet.
      lassen sich überschreiben.
    - Aufnahmedauer = Zeit pro Projektion × Projektionen × Detektoren (NM-Rotationsinformation).
    - Kontrolle: Gesamtaktivität im Sichtfeld in MBq und in % der (zerfallskorrigierten) injizierten Aktivität.
-   - *Organe auf diesem CT segmentieren* startet die CT-Organsegmentierung ([Abschnitt 9](#9-ct-organsegmentierung)).
+   - Vorhandene Labelbilder werden **übernommen statt neu segmentiert**: die Organkarte eines CTs (aus der
+     CT-Organsegmentierung, auch aus einer Projektdatei) und Labelbilder mit derselben FrameOfReference wie CT oder
+     SPECT eines Zeitpunkts werden automatisch verwendet. Gibt es für ein CT noch keine Organkarte, startet
+     *Organe auf diesem CT segmentieren* die CT-Organsegmentierung ([Abschnitt 9](#9-ct-organsegmentierung));
+     *neu segmentieren* ist nur nach Rückfrage möglich.
    - *Zeitpunkte registrieren*: rigide CT-CT-Registrierung aller Zeitpunkte auf das CT von Zeitpunkt 1; SPECT und
      Labelbilder des Zeitpunkts werden mitbewegt. Nötig für die Voxel-Dosiskarte und für Regionen, die für alle
      Zeitpunkte gelten.
@@ -404,8 +408,9 @@ nicht geeignet.
      gespeichert, das gewählte auch in der Projektdatei; Import/Export als JSON.
    - Umrechnung: MBq = Counts / (Dauer × Kalibrierfaktor), mit Korrektur des Zerfalls während der Aufnahme
      (λT / (1 − e^−λT)), außer das Bild ist bereits zerfallskorrigiert.
-3. **Regionen:** Labelbilder anhaken (CT-Organe, Läsionen aus der Tumorlast, eigene Segmentierungen als NIfTI) und je
-   einem Zeitpunkt oder *allen Zeitpunkten* (nach der Registrierung) zuordnen. Regionen gleichen Namens werden über die
+3. **Regionen:** Automatisch übernommene Labelbilder sind angehakt; weitere anhaken (CT-Organe, Läsionen aus der
+   Tumorlast, eigene Segmentierungen als NIfTI), abgewählte werden nicht erneut übernommen. Je Labelbild
+   den Zeitpunkt oder *alle Zeitpunkte* (nach der Registrierung) wählen. Regionen gleichen Namens werden über die
    Zeitpunkte verbunden; vorausgewählt sind Nieren, Leber, Milz, Harnblase und Läsionen. *RC* wendet den
    Recovery-Koeffizienten an (Läsionen). *Aktivitäten messen* integriert die Aktivitätskonzentration über jede Region;
    die Masse kommt aus der CT-Dichte (1 + HU/1000, oberhalb von Wasser 1 + 0,6·HU/1000).
