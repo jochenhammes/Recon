@@ -1,6 +1,5 @@
-import { useState } from "react";
 import type { Vec3 } from "../core/geometry";
-import { LANDMARK_NAMES, type Landmark } from "../registration/landmarks";
+import { LANDMARK_1, LANDMARK_2, type Landmark } from "../registration/landmarks";
 import { Card } from "./Card";
 
 export type LandmarkSide = "base" | "moving";
@@ -10,23 +9,21 @@ export interface LandmarkCardProps {
   movingLabel: string;
   baseLandmarks: Landmark[];
   movingLandmarks: Landmark[];
-  /** Selected landmark name (shared with the rotation pivot). */
-  name: string;
-  onNameChange: (name: string) => void;
-  /** Fadenkreuz in native coordinates of base and moving dataset (for display). */
-  cursorNative: { base: Vec3 | null; moving: Vec3 | null };
-  onSet: (side: LandmarkSide) => void;
-  onRemove: (side: LandmarkSide, name: string) => void;
+  /** Landmark mode: the viewer shows only `view`; clicks set the cross-hair for the landmark. */
+  mode: boolean;
+  onModeChange: (on: boolean) => void;
+  view: LandmarkSide;
+  onViewChange: (side: LandmarkSide) => void;
+  /** Sets landmark 1 or 2 of the dataset shown at the cross-hair. */
+  onSet: (name: string) => void;
   onGoTo: (side: LandmarkSide, name: string) => void;
-  onShow: (which: LandmarkSide | "both") => void;
-  onCursorToCenter: (side: LandmarkSide) => void;
-  onAlignOrigin: () => void;
-  /** Rigid fit from ≥ 3 common landmarks: preview of the RMS residual (mm), null if not possible. */
-  rigidRms: number | null;
-  onAlignRigid: () => void;
+  onRemove: (side: LandmarkSide, name: string) => void;
+  onOriginToLandmark1: () => void;
+  onAlignWithLandmark2: () => void;
+  /** Result of the last alignment (shown as feedback). */
+  feedback: string | null;
   follow: boolean;
   onFollowChange: (v: boolean) => void;
-  /** Number of other datasets with the same frame of reference as the moving dataset. */
   followCount: number;
   /** Bounding boxes of base and moving dataset barely overlap. */
   mismatch: boolean;
@@ -36,135 +33,162 @@ export interface LandmarkCardProps {
   running: boolean;
 }
 
-const fmt = (p: Vec3 | null) => (p ? p.map((v) => v.toFixed(1)).join(" / ") : "–");
+const fmt = (p: Vec3) => p.map((v) => v.toFixed(1)).join(" / ");
+const NAMES = [LANDMARK_1, LANDMARK_2];
 
-/** Landmarks as a common origin: align base and moving dataset at the same anatomical point, optionally take the origin into the dataset. */
+/** Two landmarks per dataset as common origin and direction; see MANUAL.md chapter 5. */
 export function LandmarkCard(props: LandmarkCardProps) {
-  const [custom, setCustom] = useState("");
-  // Open by default when the coordinate systems do not match on first display; afterwards the card keeps its state.
-  const [openInitially] = useState(props.mismatch);
-  const names = [...new Set([...LANDMARK_NAMES, ...props.baseLandmarks.map((l) => l.name), ...props.movingLandmarks.map((l) => l.name)])];
-  const has = (side: LandmarkSide, n = props.name) => (side === "base" ? props.baseLandmarks : props.movingLandmarks).some((l) => l.name === n);
-  const common = props.movingLandmarks.filter((l) => props.baseLandmarks.some((b) => b.name === l.name)).length;
+  const find = (side: LandmarkSide, name: string) => (side === "base" ? props.baseLandmarks : props.movingLandmarks).find((l) => l.name === name);
+  const both = (name: string) => !!find("base", name) && !!find("moving", name);
+  const label = (side: LandmarkSide) => (side === "base" ? `Basis: ${props.baseLabel}` : `Datensatz: ${props.movingLabel}`);
   const disabled = props.running;
 
-  const row = (side: LandmarkSide, label: string, list: Landmark[]) => (
-    <div className="dos-tp">
-      <strong>{label}</strong>
-      <div className="chip-row">
-        <button className="chip-btn" disabled={disabled} onClick={() => props.onSet(side)} title="Aktuelle Fadenkreuz-Position als Landmarke speichern">
-          Fadenkreuz → {props.name}
-        </button>
-        <button className="chip-btn" disabled={disabled} onClick={() => props.onShow(side)} title="Nur diesen Datensatz zeigen, um die Landmarke zu finden">
-          nur diesen zeigen
-        </button>
-        <button className="chip-btn" disabled={disabled} onClick={() => props.onCursorToCenter(side)}>
-          Fadenkreuz in die Mitte
-        </button>
-      </div>
-      <p className="tool-hint">Fadenkreuz in eigenen Koordinaten: {fmt(side === "base" ? props.cursorNative.base : props.cursorNative.moving)} mm</p>
-      {list.length > 0 && (
-        <table className="region-table">
-          <tbody>
-            {list.map((l) => (
-              <tr key={l.name}>
-                <td>{l.name}</td>
-                <td>{fmt(l.p)}</td>
-                <td>
-                  <button className="link-btn" onClick={() => props.onGoTo(side, l.name)}>
-                    hin
-                  </button>{" "}
-                  <button className="link-btn" disabled={disabled} onClick={() => props.onRemove(side, l.name)}>
-                    löschen
-                  </button>
+  const overview = (
+    <table className="region-table landmark-table">
+      <thead>
+        <tr>
+          <th />
+          <th>Basis</th>
+          <th>Datensatz</th>
+        </tr>
+      </thead>
+      <tbody>
+        {NAMES.map((n) => (
+          <tr key={n}>
+            <td>{n}</td>
+            {(["base", "moving"] as LandmarkSide[]).map((side) => {
+              const l = find(side, n);
+              return (
+                <td key={side}>
+                  {l ? (
+                    <button className="link-btn" title={`Fadenkreuz auf ${n} (${fmt(l.p)} mm)`} onClick={() => props.onGoTo(side, n)}>
+                      ✓ zeigen
+                    </button>
+                  ) : (
+                    "–"
+                  )}
                 </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      {(side === "base" ? props.reoriented.base : props.reoriented.moving) && (
-        <p className="tool-hint">
-          Ursprung wurde in den Datensatz übernommen.{" "}
-          <button className="link-btn" disabled={disabled} onClick={() => props.onResetOrigin(side)}>
-            zurück auf Original-Ursprung
-          </button>
-        </p>
-      )}
-    </div>
+              );
+            })}
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 
   return (
     <Card
       title={<>Ursprung &amp; Landmarken</>}
       persistKey="coreg-landmarks"
-      defaultOpen={openInitially}
-      status={props.mismatch ? { text: "Koordinaten passen nicht", tone: "warn" } : common ? { text: `${common} Landmarke${common === 1 ? "" : "n"}`, tone: "info" } : null}
-      info="Liegen zwei Datensätze in verschiedenen Koordinatensystemen (z. B. NIfTI und DICOM derselben Studie), in beiden dieselbe anatomische Landmarke setzen – Nasenspitze bei Ganzkörperdaten, vordere Kommissur (AC) beim Hirn. „Ursprünge zur Deckung bringen“ verschiebt den Datensatz so, dass die Landmarken übereinanderliegen; danach lässt er sich unten um diesen Ursprung drehen. Ab drei gemeinsamen Landmarken werden Drehung und Verschiebung berechnet. Das Ergebnis ist die Startlage für die Koregistrierung. Optional wird der Ursprung (0,0,0) dauerhaft in den Datensatz übernommen (wie SPM „Set origin“), auch für den Export."
+      status={props.mismatch ? { text: "Koordinaten passen nicht", tone: "warn" } : both(LANDMARK_1) ? { text: "Landmarken gesetzt", tone: "info" } : null}
+      info={
+        <>
+          Für Datensätze, deren Koordinatensysteme nicht zusammenpassen (z. B. NIfTI und DICOM derselben Studie). In beiden Datensätzen dieselben
+          zwei anatomischen Punkte markieren – etwa Landmarke 1 = Nasenspitze und Landmarke 2 = Scheitel (Ganzkörper) bzw. vordere und hintere
+          Kommissur (Hirn). „Ursprung setzen auf Landmarke 1“ verschiebt den Datensatz, bis seine Landmarke 1 auf der Landmarke 1 der Basis liegt.
+          „Mit Landmarke 2 ausrichten“ dreht ihn zusätzlich um Landmarke 1, bis auch die Richtung zur Landmarke 2 stimmt. Eine verbleibende Drehung
+          um diese Achse unten in der manuellen Korrektur (Drehpunkt Landmarke 1) korrigieren; danach koregistrieren.
+        </>
+      }
     >
-      {props.mismatch && <p className="tool-hint tool-warning">Basis und {props.movingLabel} überlappen kaum – die Koordinatensysteme passen nicht zusammen. Landmarken setzen und zur Deckung bringen.</p>}
-      <div className="field-row">
-        <label className="field">
-          Landmarke
-          <select value={props.name} onChange={(e) => props.onNameChange(e.target.value)}>
-            {names.map((n) => (
-              <option key={n} value={n}>
-                {n}
-                {has("base", n) ? " · Basis ✓" : ""}
-                {has("moving", n) ? " · Datensatz ✓" : ""}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          Eigene Landmarke
-          <input
-            type="text"
-            value={custom}
-            placeholder="Name + Enter"
-            onChange={(e) => setCustom(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && custom.trim()) {
-                props.onNameChange(custom.trim());
-                setCustom("");
-              }
-            }}
-          />
-        </label>
-      </div>
-      <p className="tool-hint">Landmarke im Viewer anklicken (Fadenkreuz), dann übernehmen. Ansicht: <button className="link-btn" onClick={() => props.onShow("both")}>beide zeigen</button></p>
-      {row("base", `Basis: ${props.baseLabel}`, props.baseLandmarks)}
-      {row("moving", `Datensatz: ${props.movingLabel}`, props.movingLandmarks)}
-      <label className="checkbox-field">
-        <input type="checkbox" checked={props.follow} onChange={(e) => props.onFollowChange(e.target.checked)} />
-        <span>
-          Datensätze derselben Aufnahme mitbewegen (gleiche FrameOfReference{props.followCount ? `: ${props.followCount}` : ": keine"})
-        </span>
-      </label>
-      <div className="button-row">
-        <button className="primary-btn" disabled={disabled || !has("base") || !has("moving")} onClick={props.onAlignOrigin}>
-          Ursprünge zur Deckung bringen
-        </button>
-        <button className="secondary-btn" disabled={disabled || props.rigidRms === null} onClick={props.onAlignRigid} title="Drehung und Verschiebung aus allen gemeinsamen Landmarken (≥ 3)">
-          Aus {common} Landmarken ausrichten
-        </button>
-      </div>
-      {props.rigidRms !== null && <p className="tool-hint">Rigide Lösung aus {common} Landmarken: Restfehler {props.rigidRms.toFixed(1)} mm (RMS).</p>}
-      {common > 0 && common < 3 && <p className="tool-hint">Für eine automatische Drehung mindestens drei gemeinsame Landmarken setzen; sonst unten um den Ursprung drehen.</p>}
-      <details>
-        <summary>Ursprung dauerhaft in den Datensatz übernehmen</summary>
-        <p className="tool-hint">
-          Die gewählte Landmarke wird zum Koordinatenursprung (0,0,0) des Datensatzes – wie SPM „Set origin“. Die Lage zu den anderen Datensätzen bleibt
-          erhalten; NIfTI-Export und DICOM-Export (neue Serie, neue FrameOfReference) enthalten den neuen Ursprung. Vor einer Normalisierung ausführen.
+      {props.mismatch && (
+        <p className="tool-hint tool-warning">
+          Basis und {props.movingLabel} liegen fast ohne Überlappung – die Koordinatensysteme passen nicht zusammen. Landmarken setzen.
         </p>
-        <div className="button-row">
-          <button className="secondary-btn" disabled={disabled || !has("base")} onClick={() => props.onReorient("base", props.follow)}>
-            Basis: Ursprung = {props.name}
+      )}
+
+      {!props.mode ? (
+        <>
+          {overview}
+          <button className="primary-btn" disabled={disabled} onClick={() => props.onModeChange(true)}>
+            Landmarken setzen …
           </button>
-          <button className="secondary-btn" disabled={disabled || !has("moving")} onClick={() => props.onReorient("moving", props.follow)}>
-            Datensatz: Ursprung = {props.name}
+        </>
+      ) : (
+        <div className="landmark-mode">
+          <p className="tool-hint">
+            <strong>Schritt 1:</strong> Datensatz wählen – der Viewer zeigt nur diesen. <strong>Schritt 2:</strong> im Viewer auf den Punkt klicken
+            (Fadenkreuz), dann „Landmarke hier setzen“.
+          </p>
+          <div className="segmented-control" role="group" aria-label="Angezeigter Datensatz">
+            {(["base", "moving"] as LandmarkSide[]).map((side) => (
+              <button key={side} className={props.view === side ? "active" : ""} onClick={() => props.onViewChange(side)}>
+                {side === "base" ? "Basis" : "Datensatz"}
+              </button>
+            ))}
+          </div>
+          <p className="tool-hint">Im Viewer: {label(props.view)}</p>
+          {NAMES.map((n) => {
+            const l = find(props.view, n);
+            return (
+              <div key={n} className="landmark-row">
+                <button className={l ? "secondary-btn" : "primary-btn"} disabled={disabled} onClick={() => props.onSet(n)}>
+                  {n} hier setzen
+                </button>
+                {l ? (
+                  <span className="tool-hint">
+                    gesetzt ·{" "}
+                    <button className="link-btn" onClick={() => props.onGoTo(props.view, n)}>
+                      zeigen
+                    </button>{" "}
+                    ·{" "}
+                    <button className="link-btn" disabled={disabled} onClick={() => props.onRemove(props.view, n)}>
+                      löschen
+                    </button>
+                  </span>
+                ) : (
+                  <span className="tool-hint">noch nicht gesetzt</span>
+                )}
+              </div>
+            );
+          })}
+          {overview}
+          <button className="secondary-btn" onClick={() => props.onModeChange(false)}>
+            Fertig – beide Datensätze zeigen
           </button>
         </div>
+      )}
+
+      <div className="button-row">
+        <button className="primary-btn" disabled={disabled || !both(LANDMARK_1)} onClick={props.onOriginToLandmark1} title="Verschiebt den Datensatz so, dass seine Landmarke 1 auf der Landmarke 1 der Basis liegt">
+          Ursprung setzen auf Landmarke 1
+        </button>
+        <button className="secondary-btn" disabled={disabled || !both(LANDMARK_1) || !both(LANDMARK_2)} onClick={props.onAlignWithLandmark2} title="Zusätzlich um Landmarke 1 drehen, bis die Richtung zur Landmarke 2 übereinstimmt">
+          Mit Landmarke 2 ausrichten
+        </button>
+      </div>
+      {!both(LANDMARK_1) && <p className="tool-hint">Dafür Landmarke 1 in Basis und Datensatz setzen.</p>}
+      {props.feedback && <p className="tool-hint landmark-feedback">{props.feedback}</p>}
+
+      <label className="checkbox-field">
+        <input type="checkbox" checked={props.follow} onChange={(e) => props.onFollowChange(e.target.checked)} />
+        <span>Datensätze derselben Aufnahme mitverschieben ({props.followCount ? `${props.followCount} mit gleicher FrameOfReference` : "keine vorhanden"})</span>
+      </label>
+
+      <details>
+        <summary>Ursprung dauerhaft in die Datei übernehmen (optional)</summary>
+        <p className="tool-hint">
+          Wie SPM „Set origin“: Landmarke 1 wird zum Koordinatenursprung (0,0,0) des Datensatzes. Die Lage zu den anderen Datensätzen bleibt gleich;
+          der Export (NIfTI, DICOM als neue Serie) enthält den neuen Ursprung. Vor einer Normalisierung ausführen.
+        </p>
+        <div className="button-row">
+          <button className="secondary-btn" disabled={disabled || !find("base", LANDMARK_1)} onClick={() => props.onReorient("base", props.follow)}>
+            Basis: Ursprung = Landmarke 1
+          </button>
+          <button className="secondary-btn" disabled={disabled || !find("moving", LANDMARK_1)} onClick={() => props.onReorient("moving", props.follow)}>
+            Datensatz: Ursprung = Landmarke 1
+          </button>
+        </div>
+        {(["base", "moving"] as LandmarkSide[]).map((side) =>
+          (side === "base" ? props.reoriented.base : props.reoriented.moving) ? (
+            <p key={side} className="tool-hint">
+              {label(side)}: Ursprung übernommen.{" "}
+              <button className="link-btn" disabled={disabled} onClick={() => props.onResetOrigin(side)}>
+                zurück auf Original-Ursprung
+              </button>
+            </p>
+          ) : null,
+        )}
       </details>
     </Card>
   );

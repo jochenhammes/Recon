@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { type Vec3, type VolumeGeometry, voxelToWorld } from "../core/geometry";
 import { IDENTITY_MAT4, IDENTITY_PARAMS, applyMat4, invert4, matrixFromParams } from "../core/transform";
-import { alignByLandmark, derivedFrameOfReference, originShift, reorientPlan, rigidFromPairs } from "./landmarks";
+import { alignByLandmark, alignTwoLandmarks, derivedFrameOfReference, originShift, reorientPlan, rigidFromPairs } from "./landmarks";
 
 const pts: Vec3[] = [[0, 0, 0], [100, 0, 0], [0, 80, 10], [20, 30, 120], [-40, 10, 60]];
 
@@ -68,5 +68,19 @@ describe("landmarks", () => {
     expect(a.length).toBeLessThanOrEqual(64);
     expect(derivedFrameOfReference("1.2.3", originShift([1, 2, 3]))).toBe(a);
     expect(derivedFrameOfReference("1.2.3", originShift([1, 2, 4]))).not.toBe(a);
+  });
+
+  it("two landmarks: landmark 1 coincides and the direction to landmark 2 matches", () => {
+    const truth = matrixFromParams({ ...IDENTITY_PARAMS, tx: 30, ty: -12, tz: 200, rz: 90, rx: 20 }, [0, 0, 0]);
+    const m1: Vec3 = [10, 20, 30], m2: Vec3 = [10, 20, 130];
+    const b1 = applyMat4(truth, m1), b2 = applyMat4(truth, m2);
+    for (const start of [IDENTITY_MAT4, matrixFromParams({ ...IDENTITY_PARAMS, ry: 180 }, [0, 0, 0])]) {
+      const M = alignTwoLandmarks(b1, b2, m1, m2, start)!;
+      const q1 = applyMat4(M, m1), q2 = applyMat4(M, m2);
+      for (let a = 0; a < 3; a++) {
+        expect(q1[a]).toBeCloseTo(b1[a], 6);
+        expect(q2[a]).toBeCloseTo(b2[a], 6);
+      }
+    }
   });
 });

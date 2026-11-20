@@ -208,25 +208,30 @@ NIfTI-Dateien liegen manchmal nicht im selben Koordinatensystem wie die DICOM-Da
 Die Datensatz-Details zeigen dazu *Patientenkoordinaten* (sform/qform bzw. „keine Lageangaben“) und den *Ursprung*.
 Überlappen Basis und gewählter Datensatz kaum, öffnet sich die Karte **Ursprung & Landmarken** mit einem Hinweis.
 
-1. **Landmarke wählen**: Nasenspitze (Ganzkörper), vordere Kommissur (AC, Hirn), hintere Kommissur (PC), Scheitel,
-   Kinn, Symphyse, Steißbeinspitze oder ein eigener Name.
-2. **In der Basis setzen**:
-   - Mit *nur diesen zeigen* und *Fadenkreuz in die Mitte* den Datensatz finden.
-   - Die Landmarke im Viewer anklicken und mit *Fadenkreuz → Landmarke* speichern.
-3. **Im zu registrierenden Datensatz** dieselbe Landmarke genauso setzen.
-4. **Ursprünge zur Deckung bringen**: Der Datensatz wird so verschoben, dass beide Landmarken übereinanderliegen.
-   - Danach unter *Transformation* um diesen Ursprung drehen (Drehpunkt „Ursprung“, 90°-Schritte), falls er verdreht
-     erscheint.
-   - Ab **drei gemeinsamen Landmarken** (z. B. AC, PC, Scheitel) berechnet *Aus … Landmarken ausrichten* Drehung und
-     Verschiebung automatisch und zeigt den Restfehler in mm.
-5. **Mitbewegen**: Datensätze derselben Aufnahme (gleiche FrameOfReference, z. B. PET zum CT der NIfTI-Studie) folgen.
-6. **Koregistrieren** wie oben.
-   - Die Landmarkenausrichtung ist die Startlage.
-   - Mit eingeschalteter Grobsuche sorgt *Startlage beibehalten* dafür, dass nur ±10° / ±10 mm um diese Lage gesucht
-     wird, statt auf den Schwerpunkt zu springen.
-7. Optional **Ursprung dauerhaft in den Datensatz übernehmen** (wie SPM „Set origin“), für die Basis oder den
-   Datensatz und auf Wunsch für alle Datensätze derselben Aufnahme:
-   - Die Landmarke wird zu (0,0,0); die Lage zu den anderen Datensätzen bleibt erhalten.
+Jeder Datensatz bekommt zwei Landmarken – an denselben anatomischen Punkten in Basis und Datensatz, z. B.
+**Landmarke 1** = Nasenspitze und **Landmarke 2** = Scheitel (Ganzkörper) bzw. vordere und hintere Kommissur (Hirn).
+
+1. **Landmarken setzen …** öffnet den Setz-Modus. Der Viewer zeigt dabei immer nur **einen** Datensatz:
+   - Mit *Basis* / *Datensatz* umschalten.
+   - Im Viewer auf den Punkt klicken (Fadenkreuz).
+   - *Landmarke 1 hier setzen* bzw. *Landmarke 2 hier setzen*.
+   - Gesetzte Landmarken erscheinen als Markierung im Viewer: **B1/B2** (Basis, orange), **D1/D2** (Datensatz, türkis).
+   - *zeigen* springt zur Landmarke, *löschen* entfernt sie.
+2. **Ursprung setzen auf Landmarke 1**: Der Datensatz wird verschoben, bis seine Landmarke 1 auf der Landmarke 1 der
+   Basis liegt.
+   - Der Viewer zeigt danach beide Datensätze; das Fadenkreuz steht auf Landmarke 1.
+   - Die Karte meldet, um wie viele Millimeter verschoben wurde.
+3. **Mit Landmarke 2 ausrichten**: Zusätzlich wird um Landmarke 1 gedreht, bis die Richtung zu Landmarke 2 stimmt.
+   - Weichen die Abstände Landmarke 1–2 in Basis und Datensatz deutlich ab, erscheint ein Hinweis.
+   - Eine verbleibende Drehung um diese Achse unter *Manuelle Korrektur* ausgleichen: Drehpunkt *Landmarke 1
+     (Ursprung)*, 90°-Schritte.
+4. **Mitverschieben**: Datensätze derselben Aufnahme (gleiche FrameOfReference, z. B. PET zum CT der NIfTI-Studie)
+   folgen.
+5. **Koregistrieren** wie oben. Die Landmarkenausrichtung ist die Startlage. Mit eingeschalteter Grobsuche sorgt
+   *Startlage beibehalten* dafür, dass nur ±10° / ±10 mm um diese Lage gesucht wird.
+6. Optional **Ursprung dauerhaft in die Datei übernehmen** (wie SPM „Set origin“), für Basis oder Datensatz und auf
+   Wunsch für alle Datensätze derselben Aufnahme:
+   - Landmarke 1 wird zu (0,0,0); die Lage zu den anderen Datensätzen bleibt erhalten.
    - Der NIfTI-Export enthält den neuen Ursprung. Der DICOM-Export schreibt eine neue Serie mit neuer FrameOfReference.
    - *Zurück auf Original-Ursprung* macht das rückgängig.
    - Vor einer Normalisierung ausführen.

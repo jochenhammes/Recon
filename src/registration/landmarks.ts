@@ -7,8 +7,9 @@ export interface Landmark {
   p: Vec3;
 }
 
-/** Suggested landmark names (pairs between datasets are formed by name). */
-export const LANDMARK_NAMES = ["Nasenspitze", "Anteriore Kommissur (AC)", "Posteriore Kommissur (PC)", "Scheitel", "Kinn", "Symphyse", "Steißbeinspitze"];
+/** The two landmarks set in every dataset (pairs are formed by name). */
+export const LANDMARK_1 = "Landmarke 1";
+export const LANDMARK_2 = "Landmarke 2";
 
 export const translation = (t: Vec3): Mat4 => [1, 0, 0, t[0], 0, 1, 0, t[1], 0, 0, 1, t[2], 0, 0, 0, 1];
 
@@ -187,4 +188,42 @@ export function derivedFrameOfReference(oldUid: string | undefined, T: Mat4): st
     h2 = (h2 * 0x100000001b3n) & 0xffffffffffffffffn;
   }
   return `2.25.${((h << 64n) | h2) + 1n}`;
+}
+
+/**
+ * Two landmarks: landmark 1 is moved onto the base landmark 1, and the dataset is turned about it with the smallest
+ * rotation that makes the direction 1 → 2 match the base (the roll about this axis stays as it was).
+ */
+export function alignTwoLandmarks(b1: Vec3, b2: Vec3, m1: Vec3, m2: Vec3, M: Mat4): Mat4 | null {
+  const A = [M[0], M[1], M[2], M[4], M[5], M[6], M[8], M[9], M[10]];
+  const d: Vec3 = [m2[0] - m1[0], m2[1] - m1[1], m2[2] - m1[2]];
+  const vm: Vec3 = [A[0] * d[0] + A[1] * d[1] + A[2] * d[2], A[3] * d[0] + A[4] * d[1] + A[5] * d[2], A[6] * d[0] + A[7] * d[1] + A[8] * d[2]];
+  const vb: Vec3 = [b2[0] - b1[0], b2[1] - b1[1], b2[2] - b1[2]];
+  const lm = Math.hypot(...vm), lb = Math.hypot(...vb);
+  if (lm < 1e-6 || lb < 1e-6) return null;
+  const a: Vec3 = [vm[0] / lm, vm[1] / lm, vm[2] / lm], b: Vec3 = [vb[0] / lb, vb[1] / lb, vb[2] / lb];
+  const c = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  let axis: Vec3 = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  let s = Math.hypot(...axis);
+  if (s < 1e-9) {
+    if (c > 0) axis = [1, 0, 0];
+    else {
+      // Opposite directions: any axis perpendicular to a, 180°.
+      const p: Vec3 = Math.abs(a[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+      axis = [a[1] * p[2] - a[2] * p[1], a[2] * p[0] - a[0] * p[2], a[0] * p[1] - a[1] * p[0]];
+    }
+    s = c > 0 ? 0 : 1;
+    const n = Math.hypot(...axis);
+    axis = [axis[0] / n, axis[1] / n, axis[2] / n];
+  } else axis = [axis[0] / s, axis[1] / s, axis[2] / s];
+  const [x, y, z] = axis, C = 1 - c;
+  // Rodrigues: rotation by angle (cos c, sin s) about the axis.
+  const R = [
+    c + x * x * C, x * y * C - z * s, x * z * C + y * s,
+    y * x * C + z * s, c + y * y * C, y * z * C - x * s,
+    z * x * C - y * s, z * y * C + x * s, c + z * z * C,
+  ];
+  const RA = [0, 1, 2].flatMap((i) => [0, 1, 2].map((j) => R[i * 3] * A[j] + R[i * 3 + 1] * A[3 + j] + R[i * 3 + 2] * A[6 + j]));
+  const q = [RA[0] * m1[0] + RA[1] * m1[1] + RA[2] * m1[2], RA[3] * m1[0] + RA[4] * m1[1] + RA[5] * m1[2], RA[6] * m1[0] + RA[7] * m1[1] + RA[8] * m1[2]];
+  return [RA[0], RA[1], RA[2], b1[0] - q[0], RA[3], RA[4], RA[5], b1[1] - q[1], RA[6], RA[7], RA[8], b1[2] - q[2], 0, 0, 0, 1];
 }

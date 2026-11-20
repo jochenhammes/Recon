@@ -72,7 +72,8 @@ import { BUNDLED_MNI, BUNDLED_PET_TEMPLATES, SPM_TEMPLATE_ATTRIBUTION, SPM_TEMPL
 import { AnalysisPanel } from "./components/AnalysisPanel";
 import { type BrushState, FilterSection, type GeometryAction, GeometrySection, type GeometryTarget, HistorySection, ValueSection, VoiSection, type VoiTool } from "./components/EditTools";
 import { type GroupTarget, groupEditFor, referenceCenter, rotationSense } from "./edit/groupGeometry";
-import { type Landmark, alignByLandmark, landmarkPairs, originShift, reorientPlan, rigidFromPairs } from "./registration/landmarks";
+import { LANDMARK_1, LANDMARK_2, type Landmark, alignByLandmark, alignTwoLandmarks, originShift, reorientPlan } from "./registration/landmarks";
+import { worldToPlane } from "./viewer/planes";
 import { LandmarkCard, type LandmarkSide } from "./ui/LandmarkCard";
 import { runEdits } from "./edit/runner";
 import { type VoiShape, maskBounds, paintDisc, voiMask, voiStats } from "./edit/voi";
@@ -90,7 +91,7 @@ import { buildSinogram } from "./recon/sinogram";
 import type { ReconParams } from "./recon/volume";
 import { reconstructVolume } from "./workers/workerPool";
 import { Volume3D, migrateLut } from "./viewer/volume";
-import { Viewer } from "./viewer/Viewer";
+import { Viewer, type ViewerProps } from "./viewer/Viewer";
 import { useShallowStable } from "./viewer/useShallowStable";
 import type { LayerDisplay, LayoutKind, ViewKind, ViewerLayer } from "./viewer/types";
 import { type Vec3, type WorldToVoxel, applyWorldToVoxel, voxelToWorld, volumeCenter, worldToVoxelTransform } from "./core/geometry";
@@ -212,7 +213,9 @@ function App() {
   const [newValue, setNewValue] = useState("0");
   const [unitMode, setUnitMode] = useState<UnitMode>("raw");
   const [cursor, setCursor] = useState<Vec3 | null>(null);
-  const [landmarkName, setLandmarkName] = useState("Nasenspitze");
+  const [landmarkMode, setLandmarkMode] = useState(false);
+  const [landmarkView, setLandmarkView] = useState<LandmarkSide>("base");
+  const [landmarkFeedback, setLandmarkFeedback] = useState<string | null>(null);
   const [landmarkFollow, setLandmarkFollow] = useState(true);
   const [rotPivot, setRotPivot] = useState<"landmark" | "center">("landmark");
   const [layout, setLayout] = useState<LayoutKind>("grid");
@@ -2277,7 +2280,7 @@ function App() {
 
   // Manual registration of the moving dataset relative to the reference: parameters about its center or about the
   // selected landmark (its "origin").
-  const movingLandmark = moving?.landmarks?.find((l) => l.name === landmarkName) ?? moving?.landmarks?.[0];
+  const movingLandmark = moving?.landmarks?.find((l) => l.name === LANDMARK_1);
   const movingCenter = moving ? (rotPivot === "landmark" && movingLandmark ? movingLandmark.p : centerOf(moving.dataset.current)) : null;
   const movingParams = moving && movingCenter ? (paramsFromMatrix(moving.matrix, movingCenter) ?? IDENTITY_PARAMS) : IDENTITY_PARAMS;
 
@@ -2309,41 +2312,80 @@ function App() {
     discardResultOnly(moving.id);
   }
 
-  function setLandmark(side: LandmarkSide) {
+  const landmarkWorld = (e: Entry, name: string) => {
+    const l = e.landmarks?.find((x) => x.name === name);
+    return l ? applyMat4(e.matrix, l.p) : null;
+  };
+
+  /** Landmark mode: the viewer shows only one dataset; the cross-hair goes to its landmark 1 or its center. */
+  function showLandmarkSide(side: LandmarkSide) {
     const e = sideEntry(side);
     if (!e) return;
-    const p = nativeOf(e, cursor ?? applyMat4(e.matrix, centerOf(e.dataset.current)));
-    const list = [...(e.landmarks ?? []).filter((l) => l.name !== landmarkName), { name: landmarkName, p }];
-    updateEntry(e.id, { landmarks: list });
+    setLandmarkView(side);
+    if (moving) makeOverlay(moving.id);
+    setCursor(landmarkWorld(e, LANDMARK_1) ?? applyMat4(e.matrix, centerOf(e.dataset.current)));
   }
 
-  function showOnly(which: LandmarkSide | "both") {
+  function setLandmarkMode2(on: boolean) {
+    setLandmarkMode(on);
+    setLandmarkFeedback(null);
+    if (on) showLandmarkSide("base");
+    else if (moving) {
+      makeOverlay(moving.id);
+      updateEntry(moving.id, { display: { ...overlayDisplay(moving), visible: true } });
+    }
+  }
+
+  function setLandmark(name: string) {
+    const e = sideEntry(landmarkView);
+    if (!e) return;
+    const p = nativeOf(e, cursor ?? applyMat4(e.matrix, centerOf(e.dataset.current)));
+    updateEntry(e.id, { landmarks: [...(e.landmarks ?? []).filter((l) => l.name !== name), { name, p }] });
+  }
+
+  /** After an alignment: leave the landmark mode, show both datasets and put the cross-hair on landmark 1. */
+  function showAlignment(next: Mat4, message: string) {
     if (!moving || !reference) return;
-    makeOverlay(moving.id);
-    setEntries((prev) =>
-      prev.map((x) =>
-        x.id === reference.id ? { ...x, display: { ...x.display, visible: which !== "moving" } } : x.id === moving.id ? { ...x, display: { ...x.display, visible: which !== "base" } } : x,
-      ),
+    placeMoving(next);
+    setLandmarkMode(false);
+    setRotPivot("landmark");
+    setCoregSettings((s) => ({ ...s, keepStart: true }));
+    const b1 = landmarkWorld(reference, LANDMARK_1);
+    if (b1) setCursor(b1);
+    setLandmarkFeedback(message);
+  }
+
+  function originToLandmark1() {
+    if (!moving || !reference) return;
+    const b1 = landmarkWorld(reference, LANDMARK_1);
+    const m1 = moving.landmarks?.find((l) => l.name === LANDMARK_1);
+    if (!b1 || !m1) return;
+    const before = applyMat4(moving.matrix, m1.p);
+    const dist = Math.hypot(b1[0] - before[0], b1[1] - before[1], b1[2] - before[2]);
+    showAlignment(
+      alignByLandmark(b1, m1.p, moving.matrix),
+      `${entryLabel(moving)} um ${dist.toFixed(0)} mm verschoben: Landmarke 1 liegt jetzt auf Landmarke 1 der Basis (Fadenkreuz). Falls verdreht: „Mit Landmarke 2 ausrichten“ oder unten um Landmarke 1 drehen.`,
     );
   }
 
-  function alignOrigins() {
+  function alignWithLandmark2() {
     if (!moving || !reference) return;
-    const lb = reference.landmarks?.find((l) => l.name === landmarkName);
-    const lm = moving.landmarks?.find((l) => l.name === landmarkName);
-    if (!lb || !lm) return;
-    placeMoving(alignByLandmark(applyMat4(reference.matrix, lb.p), lm.p, moving.matrix));
-    setRotPivot("landmark");
-    setCoregSettings((s) => ({ ...s, keepStart: true }));
-    setCursor(applyMat4(reference.matrix, lb.p));
-  }
-
-  const rigidFit = moving && reference ? rigidFromPairs(landmarkPairs(reference.landmarks ?? [], reference.matrix, moving.landmarks ?? [])) : null;
-
-  function alignRigid() {
-    if (!rigidFit) return;
-    placeMoving(rigidFit.matrix);
-    setCoregSettings((s) => ({ ...s, keepStart: true }));
+    const b1 = landmarkWorld(reference, LANDMARK_1), b2 = landmarkWorld(reference, LANDMARK_2);
+    const m1 = moving.landmarks?.find((l) => l.name === LANDMARK_1), m2 = moving.landmarks?.find((l) => l.name === LANDMARK_2);
+    if (!b1 || !b2 || !m1 || !m2) return;
+    const next = alignTwoLandmarks(b1, b2, m1.p, m2.p, moving.matrix);
+    if (!next) return;
+    // Rotation angle between the old and new linear part.
+    const A = moving.matrix, B = next;
+    let tr = 0;
+    for (let i = 0; i < 3; i++) for (let k = 0; k < 3; k++) tr += B[i * 4 + k] * A[i * 4 + k];
+    const angle = (Math.acos(Math.max(-1, Math.min(1, (tr - 1) / 2))) * 180) / Math.PI;
+    const db = Math.hypot(b2[0] - b1[0], b2[1] - b1[1], b2[2] - b1[2]);
+    const dm = Math.hypot(m2.p[0] - m1.p[0], m2.p[1] - m1.p[1], m2.p[2] - m1.p[2]);
+    showAlignment(
+      next,
+      `${entryLabel(moving)} auf Landmarke 1 gelegt und um ${angle.toFixed(0)}° gedreht, bis die Richtung zu Landmarke 2 stimmt. Abstand Landmarke 1–2: Basis ${db.toFixed(0)} mm, Datensatz ${dm.toFixed(0)} mm${Math.abs(db - dm) > 10 ? " – deutlich verschieden, Landmarken prüfen" : ""}.`,
+    );
   }
 
   /** Takes the coordinate change T into the datasets `ids`; all placements are compensated (see reorientPlan). */
@@ -2370,10 +2412,10 @@ function App() {
 
   function reorientTo(side: LandmarkSide, sameFrameToo: boolean) {
     const e = sideEntry(side);
-    const l = e?.landmarks?.find((x) => x.name === landmarkName);
+    const l = e?.landmarks?.find((x) => x.name === LANDMARK_1);
     if (!e || !l) return;
     const ids = new Set([e.id, ...(sameFrameToo ? entries.filter((x) => sameFrame(x, e)).map((x) => x.id) : [])]);
-    if (!window.confirm(`Ursprung (0,0,0) von ${ids.size === 1 ? "„" + entryLabel(e) + "“" : `${ids.size} Datensätzen`} auf „${landmarkName}“ legen? Die Lage zu den anderen Datensätzen bleibt erhalten.`)) return;
+    if (!window.confirm(`Ursprung (0,0,0) von ${ids.size === 1 ? "„" + entryLabel(e) + "“" : `${ids.size} Datensätzen`} auf Landmarke 1 legen? Die Lage zu den anderen Datensätzen bleibt erhalten.`)) return;
     applyReorient(ids, originShift(l.p));
   }
 
@@ -2719,30 +2761,25 @@ function App() {
             movingLabel={entryLabel(moving)}
             baseLandmarks={reference.landmarks ?? []}
             movingLandmarks={moving.landmarks ?? []}
-            name={landmarkName}
-            onNameChange={setLandmarkName}
-            cursorNative={{ base: cursor ? nativeOf(reference, cursor) : null, moving: cursor ? nativeOf(moving, cursor) : null }}
+            mode={landmarkMode}
+            onModeChange={setLandmarkMode2}
+            view={landmarkView}
+            onViewChange={showLandmarkSide}
             onSet={setLandmark}
+            onGoTo={(side, name) => {
+              const e = sideEntry(side);
+              const w = e ? landmarkWorld(e, name) : null;
+              if (!w) return;
+              if (landmarkMode) setLandmarkView(side);
+              setCursor(w);
+            }}
             onRemove={(side, name) => {
               const e = sideEntry(side);
               if (e) updateEntry(e.id, { landmarks: (e.landmarks ?? []).filter((l) => l.name !== name) });
             }}
-            onGoTo={(side, name) => {
-              const e = sideEntry(side);
-              const l = e?.landmarks?.find((x) => x.name === name);
-              if (e && l) {
-                setLandmarkName(name);
-                setCursor(applyMat4(e.matrix, l.p));
-              }
-            }}
-            onShow={showOnly}
-            onCursorToCenter={(side) => {
-              const e = sideEntry(side);
-              if (e) setCursor(applyMat4(e.matrix, centerOf(e.dataset.current)));
-            }}
-            onAlignOrigin={alignOrigins}
-            rigidRms={rigidFit ? rigidFit.rms : null}
-            onAlignRigid={alignRigid}
+            onOriginToLandmark1={originToLandmark1}
+            onAlignWithLandmark2={alignWithLandmark2}
+            feedback={landmarkFeedback}
             follow={landmarkFollow}
             onFollowChange={setLandmarkFollow}
             followCount={followers(moving).length}
@@ -2770,7 +2807,7 @@ function App() {
             title={`Manuelle Korrektur: ${entryLabel(moving)} → Basis`}
             params={movingParams}
             onChange={(p) => placeMoving(matrixFromParams(p, movingCenter))}
-            pivots={movingLandmark ? [{ id: "landmark", label: `Ursprung: ${movingLandmark.name}` }, { id: "center", label: "Volumenmitte" }] : undefined}
+            pivots={movingLandmark ? [{ id: "landmark", label: "Landmarke 1 (Ursprung)" }, { id: "center", label: "Volumenmitte" }] : undefined}
             pivot={rotPivot}
             onPivotChange={(v) => setRotPivot(v as "landmark" | "center")}
           >
@@ -3210,6 +3247,55 @@ function App() {
   // MIP of the topmost visible functional image (not of label images or CT/MR).
   const mipLayerId = [...overlays].reverse().concat(reference ? [reference] : []).find((e) => e.display.visible && !e.dataset.atlas && !isAnatomical(e.dataset.source))?.id ?? reference?.id;
 
+  // Landmark mode (registration): the viewer shows only the dataset whose landmarks are being set.
+  const landmarkSideEntry = landmarkMode && activeTab === "registration" && moving && reference ? (landmarkView === "base" ? reference : moving) : null;
+  const sideLayers = landmarkSideEntry ? layers.filter((l) => l.id === landmarkSideEntry.id).map((l) => ({ ...l, display: { ...l.display, visible: true, opacity: 1 } })) : [];
+  const viewerLayers = sideLayers.length ? sideLayers : layers;
+
+  /** Landmark markers (base amber, dataset cyan) on the registration tab; strong when the point lies in the slice. */
+  const landmarkMarkers =
+    activeTab === "registration" && reference && moving
+      ? [
+          ...(!landmarkSideEntry || landmarkSideEntry.id === reference.id ? (reference.landmarks ?? []).map((l) => ({ l, e: reference, color: "#ffb000", tag: "B" })) : []),
+          ...(!landmarkSideEntry || landmarkSideEntry.id === moving.id ? (moving.landmarks ?? []).map((l) => ({ l, e: moving, color: "#3bc9db", tag: "D" })) : []),
+        ].map((m) => ({ w: applyMat4(m.e.matrix, m.l.p), color: m.color, text: `${m.tag}${m.l.name.replace(/\D+/g, "")}` }))
+      : [];
+  const landmarkOverlay: ViewerProps["planeOverlay"] = landmarkMarkers.length
+    ? (_kind, ctx, toScreen, basis) => {
+        const nx = basis.U[1] * basis.V[2] - basis.U[2] * basis.V[1];
+        const ny = basis.U[2] * basis.V[0] - basis.U[0] * basis.V[2];
+        const nz = basis.U[0] * basis.V[1] - basis.U[1] * basis.V[0];
+        const nn = Math.hypot(nx, ny, nz) || 1;
+        for (const m of landmarkMarkers) {
+          const d = Math.abs(((m.w[0] - basis.origin[0]) * nx + (m.w[1] - basis.origin[1]) * ny + (m.w[2] - basis.origin[2]) * nz) / nn);
+          if (d > 25) continue;
+          const [u, v] = worldToPlane(basis, m.w);
+          const [x, y] = toScreen(u, v);
+          const inSlice = d < 3;
+          ctx.save();
+          ctx.globalAlpha = inSlice ? 1 : 0.45;
+          ctx.strokeStyle = m.color;
+          ctx.fillStyle = m.color;
+          ctx.lineWidth = inSlice ? 2 : 1;
+          ctx.beginPath();
+          ctx.arc(x, y, 7, 0, Math.PI * 2);
+          ctx.moveTo(x - 11, y);
+          ctx.lineTo(x - 3, y);
+          ctx.moveTo(x + 3, y);
+          ctx.lineTo(x + 11, y);
+          ctx.moveTo(x, y - 11);
+          ctx.lineTo(x, y - 3);
+          ctx.moveTo(x, y + 3);
+          ctx.lineTo(x, y + 11);
+          ctx.stroke();
+          ctx.font = "bold 12px system-ui, sans-serif";
+          // Base labels above, dataset labels below the marker (they coincide after the alignment).
+          ctx.fillText(m.text, x + 10, m.text.startsWith("B") ? y - 9 : y + 20);
+          ctx.restore();
+        }
+      }
+    : undefined;
+
   return (
     <AppShell
       tabs={tabs}
@@ -3232,7 +3318,8 @@ function App() {
     >
       {layers.length > 0 ? (
         <Viewer
-          layers={layers}
+          layers={viewerLayers}
+          planeOverlay={landmarkOverlay}
           activeLayerId={active && displayedIds.includes(active.id) ? active.id : (reference?.id ?? "")}
           mipLayerId={mipLayerId}
           paintMode={(brush.active && voiTool === "brush" && activeTab === "edit" && panelOpen) || (activeTab === "tumor" && panelOpen && !!tumor && (tumorMode === "add" || tumorMode === "erase"))}

@@ -2499,3 +2499,29 @@ tr.focus-row td {
   font-size: 11px;
   margin-bottom: 2px;
 }
+
+/* Landmarks (registration) */
+.landmark-mode {
+  border: 1px solid var(--accent-border);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+.landmark-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.landmark-row .primary-btn,
+.landmark-row .secondary-btn {
+  flex: 0 0 auto;
+  width: auto;
+}
+.landmark-table td,
+.landmark-table th {
+  white-space: nowrap;
+}
+.landmark-feedback {
+  color: var(--accent-strong);
+}
