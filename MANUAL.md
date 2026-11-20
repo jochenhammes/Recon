@@ -179,22 +179,73 @@ und nimmt alle hier registrierten Datensätze mit.
 
 ![Basis und zu registrierende Datensätze](docs/images/12-registrierung-auswahl.jpg)
 
-1. Bereich **Koregistrierung** öffnen.
-2. **1 · Zielraum (Basis)**: den Datensatz wählen, der den Raum definiert (meist CT oder MRT).
-3. **2 · Auf die Basis registrieren**: die zu registrierenden Datensätze anhaken (*alle* / *keine*).
-   Labelbilder, Vorlagen und abgeleitete Datensätze werden nicht automatisch angehakt.
-   Je Zeile: Status (*Patientenkoordinaten*, *registriert*, *Ergebnis prüfen* …) und die gewählte Kostenfunktion.
-4. **3 · Einstellungen** (optional): *Rigide (6)* oder *Affin (12)*, Kostenfunktion (automatisch: Kreuzkorrelation bei
-   gleicher Modalität, sonst normalisierte Mutual Information), Auflösungsstufen, **Grobsuche** für Daten aus
-   verschiedenen Untersuchungen (Schwerpunkt + Rotationsraster ±30°).
-5. **Registrieren** – die Datensätze werden nacheinander berechnet (Fortschritt, *Abbrechen*).
-6. Ergebnisse prüfen: Die Ansicht zeigt das Ergebnis bereits; Klick auf eine Zeile blendet den Datensatz als Overlay ein.
-   Dann *Übernehmen* oder *Verwerfen* (einzeln) bzw. *Alle Ergebnisse übernehmen*.
+Der Bereich **Koregistrierung** hat drei Karten; erledigte Karten klappen ein und zeigen ihren Stand im Kopf.
+
+1. **1 · Basis**: den Datensatz wählen, der den Raum definiert (meist CT oder MRT).
+2. **2 · Datensätze**: die Datensätze, die auf die Basis registriert werden.
+   - Datensätze **derselben Aufnahme** stehen eingerückt unter ihrem Datensatz („folgt …“) und bewegen sich automatisch
+     mit: gleiche FrameOfReference (z. B. PET zum CT) oder eine Organkarte, die zum CT gehört (auch eine wieder geladene
+     „Labels_CT-Organe_…“-Datei).
+   - Status je Zeile: ○ Patientenkoordinaten, ✎ manuell/Landmarken, ◐ Ergebnis prüfen, ✓ registriert, ⚠ Koordinaten
+     (Basis und Datensatz überlappen kaum).
+   - Angehakte Datensätze mit *… automatisch registrieren* nacheinander berechnen, dann *Übernehmen*/*Verwerfen*
+     (einzeln) oder *Alle Ergebnisse übernehmen*.
+   - Klick auf eine Zeile wählt den Datensatz für Karte 3.
+3. **3 · Ausrichten**: ein Datensatz (Auswahl oben; Datensätze einer Aufnahme lassen sich auch *einzeln* ausrichten)
+   mit drei Reitern in der empfohlenen Reihenfolge:
+   - **① Landmarken (optional)**: grob über zwei anatomische Punkte ausrichten, siehe unten. Offen, wenn die
+     Koordinatensysteme nicht zusammenpassen.
+   - **② Automatisch**: *Rigide (6)* oder *Affin (12)*, Kostenfunktion (automatisch: Kreuzkorrelation bei gleicher
+     Modalität, sonst normalisierte Mutual Information), Auflösungsstufen, **Grobsuche** (Schwerpunkt +
+     Rotationsraster ±30°) und *Startlage beibehalten*; *Jetzt registrieren*, danach *Übernehmen*/*Verwerfen*.
+   - **Manuell**: Verschiebung und Drehung als Zahlen (mm, °), *In 90°-Schritten drehen*, optional Schieberegler;
+     Drehpunkt Volumenmitte oder Landmarke 1.
+   - **▸ Erweitert**: Matrix speichern/laden, auf Patientenkoordinaten zurücksetzen, Ursprung dauerhaft in die Datei
+     übernehmen.
 
 ![Registrierungsergebnis prüfen](docs/images/13-registrierung-ergebnis.jpg)
 
-7. **Manuelle Feinkorrektur** (Karte *Transformation*): Verschiebung/Drehung anpassen; Matrix als JSON speichern/laden.
-8. Die Basis lässt sich später wechseln – bestehende Registrierungen bleiben erhalten.
+Die Basis lässt sich später wechseln – bestehende Registrierungen bleiben erhalten. Die Bilder zeigen noch den früheren
+Aufbau.
+
+### Reiter ① Landmarken (verschiedene Koordinatensysteme)
+
+NIfTI-Dateien liegen manchmal nicht im selben Koordinatensystem wie die DICOM-Daten derselben Studie. Häufige Gründe:
+- Der Ursprung wurde neu gesetzt, z. B. mit SPM „Set origin/Reorient“.
+- Die Datei hat keine Lageangaben (sform/qform-Code 0; dann gelten nur die Voxelgröße und der Ursprung 0).
+- Ein Konverter hat die Daten neu zentriert.
+
+Die Datensatz-Details zeigen dazu *Patientenkoordinaten* (sform/qform bzw. „keine Lageangaben“) und den *Ursprung*.
+Überlappen Basis und gewählter Datensatz kaum (⚠), öffnet *Ausrichten* den Reiter **① Landmarken**.
+
+Jeder Datensatz bekommt zwei Landmarken – an denselben anatomischen Punkten in Basis und Datensatz, z. B.
+**Landmarke 1** = Nasenspitze und **Landmarke 2** = Scheitel (Ganzkörper) bzw. vordere und hintere Kommissur (Hirn).
+
+1. **Landmarken setzen …** öffnet den Setz-Modus. Der Viewer zeigt dabei immer nur **einen** Datensatz:
+   - Mit *Basis* / *Datensatz* umschalten.
+   - Im Viewer auf den Punkt klicken (Fadenkreuz).
+   - *Landmarke 1 hier setzen* bzw. *Landmarke 2 hier setzen*.
+   - Gesetzte Landmarken erscheinen als Markierung im Viewer: **B1/B2** (Basis, orange), **D1/D2** (Datensatz, türkis).
+   - *zeigen* springt zur Landmarke, *löschen* entfernt sie.
+2. **Ursprung setzen auf Landmarke 1**: Der Datensatz wird verschoben, bis seine Landmarke 1 auf der Landmarke 1 der
+   Basis liegt.
+   - Der Viewer zeigt danach beide Datensätze; das Fadenkreuz steht auf Landmarke 1.
+   - Ein Hinweis im Viewer meldet, um wie viele Millimeter verschoben wurde.
+3. **Mit Landmarke 2 ausrichten**: Zusätzlich wird um Landmarke 1 gedreht, bis die Richtung zu Landmarke 2 stimmt.
+   - Weichen die Abstände Landmarke 1–2 in Basis und Datensatz deutlich ab, erscheint ein Hinweis.
+   - Eine verbleibende Drehung um diese Achse im Reiter *Manuell* ausgleichen: Drehpunkt *Landmarke 1 (Ursprung)*,
+     90°-Schritte.
+4. Datensätze derselben Aufnahme (z. B. PET zum CT der NIfTI-Studie, die Organkarte) folgen automatisch.
+5. **Weiter: automatisch registrieren →** öffnet Reiter ② – die Landmarkenausrichtung ist die Startlage. Mit
+   eingeschalteter Grobsuche sorgt *Startlage beibehalten* dafür, dass nur ±10° / ±10 mm um diese Lage gesucht wird.
+6. Optional unter *▸ Erweitert*: **Ursprung dauerhaft in die Datei übernehmen** (wie SPM „Set origin“), für Basis oder Datensatz und auf
+   Wunsch für alle Datensätze derselben Aufnahme:
+   - Landmarke 1 wird zu (0,0,0); die Lage zu den anderen Datensätzen bleibt erhalten.
+   - Der NIfTI-Export enthält den neuen Ursprung. Der DICOM-Export schreibt eine neue Serie mit neuer FrameOfReference.
+   - *Zurück auf Original-Ursprung* macht das rückgängig.
+   - Vor einer Normalisierung ausführen.
+
+Landmarken werden in der Projektdatei gespeichert.
 
 ---
 

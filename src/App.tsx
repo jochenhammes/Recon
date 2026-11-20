@@ -15,7 +15,7 @@ import { type ImcalcJob, ImcalcPanel } from "./ui/ImcalcPanel";
 import { combine, groupMeanSd, linear, product, quotient, zScore } from "./imcalc/imcalc";
 import { PROJECT_EXTENSION, ProjectError, loadProject, saveProject } from "./project/project";
 import { InfoText } from "./ui/Info";
-import { type DisplayCandidate, type DisplayDecision, decideDisplay, gridBox, gridKey } from "./dataset/autoDisplay";
+import { type DisplayCandidate, type DisplayDecision, boxOverlap, decideDisplay, gridBox, gridKey } from "./dataset/autoDisplay";
 import { type Activity as JobActivity, ActivityBar } from "./ui/ActivityBar";
 import { FrameSlider } from "./ui/FrameSlider";
 import { runKineticsJob } from "./kinetics/runner";
@@ -56,7 +56,8 @@ import { listZip } from "./core/unzip";
 import { runWarp } from "./normalization/warpRunner";
 import { runResample } from "./resample/runner";
 import { type Interpolation, resampleAtPoints } from "./resample/resample";
-import { CoregPanel, type CoregSettings } from "./ui/CoregPanel";
+import { CoregSettingsForm, type CoregSettings } from "./ui/CoregPanel";
+import { AlignCard, type AlignTab } from "./ui/AlignCard";
 import { similarity } from "./registration/similarity";
 import { type RegistrationRun, runCoregistration } from "./registration/runner";
 import type { CoregProgress, CoregResult } from "./registration/coregister";
@@ -66,12 +67,16 @@ import { DatasetDetails } from "./ui/DatasetInfo";
 import { DatasetList } from "./ui/DatasetList";
 import { LayerSettings, type WindowPreset } from "./ui/ViewSettingsPanel";
 import { type RegRow, type RegStatusKind, RegistrationSetup } from "./ui/RegistrationSetup";
+import { shortLabel } from "./core/shortLabel";
 import { RegistrationPanel } from "./ui/RegistrationPanel";
 import { CT_PRESETS, datasetModality, defaultDisplay, isAnatomical, middleEllipsis, modalityLabel, rawUnitLabel, shortName, suvForSource, unitSource } from "./dataset/describe";
 import { BUNDLED_MNI, BUNDLED_PET_TEMPLATES, SPM_TEMPLATE_ATTRIBUTION, SPM_TEMPLATE_LICENSE, type TemplateKind, loadBundledMni, loadBundledPetTemplate, loadPetTemplate } from "./normalization/templates";
 import { AnalysisPanel } from "./components/AnalysisPanel";
 import { type BrushState, FilterSection, type GeometryAction, GeometrySection, type GeometryTarget, HistorySection, ValueSection, VoiSection, type VoiTool } from "./components/EditTools";
 import { type GroupTarget, groupEditFor, referenceCenter, rotationSense } from "./edit/groupGeometry";
+import { LANDMARK_1, LANDMARK_2, type Landmark, alignByLandmark, alignTwoLandmarks, originShift, reorientPlan } from "./registration/landmarks";
+import { worldToPlane } from "./viewer/planes";
+import { LandmarkPanel, type LandmarkSide } from "./ui/LandmarkCard";
 import { runEdits } from "./edit/runner";
 import { type VoiShape, maskBounds, paintDisc, voiMask, voiStats } from "./edit/voi";
 import { computeStats } from "./analysis/stats";
@@ -88,7 +93,7 @@ import { buildSinogram } from "./recon/sinogram";
 import type { ReconParams } from "./recon/volume";
 import { reconstructVolume } from "./workers/workerPool";
 import { Volume3D, migrateLut } from "./viewer/volume";
-import { Viewer } from "./viewer/Viewer";
+import { Viewer, type ViewerProps } from "./viewer/Viewer";
 import { useShallowStable } from "./viewer/useShallowStable";
 import type { LayerDisplay, LayoutKind, ViewKind, ViewerLayer } from "./viewer/types";
 import { type Vec3, type WorldToVoxel, applyWorldToVoxel, voxelToWorld, volumeCenter, worldToVoxelTransform } from "./core/geometry";
@@ -102,6 +107,7 @@ import {
   type TransformFile,
   matrixFromParams,
   multiply4,
+  transformGeometry,
   paramsFromMatrix,
   parseTransformFile,
   transformedWorldToVoxel,
@@ -121,6 +127,8 @@ interface Entry {
   matrix: Mat4;
   /** User tag (e.g. "Baseline") shown wherever the dataset is named. */
   tag?: string;
+  /** Anatomical landmarks in the dataset's own (native) coordinates. */
+  landmarks?: Landmark[];
   /** Label images: labels shown in the viewer (undefined = all). */
   labelFilter?: number[];
   /** Dynamic datasets: frame shown in the viewer (undefined = time-weighted mean). */
@@ -207,6 +215,12 @@ function App() {
   const [newValue, setNewValue] = useState("0");
   const [unitMode, setUnitMode] = useState<UnitMode>("raw");
   const [cursor, setCursor] = useState<Vec3 | null>(null);
+  const [landmarkMode, setLandmarkMode] = useState(false);
+  const [landmarkView, setLandmarkView] = useState<LandmarkSide>("base");
+  /** Open tab of the "Ausrichten" card and the last landmark step, per target dataset. */
+  const [alignTabFor, setAlignTabFor] = useState<{ id: string; tab: AlignTab } | null>(null);
+  const [landmarkStepFor, setLandmarkStepFor] = useState<{ id: string; step: 0 | 1 | 2 } | null>(null);
+  const [rotPivot, setRotPivot] = useState<"landmark" | "center">("landmark");
   const [layout, setLayout] = useState<LayoutKind>("grid");
   const [focusView, setFocusView] = useState<ViewKind>("axial");
   const [activeTab, setActiveTab] = useState("data");
@@ -932,7 +946,52 @@ function App() {
   const autoCost = costFor(moving);
   /** Labels, standard-space templates and derived datasets are not registered by intensity by default. */
   const isPassive = (e: Entry) => !!(e.dataset.atlas || e.dataset.derivedFrom || e.dataset.template);
-  const regSelection = (regSelected ?? movingCandidates.filter((e) => !isPassive(e)).map((e) => e.id)).filter((id) => movingCandidates.some((e) => e.id === id));
+  // Acquisition groups: datasets with the same frame of reference (or a label map named after its source) move
+  // together; the primary (base, else CT/MR, else the first intensity image) is registered, the others follow.
+  const frameOf = (e: Entry) => e.dataset.current.geometry.frameOfReferenceUid;
+  const groupKey = (e: Entry): string | null => {
+    if (e.dataset.template || (e.dataset.derivedFrom && e.dataset.derivedFrom.space !== "nativ")) return null;
+    if (frameOf(e)) return `for:${frameOf(e)}`;
+    // Label maps without frame of reference (e.g. a re-loaded export "Labels_CT-Organe_<CT name>.nii") belong to the
+    // dataset whose name they contain.
+    const norm = (s: string) => s.replace(/\.nii(\.gz)?$/i, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+    const src = entries.find(
+      (x) =>
+        x.id !== e.id &&
+        (e.dataset.displayName === `CT-Organe · ${x.dataset.displayName}` ||
+          e.dataset.displayName === `Läsionen · ${x.dataset.displayName}` ||
+          (!!e.dataset.atlas && !x.dataset.atlas && norm(x.dataset.displayName).length >= 6 && norm(e.dataset.displayName).includes(norm(x.dataset.displayName)))),
+    );
+    return src ? (frameOf(src) ? `for:${frameOf(src)}` : `id:${src.id}`) : `id:${e.id}`;
+  };
+  const primaryId = new Map<string, string>();
+  {
+    const groups = new Map<string, Entry[]>();
+    for (const e of entries) {
+      const k = groupKey(e);
+      if (k) groups.set(k, [...(groups.get(k) ?? []), e]);
+      else primaryId.set(e.id, e.id);
+    }
+    const anatomicalEntry = (e: Entry) => ["CT", "MR"].includes(modalityLabel(e.dataset.source));
+    for (const list of groups.values()) {
+      const primary =
+        list.find((e) => e.id === reference?.id) ?? list.find((e) => !isPassive(e) && anatomicalEntry(e)) ?? list.find((e) => !isPassive(e)) ?? list[0];
+      for (const e of list) primaryId.set(e.id, primary.id);
+    }
+  }
+  const membersOf = (id: string) => entries.filter((x) => x.id !== id && primaryId.get(x.id) === id);
+  const isPrimary = (e: Entry) => (primaryId.get(e.id) ?? e.id) === e.id;
+  const regCandidates = movingCandidates.filter(isPrimary);
+  const regSelection = (regSelected ?? regCandidates.filter((e) => !isPassive(e)).map((e) => e.id)).filter((id) => regCandidates.some((e) => e.id === id));
+
+  /** New placement of a dataset; if it is the primary of its acquisition, the others follow (same relative pose). */
+  function setMatrixGroup(id: string, next: Mat4) {
+    const e = byId(id);
+    if (!e) return;
+    const delta = multiply4(next, invert4(e.matrix));
+    const members = new Set(isPrimary(e) ? membersOf(id).map((x) => x.id) : []);
+    setEntries((prev) => prev.map((x) => (x.id === id ? { ...x, matrix: next } : members.has(x.id) ? { ...x, matrix: multiply4(delta, x.matrix) } : x)));
+  }
 
   function selectMoving(id: string) {
     setMovingId(id);
@@ -940,9 +999,8 @@ function App() {
   }
 
   /** Registers the checked datasets one after another onto the base. */
-  async function startCoregistration() {
+  async function startCoregistration(ids: string[] = regSelection) {
     if (!reference || coregRunning) return;
-    const ids = regSelection;
     if (!ids.length) return;
     setCoregError(null);
     setCoregProgress(null);
@@ -965,7 +1023,7 @@ function App() {
         );
         coregRun.current = run;
         const result = await run.promise;
-        updateEntry(id, { matrix: result.matrix });
+        setMatrixGroup(id, result.matrix);
         setCoregResults((r) => ({ ...r, [id]: { previous, result, accepted: false } }));
       }
     } catch (err) {
@@ -983,7 +1041,7 @@ function App() {
 
   function discardCoregistration(id: string) {
     const r = coregResults[id];
-    if (r) updateEntry(id, { matrix: r.previous });
+    if (r) setMatrixGroup(id, r.previous);
     setCoregResults((all) => {
       const next = { ...all };
       delete next[id];
@@ -1033,7 +1091,7 @@ function App() {
     if (!moving) return;
     try {
       const t = parseTransformFile(await f.text());
-      updateEntry(moving.id, { matrix: t.matrix });
+      setMatrixGroup(moving.id, t.matrix);
       discardResultOnly(moving.id);
       setCoregError(null);
     } catch (e) {
@@ -2267,16 +2325,158 @@ function App() {
     ];
   };
 
-  // Manual registration of the moving dataset relative to the reference (parameters about its center).
-  const movingCenter = moving ? centerOf(moving.dataset.current) : null;
+  // Manual registration of the moving dataset relative to the reference: parameters about its center or about the
+  // selected landmark (its "origin").
+  const movingLandmark = moving?.landmarks?.find((l) => l.name === LANDMARK_1);
+  const movingCenter = moving ? (rotPivot === "landmark" && movingLandmark ? movingLandmark.p : centerOf(moving.dataset.current)) : null;
   const movingParams = moving && movingCenter ? (paramsFromMatrix(moving.matrix, movingCenter) ?? IDENTITY_PARAMS) : IDENTITY_PARAMS;
+
+  // ── Landmarks / origin ──
+  const sameFrame = (a: Entry, b: Entry) => {
+    const fa = a.dataset.current.geometry.frameOfReferenceUid, fb = b.dataset.current.geometry.frameOfReferenceUid;
+    return !!fa && fa === fb && a.id !== b.id;
+  };
+  const nativeOf = (e: Entry, p: Vec3): Vec3 => applyMat4(invert4(e.matrix), p);
+  const sideEntry = (side: LandmarkSide) => (side === "base" ? reference : moving);
+  const placementMismatch = (() => {
+    if (!moving || !reference) return false;
+    const box = (e: Entry) => gridBox(transformGeometry(e.dataset.current.geometry, e.matrix), [e.dataset.current.nx, e.dataset.current.ny, e.dataset.current.nz]);
+    return boxOverlap(box(moving), box(reference)) < 0.1;
+  })();
+
+  /** New placement of the moving dataset; datasets of the same acquisition follow (same relative pose). */
+  function placeMoving(next: Mat4) {
+    if (!moving) return;
+    makeOverlay(moving.id);
+    setMatrixGroup(moving.id, next);
+    setEntries((prev) => prev.map((x) => (x.id === moving.id ? { ...x, display: { ...x.display, visible: true } } : x)));
+    discardResultOnly(moving.id);
+  }
+
+  const landmarkWorld = (e: Entry, name: string) => {
+    const l = e.landmarks?.find((x) => x.name === name);
+    return l ? applyMat4(e.matrix, l.p) : null;
+  };
+
+  /** Landmark mode: the viewer shows only one dataset; the cross-hair goes to its landmark 1 or its center. */
+  function showLandmarkSide(side: LandmarkSide) {
+    const e = sideEntry(side);
+    if (!e) return;
+    setLandmarkView(side);
+    if (moving) makeOverlay(moving.id);
+    setCursor(landmarkWorld(e, LANDMARK_1) ?? applyMat4(e.matrix, centerOf(e.dataset.current)));
+  }
+
+  function setLandmarkMode2(on: boolean) {
+    setLandmarkMode(on);
+    // Keep the landmark tab open while working there (the default tab follows the overlap otherwise).
+    if (on && moving) setAlignTabFor({ id: moving.id, tab: "landmarks" });
+    if (on) showLandmarkSide("base");
+    else if (moving) {
+      makeOverlay(moving.id);
+      updateEntry(moving.id, { display: { ...overlayDisplay(moving), visible: true } });
+    }
+  }
+
+  function setLandmark(name: string) {
+    const e = sideEntry(landmarkView);
+    if (!e) return;
+    const p = nativeOf(e, cursor ?? applyMat4(e.matrix, centerOf(e.dataset.current)));
+    updateEntry(e.id, { landmarks: [...(e.landmarks ?? []).filter((l) => l.name !== name), { name, p }] });
+  }
+
+  /** After an alignment: leave the landmark mode, show both datasets and put the cross-hair on landmark 1. */
+  function showAlignment(next: Mat4, message: string) {
+    if (!moving || !reference) return;
+    placeMoving(next);
+    setLandmarkMode(false);
+    setRotPivot("landmark");
+    setCoregSettings((s) => ({ ...s, keepStart: true }));
+    const b1 = landmarkWorld(reference, LANDMARK_1);
+    if (b1) setCursor(b1);
+    setLandmarkStepFor({ id: moving.id, step: message.includes("gedreht") ? 2 : 1 });
+    setAlignTabFor({ id: moving.id, tab: "landmarks" });
+    setNotice(message);
+  }
+
+  function originToLandmark1() {
+    if (!moving || !reference) return;
+    const b1 = landmarkWorld(reference, LANDMARK_1);
+    const m1 = moving.landmarks?.find((l) => l.name === LANDMARK_1);
+    if (!b1 || !m1) return;
+    const before = applyMat4(moving.matrix, m1.p);
+    const dist = Math.hypot(b1[0] - before[0], b1[1] - before[1], b1[2] - before[2]);
+    showAlignment(
+      alignByLandmark(b1, m1.p, moving.matrix),
+      `${entryLabel(moving)} um ${dist.toFixed(0)} mm verschoben: Landmarke 1 liegt jetzt auf Landmarke 1 der Basis (Fadenkreuz). Falls verdreht: „Mit Landmarke 2 ausrichten“ oder im Reiter „Manuell“ um Landmarke 1 drehen.`,
+    );
+  }
+
+  function alignWithLandmark2() {
+    if (!moving || !reference) return;
+    const b1 = landmarkWorld(reference, LANDMARK_1), b2 = landmarkWorld(reference, LANDMARK_2);
+    const m1 = moving.landmarks?.find((l) => l.name === LANDMARK_1), m2 = moving.landmarks?.find((l) => l.name === LANDMARK_2);
+    if (!b1 || !b2 || !m1 || !m2) return;
+    const next = alignTwoLandmarks(b1, b2, m1.p, m2.p, moving.matrix);
+    if (!next) return;
+    // Rotation angle between the old and new linear part.
+    const A = moving.matrix, B = next;
+    let tr = 0;
+    for (let i = 0; i < 3; i++) for (let k = 0; k < 3; k++) tr += B[i * 4 + k] * A[i * 4 + k];
+    const angle = (Math.acos(Math.max(-1, Math.min(1, (tr - 1) / 2))) * 180) / Math.PI;
+    const db = Math.hypot(b2[0] - b1[0], b2[1] - b1[1], b2[2] - b1[2]);
+    const dm = Math.hypot(m2.p[0] - m1.p[0], m2.p[1] - m1.p[1], m2.p[2] - m1.p[2]);
+    showAlignment(
+      next,
+      `${entryLabel(moving)} auf Landmarke 1 gelegt und um ${angle.toFixed(0)}° gedreht, bis die Richtung zu Landmarke 2 stimmt. Abstand Landmarke 1–2: Basis ${db.toFixed(0)} mm, Datensatz ${dm.toFixed(0)} mm${Math.abs(db - dm) > 10 ? " – deutlich verschieden, Landmarken prüfen" : ""}.`,
+    );
+  }
+
+  /** Takes the coordinate change T into the datasets `ids`; all placements are compensated (see reorientPlan). */
+  function applyReorient(ids: Set<string>, T: Mat4) {
+    if (!reference) return;
+    const r = reorientPlan(entries.map((e) => ({ id: e.id, matrix: e.matrix, geometry: e.dataset.current.geometry, landmarks: e.landmarks })), ids, T, reference.id);
+    const move = (v: Volume3D) => new Volume3D(v.data, v.nz, v.ny, v.nx, v.voxelSpacingMm, transformGeometry(v.geometry, T));
+    setEntries((prev) =>
+      prev.map((e) => {
+        const matrix = r.matrices.get(e.id) ?? e.matrix;
+        if (!ids.has(e.id)) return { ...e, matrix };
+        const prevT = e.dataset.reoriented ?? IDENTITY_MAT4;
+        const total = multiply4(T, prevT);
+        const isIdentity = total.every((v, i) => Math.abs(v - IDENTITY_MAT4[i]) < 1e-9);
+        const original = move(e.dataset.original);
+        const current = e.dataset.current === e.dataset.original ? original : move(e.dataset.current);
+        return { ...e, matrix, landmarks: r.landmarks.get(e.id) ?? e.landmarks, dataset: { ...e.dataset, original, current, reoriented: isIdentity ? undefined : total } };
+      }),
+    );
+    if (cursor) setCursor(applyMat4(r.world, cursor));
+    setVoi(null);
+    setCoregResults({});
+  }
+
+  function reorientTo(side: LandmarkSide, sameFrameToo: boolean) {
+    const e = sideEntry(side);
+    const l = e?.landmarks?.find((x) => x.name === LANDMARK_1);
+    if (!e || !l) return;
+    const ids = new Set([e.id, ...(sameFrameToo && isPrimary(e) ? membersOf(e.id).map((x) => x.id) : [])]);
+    if (!window.confirm(`Ursprung (0,0,0) von ${ids.size === 1 ? "„" + entryLabel(e) + "“" : `${ids.size} Datensätzen`} auf Landmarke 1 legen? Die Lage zu den anderen Datensätzen bleibt erhalten.`)) return;
+    applyReorient(ids, originShift(l.p));
+  }
+
+  function resetOrigin(side: LandmarkSide) {
+    const e = sideEntry(side);
+    if (!e?.dataset.reoriented) return;
+    const key = JSON.stringify(e.dataset.reoriented);
+    const ids = new Set([e.id, ...entries.filter((x) => sameFrame(x, e) && JSON.stringify(x.dataset.reoriented) === key).map((x) => x.id)]);
+    applyReorient(ids, invert4(e.dataset.reoriented));
+  }
 
   let frameNote: string | undefined;
   if (moving && reference) {
     const a = moving.dataset.current.geometry.frameOfReferenceUid;
     const b = reference.dataset.current.geometry.frameOfReferenceUid;
     if (!moving.dataset.current.hasPatientGeometry || !reference.dataset.current.hasPatientGeometry)
-      frameNote = "Für mindestens einen Datensatz sind keine Patientenkoordinaten bekannt – die Ausrichtung muss manuell erfolgen.";
+      frameNote = "Für mindestens einen Datensatz sind keine Patientenkoordinaten bekannt – vorher über Landmarken oder manuell grob ausrichten.";
     else if (a && b && a !== b)
       frameNote = "Unterschiedliche Frame-of-Reference-UIDs: Die Datensätze stammen evtl. aus verschiedenen Untersuchungen – Grobsuche empfohlen.";
   }
@@ -2558,24 +2758,57 @@ function App() {
     const v = e.dataset.current;
     return `${v.nx}×${v.ny}×${v.nz} · ${v.geometry.spacing.map((x) => formatValue(x)).join("×")} mm`;
   };
-  const regRows: RegRow[] = movingCandidates.map((e) => {
+  const overlapsBase = (x: Entry) => {
+    if (!reference) return true;
+    const box = (y: Entry) => gridBox(transformGeometry(y.dataset.current.geometry, y.matrix), [y.dataset.current.nx, y.dataset.current.ny, y.dataset.current.nz]);
+    return boxOverlap(box(x), box(reference)) >= 0.1;
+  };
+  const statusOf = (e: Entry): RegStatusKind => {
     const r = coregResults[e.id];
-    const status: RegStatusKind =
-      regQueue.running === e.id ? "running" : regQueue.waiting.includes(e.id) ? "queued" : r && !r.accepted ? "pending" : r ? "registered" : isIdentity(e.matrix) ? "scanner" : "manual";
+    return regQueue.running === e.id ? "running" : regQueue.waiting.includes(e.id) ? "queued" : r && !r.accepted ? "pending" : r ? "registered" : isIdentity(e.matrix) ? "scanner" : "manual";
+  };
+  const regRows: RegRow[] = regCandidates.map((e) => {
+    const r = coregResults[e.id];
+    const status = statusOf(e);
     const detail =
       status === "running" && coregProgress
         ? `Stufe ${coregProgress.level}/${coregProgress.levels} · ${similarity(coregSettings.cost === "auto" ? costFor(e) : coregSettings.cost, coregProgress.cost)}`
         : r && (status === "pending" || status === "registered")
           ? `${similarity(r.result.cost, r.result.before)} → ${similarity(r.result.cost, r.result.after)}`
           : undefined;
-    return { id: e.id, label: entryLabel(e), info: gridInfo(e), status, detail, passive: isPassive(e) };
+    return {
+      id: e.id,
+      label: entryLabel(e),
+      info: gridInfo(e),
+      status,
+      detail,
+      passive: isPassive(e),
+      mismatch: !overlapsBase(e),
+      members: membersOf(e.id).map((m) => ({ id: m.id, label: entryLabel(m) })),
+    };
   });
+  // "Ausrichten": groups first, then single members.
+  const alignTargets = [
+    ...regCandidates.map((e) => ({ id: e.id, label: entryLabel(e) })),
+    ...movingCandidates.filter((e) => !isPrimary(e)).map((e) => ({ id: e.id, label: entryLabel(e), single: true })),
+  ];
+  const alignTab: AlignTab = moving && alignTabFor?.id === moving.id ? alignTabFor.tab : placementMismatch ? "landmarks" : "auto";
+  const setAlignTab = (tab: AlignTab) => {
+    if (!moving) return;
+    setAlignTabFor({ id: moving.id, tab });
+    if (tab !== "landmarks" && landmarkMode) setLandmarkMode2(false);
+  };
+  const landmarkStep = moving && landmarkStepFor?.id === moving.id ? landmarkStepFor.step : 0;
+  const movingStatus = moving ? statusOf(moving) : null;
+  const STATUS_TEXT: Record<RegStatusKind, string> = { scanner: "Patientenkoordinaten", registered: "✓ registriert", manual: "✎ manuell/Landmarken", pending: "◐ Ergebnis prüfen", running: "läuft …", queued: "wartet" };
+
   const registrationTab = reference && (
     <>
       <RegistrationSetup
         datasets={entries.map((e) => ({ id: e.id, label: entryLabel(e), info: `${datasetModality(e.dataset)} · ${gridInfo(e)}` }))}
         referenceId={reference.id}
         onReferenceChange={changeBase}
+        baseMembers={membersOf(reference.id).map((m) => ({ id: m.id, label: entryLabel(m) }))}
         rows={regRows}
         selected={regSelection}
         onSelectedChange={setRegSelected}
@@ -2584,7 +2817,7 @@ function App() {
         running={coregRunning}
         progressText={
           regQueue.running
-            ? `${entryLabel(byId(regQueue.running)!)}${coregProgress ? ` · Stufe ${coregProgress.level}/${coregProgress.levels} · ${coregProgress.stage}` : ""}${regQueue.waiting.length ? ` · noch ${regQueue.waiting.length} wartend` : ""}`
+            ? `${shortLabel(entryLabel(byId(regQueue.running)!), 30)}${coregProgress ? ` · Stufe ${coregProgress.level}/${coregProgress.levels} · ${coregProgress.stage}` : ""}${regQueue.waiting.length ? ` · noch ${regQueue.waiting.length} wartend` : ""}`
             : null
         }
         onStart={() => void startCoregistration()}
@@ -2599,40 +2832,165 @@ function App() {
         error={coregError}
       />
       {moving && movingCenter && (
-        <>
-          <CoregPanel
-            focusLabel={entryLabel(moving)}
-            autoCost={autoCost}
-            settings={coregSettings}
-            onSettingsChange={setCoregSettings}
-            running={coregRunning}
-            onResetToScanner={() => {
-              updateEntry(moving.id, { matrix: IDENTITY_MAT4 });
-              discardResultOnly(moving.id);
-            }}
-            onSaveMatrix={saveMatrix}
-            onLoadMatrix={(f) => void loadMatrix(f)}
-            frameNote={frameNote}
-          />
-          <RegistrationPanel
-            title={`Manuelle Korrektur: ${entryLabel(moving)} → Basis`}
-            params={movingParams}
-            onChange={(p) => {
-              updateEntry(moving.id, { matrix: matrixFromParams(p, movingCenter) });
-              discardResultOnly(moving.id);
-            }}
-          >
-            {!isRigid(movingParams) && (
+        <AlignCard
+          targets={alignTargets}
+          targetId={moving.id}
+          onTargetChange={selectMoving}
+          tab={alignTab}
+          onTabChange={setAlignTab}
+          mismatch={placementMismatch}
+          status={movingStatus ? { text: STATUS_TEXT[movingStatus], tone: movingStatus === "registered" ? "ok" : movingStatus === "pending" ? "warn" : "info" } : null}
+          landmarks={
+            <LandmarkPanel
+              baseLabel={entryLabel(reference)}
+              movingLabel={entryLabel(moving)}
+              baseLandmarks={reference.landmarks ?? []}
+              movingLandmarks={moving.landmarks ?? []}
+              mode={landmarkMode}
+              onModeChange={setLandmarkMode2}
+              view={landmarkView}
+              onViewChange={showLandmarkSide}
+              onSet={setLandmark}
+              onGoTo={(side, name) => {
+                const e = sideEntry(side);
+                const w = e ? landmarkWorld(e, name) : null;
+                if (!w) return;
+                if (landmarkMode) setLandmarkView(side);
+                setCursor(w);
+              }}
+              onRemove={(side, name) => {
+                const e = sideEntry(side);
+                if (e) updateEntry(e.id, { landmarks: (e.landmarks ?? []).filter((l) => l.name !== name) });
+              }}
+              onOriginToLandmark1={originToLandmark1}
+              onAlignWithLandmark2={alignWithLandmark2}
+              step={landmarkStep}
+              onNext={() => setAlignTab("auto")}
+              running={coregRunning}
+            />
+          }
+          auto={
+            <>
+              {frameNote && <p className="tool-hint">{frameNote}</p>}
+              <CoregSettingsForm autoCost={autoCost} settings={coregSettings} onSettingsChange={setCoregSettings} running={coregRunning} />
+              {!coregRunning ? (
+                <button className={movingStatus === "pending" ? "secondary-btn" : "primary-btn"} onClick={() => void startCoregistration([moving.id])}>
+                  Jetzt registrieren
+                </button>
+              ) : (
+                <>
+                  <p className="tool-hint">
+                    {coregProgress ? `Stufe ${coregProgress.level}/${coregProgress.levels} · ${coregProgress.stage}` : "Vorbereitung …"}
+                  </p>
+                  <button
+                    className="secondary-btn"
+                    onClick={() => {
+                      regCancelled.current = true;
+                      coregRun.current?.cancel();
+                    }}
+                  >
+                    Abbrechen
+                  </button>
+                </>
+              )}
+              {movingStatus === "pending" && coregResults[moving.id] && (
+                <>
+                  <p className="tool-hint">
+                    Ergebnis: {similarity(coregResults[moving.id].result.cost, coregResults[moving.id].result.before)} →{" "}
+                    {similarity(coregResults[moving.id].result.cost, coregResults[moving.id].result.after)}. Die Ansicht zeigt es bereits.
+                  </p>
+                  <div className="button-row">
+                    <button className="primary-btn" onClick={() => acceptCoregistration(moving.id)}>
+                      Übernehmen
+                    </button>
+                    <button className="secondary-btn" onClick={() => discardCoregistration(moving.id)}>
+                      Verwerfen
+                    </button>
+                  </div>
+                </>
+              )}
+            </>
+          }
+          manual={
+            <RegistrationPanel
+              params={movingParams}
+              onChange={(p) => placeMoving(matrixFromParams(p, movingCenter))}
+              pivots={movingLandmark ? [{ id: "landmark", label: "Landmarke 1 (Ursprung)" }, { id: "center", label: "Volumenmitte" }] : undefined}
+              pivot={rotPivot}
+              onPivotChange={(v) => setRotPivot(v as "landmark" | "center")}
+            >
+              {!isRigid(movingParams) && (
+                <p className="tool-hint">
+                  Affine Anteile: Skalierung {[movingParams.sx, movingParams.sy, movingParams.sz].map((v) => v.toFixed(3)).join(" / ")}, Scherung{" "}
+                  {[movingParams.hxy, movingParams.hxz, movingParams.hyz].map((v) => v.toFixed(3)).join(" / ")}
+                </p>
+              )}
+            </RegistrationPanel>
+          }
+          advanced={
+            <>
+              <div className="button-row">
+                <button className="secondary-btn" disabled={coregRunning} onClick={saveMatrix}>
+                  Matrix speichern
+                </button>
+                <label className="secondary-btn file-btn">
+                  Matrix laden
+                  <input
+                    type="file"
+                    accept=".json,application/json"
+                    hidden
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) void loadMatrix(f);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+              <button
+                className="secondary-btn"
+                disabled={coregRunning}
+                onClick={() => {
+                  setMatrixGroup(moving.id, IDENTITY_MAT4);
+                  discardResultOnly(moving.id);
+                }}
+              >
+                Auf Patientenkoordinaten zurücksetzen
+              </button>
               <p className="tool-hint">
-                Affine Anteile: Skalierung {[movingParams.sx, movingParams.sy, movingParams.sz].map((v) => v.toFixed(3)).join(" / ")}, Scherung{" "}
-                {[movingParams.hxy, movingParams.hxz, movingParams.hyz].map((v) => v.toFixed(3)).join(" / ")}
+                Ursprung dauerhaft in die Datei übernehmen (wie SPM „Set origin“): Landmarke 1 wird zu (0,0,0); die Lage zu den anderen Datensätzen bleibt,
+                der Export enthält den neuen Ursprung (DICOM als neue Serie). Gilt auch für die Datensätze derselben Aufnahme. Vor einer Normalisierung
+                ausführen.
               </p>
-            )}
-          </RegistrationPanel>
-        </>
+              <div className="button-row">
+                <button className="secondary-btn" disabled={coregRunning || !reference.landmarks?.some((l) => l.name === LANDMARK_1)} onClick={() => reorientTo("base", true)}>
+                  Basis: Ursprung = Landmarke 1
+                </button>
+                <button className="secondary-btn" disabled={coregRunning || !moving.landmarks?.some((l) => l.name === LANDMARK_1)} onClick={() => reorientTo("moving", true)}>
+                  Datensatz: Ursprung = Landmarke 1
+                </button>
+              </div>
+              {(["base", "moving"] as LandmarkSide[]).map((side) =>
+                sideEntry(side)?.dataset.reoriented ? (
+                  <p key={side} className="tool-hint">
+                    {side === "base" ? "Basis" : "Datensatz"}: Ursprung übernommen.{" "}
+                    <button className="link-btn" disabled={coregRunning} onClick={() => resetOrigin(side)}>
+                      zurück auf Original-Ursprung
+                    </button>
+                  </p>
+                ) : null,
+              )}
+              <p className="tool-hint">
+                Intensitätsbasierte Registrierung nach dem Vorbild von SPM (Coregister) und FSL FLIRT: Mutual Information für unterschiedliche Modalitäten,
+                Kreuzkorrelation für gleiche; Startpunkt ist die aktuelle Lage (Patientenkoordinaten, Landmarken oder manuelle Korrektur).
+              </p>
+            </>
+          }
+        />
       )}
     </>
   );
+
 
   const normalizationTab = (
     <NormalizationPanel
@@ -3058,6 +3416,55 @@ function App() {
   // MIP of the topmost visible functional image (not of label images or CT/MR).
   const mipLayerId = [...overlays].reverse().concat(reference ? [reference] : []).find((e) => e.display.visible && !e.dataset.atlas && !isAnatomical(e.dataset.source))?.id ?? reference?.id;
 
+  // Landmark mode (registration): the viewer shows only the dataset whose landmarks are being set.
+  const landmarkSideEntry = landmarkMode && activeTab === "registration" && alignTab === "landmarks" && moving && reference ? (landmarkView === "base" ? reference : moving) : null;
+  const sideLayers = landmarkSideEntry ? layers.filter((l) => l.id === landmarkSideEntry.id).map((l) => ({ ...l, display: { ...l.display, visible: true, opacity: 1 } })) : [];
+  const viewerLayers = sideLayers.length ? sideLayers : layers;
+
+  /** Landmark markers (base amber, dataset cyan) on the registration tab; strong when the point lies in the slice. */
+  const landmarkMarkers =
+    activeTab === "registration" && reference && moving
+      ? [
+          ...(!landmarkSideEntry || landmarkSideEntry.id === reference.id ? (reference.landmarks ?? []).map((l) => ({ l, e: reference, color: "#ffb000", tag: "B" })) : []),
+          ...(!landmarkSideEntry || landmarkSideEntry.id === moving.id ? (moving.landmarks ?? []).map((l) => ({ l, e: moving, color: "#3bc9db", tag: "D" })) : []),
+        ].map((m) => ({ w: applyMat4(m.e.matrix, m.l.p), color: m.color, text: `${m.tag}${m.l.name.replace(/\D+/g, "")}` }))
+      : [];
+  const landmarkOverlay: ViewerProps["planeOverlay"] = landmarkMarkers.length
+    ? (_kind, ctx, toScreen, basis) => {
+        const nx = basis.U[1] * basis.V[2] - basis.U[2] * basis.V[1];
+        const ny = basis.U[2] * basis.V[0] - basis.U[0] * basis.V[2];
+        const nz = basis.U[0] * basis.V[1] - basis.U[1] * basis.V[0];
+        const nn = Math.hypot(nx, ny, nz) || 1;
+        for (const m of landmarkMarkers) {
+          const d = Math.abs(((m.w[0] - basis.origin[0]) * nx + (m.w[1] - basis.origin[1]) * ny + (m.w[2] - basis.origin[2]) * nz) / nn);
+          if (d > 25) continue;
+          const [u, v] = worldToPlane(basis, m.w);
+          const [x, y] = toScreen(u, v);
+          const inSlice = d < 3;
+          ctx.save();
+          ctx.globalAlpha = inSlice ? 1 : 0.45;
+          ctx.strokeStyle = m.color;
+          ctx.fillStyle = m.color;
+          ctx.lineWidth = inSlice ? 2 : 1;
+          ctx.beginPath();
+          ctx.arc(x, y, 7, 0, Math.PI * 2);
+          ctx.moveTo(x - 11, y);
+          ctx.lineTo(x - 3, y);
+          ctx.moveTo(x + 3, y);
+          ctx.lineTo(x + 11, y);
+          ctx.moveTo(x, y - 11);
+          ctx.lineTo(x, y - 3);
+          ctx.moveTo(x, y + 3);
+          ctx.lineTo(x, y + 11);
+          ctx.stroke();
+          ctx.font = "bold 12px system-ui, sans-serif";
+          // Base labels above, dataset labels below the marker (they coincide after the alignment).
+          ctx.fillText(m.text, x + 10, m.text.startsWith("B") ? y - 9 : y + 20);
+          ctx.restore();
+        }
+      }
+    : undefined;
+
   return (
     <AppShell
       tabs={tabs}
@@ -3080,7 +3487,8 @@ function App() {
     >
       {layers.length > 0 ? (
         <Viewer
-          layers={layers}
+          layers={viewerLayers}
+          planeOverlay={landmarkOverlay}
           activeLayerId={active && displayedIds.includes(active.id) ? active.id : (reference?.id ?? "")}
           mipLayerId={mipLayerId}
           paintMode={(brush.active && voiTool === "brush" && activeTab === "edit" && panelOpen) || (activeTab === "tumor" && panelOpen && !!tumor && (tumorMode === "add" || tumorMode === "erase"))}

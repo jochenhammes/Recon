@@ -14,6 +14,13 @@ import { buildEditedDicomFiles } from "./editedDicomExport";
 import { buildNiftiFile, buildNiftiFromOriginalHeader } from "./niftiWriter";
 import { buildTemplateSeries } from "./templateDicomWriter";
 import { buildZip } from "./zip";
+import { derivedFrameOfReference } from "../registration/landmarks";
+
+/** Frame of reference written for a dataset: a new (deterministic) UID after an origin change. */
+function frameOfReferenceFor(d: LoadedDataset): string | undefined {
+  const uid = d.current.geometry.frameOfReferenceUid;
+  return d.reoriented ? derivedFrameOfReference(uid, d.reoriented) : uid;
+}
 
 /** A dataset offered for export, with its placement in the reference world. */
 export interface ExportItem {
@@ -102,7 +109,7 @@ export async function exportDatasetFiles(
     const w2v = worldToVoxelThrough(item.w2v, target.matrix);
     const data = await runResample(d.current, w2v, grid, d.atlas ? "nearest" : method, onProgress);
     const g = grid.geometry;
-    const vol = new Volume3D(data, grid.nz, grid.ny, grid.nx, [g.spacing[2], g.spacing[1], g.spacing[0]], { ...g, frameOfReferenceUid: target.dataset.current.geometry.frameOfReferenceUid });
+    const vol = new Volume3D(data, grid.nz, grid.ny, grid.nx, [g.spacing[2], g.spacing[1], g.spacing[0]], { ...g, frameOfReferenceUid: frameOfReferenceFor(target.dataset) });
     const spaceTag = `im_${safeName(datasetModality(target.dataset))}-Raum`;
     if (settings.format === "nifti" || d.source.kind !== "dicom") {
       if (settings.format === "dicom") warnings.push(`${item.label}: keine DICOM-Quelle – als NIfTI gespeichert.`);
@@ -113,7 +120,7 @@ export async function exportDatasetFiles(
     const { files, warnings: w } = buildTemplateSeries(vol, d.source.files[0], {
       seriesDescription: `${datasetModality(d)} im ${datasetModality(target.dataset)}-Raum`,
       derivationDescription: `Resampelt in den Raum von ${target.dataset.displayName} (${INTERPOLATION_LABELS[method].split(" (")[0]})${edits ? `; ${edits}` : ""}`,
-      frameOfReferenceUid: target.dataset.current.geometry.frameOfReferenceUid,
+      frameOfReferenceUid: frameOfReferenceFor(target.dataset),
       anonymize: settings.anonymize,
       headerEdits: d.headerEdits,
     });
@@ -123,7 +130,7 @@ export async function exportDatasetFiles(
   // Native grid.
   const registered = !isIdentityMat4(item.matrix);
   if (settings.format === "nifti") {
-    if (d.source.kind === "nifti" && !d.edits.some(changesGrid) && !d.atlas && !registered && !suv) {
+    if (d.source.kind === "nifti" && !d.edits.some(changesGrid) && !d.atlas && !registered && !suv && !d.reoriented) {
       const bytes = buildNiftiFromOriginalHeader(d.current, d.source.nifti);
       if (bytes) return { files: [{ name: `${niftiName}.nii`, bytes }], warnings };
     }
@@ -135,7 +142,7 @@ export async function exportDatasetFiles(
   const source = d.source;
   const edited = d.edits.length > 0;
   const editDescription = d.edits.map((e) => describeEdit(e)).join("; ");
-  if (source.kind === "dicom" && !d.edits.some(changesGrid)) {
+  if (source.kind === "dicom" && !d.edits.some(changesGrid) && !d.reoriented) {
     const { files, warnings: w } = buildEditedDicomFiles(d.current, source, {
       seriesDescriptionSuffix: settings.markSeries && edited ? " [bearbeitet]" : undefined,
       derivationDescription: edited ? editDescription : undefined,
@@ -148,11 +155,12 @@ export async function exportDatasetFiles(
   if (source.kind === "dicom") {
     const { files, warnings: w } = buildTemplateSeries(d.current, source.files[0], {
       seriesDescription: `${source.files[0].dataSet.string("x0008103e")?.trim() ?? ""} [bearbeitet]`.trim(),
-      derivationDescription: editDescription,
+      derivationDescription: [editDescription, d.reoriented ? "Koordinatenursprung neu gesetzt" : ""].filter(Boolean).join("; "),
+      frameOfReferenceUid: frameOfReferenceFor(d),
       anonymize: settings.anonymize,
       headerEdits: d.headerEdits,
     });
-    return { files: series(files, base), warnings: [...warnings, `${item.label}: neue Serie mit verändertem Voxelraster.`, ...w] };
+    return { files: series(files, base), warnings: [...warnings, d.reoriented && !d.edits.some(changesGrid) ? `${item.label}: neue Serie mit neuem Koordinatenursprung (neue FrameOfReference).` : `${item.label}: neue Serie mit verändertem Voxelraster.`, ...w] };
   }
   const description = source.kind === "reconstruction" ? (d.kindLabel ? `${d.kindLabel} ${d.displayName}` : describeRecon(source.reconParams)) : `NIfTI-Import ${d.displayName}`;
   const bytes = buildReconstructionDicom(d.current, { seriesDescription: (edited ? `${description} [bearbeitet]` : description).slice(0, 64) });

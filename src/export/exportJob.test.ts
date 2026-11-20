@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { listZip } from "../core/unzip";
 import { voxelToWorld, worldToVoxelTransform } from "../core/geometry";
-import { IDENTITY_MAT4, IDENTITY_PARAMS, applyMat4, matrixFromParams } from "../core/transform";
+import { IDENTITY_MAT4, IDENTITY_PARAMS, applyMat4, matrixFromParams, transformGeometry } from "../core/transform";
+import { buildNiftiFile } from "./niftiWriter";
+import { originShift } from "../registration/landmarks";
 import { createDataset } from "../dataset/types";
 import { Volume3D } from "../viewer/volume";
 import { parseNifti1 } from "../viewer/volumeLoader";
@@ -32,6 +34,17 @@ describe("export without resampling", () => {
       const got = voxelToWorld(back.geometry, i, j, k);
       got.forEach((v, a) => expect(v).toBeCloseTo(want[a], 3));
     }
+  });
+
+  it("a new origin taken into a NIfTI dataset is written instead of the original header", async () => {
+    const orig = parse(buildNiftiFile(vol, {}));
+    const landmark = voxelToWorld(orig.volume.geometry, 2, 3, 4);
+    const T = originShift(landmark);
+    const moved = new Volume3D(orig.volume.data, 6, 5, 4, [3, 2, 2], transformGeometry(orig.volume.geometry, T));
+    const d = { ...createDataset(moved, { kind: "nifti" as const, fileName: "x.nii", nifti: orig.nifti }, "x.nii"), reoriented: T };
+    const { files } = await exportDatasetFiles({ ...item(), dataset: d, w2v: worldToVoxelTransform(moved.geometry) }, nifti, 0);
+    const back = parse(files[0].bytes).volume;
+    voxelToWorld(back.geometry, 2, 3, 4).forEach((v) => expect(Math.abs(v)).toBeLessThan(1e-3));
   });
 
   it("converts PET values to SUV on request", async () => {

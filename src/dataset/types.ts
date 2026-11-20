@@ -83,6 +83,8 @@ export interface LoadedDataset {
   /** Set when the dataset is a label atlas (region indices). */
   atlas?: AtlasInfo;
   /** Set for datasets resampled into a standard space: name, original source (for SUV/units) and space. */
+  /** Coordinate change taken into the dataset (e.g. new origin at a landmark); undefined = original header geometry. */
+  reoriented?: number[];
   derivedFrom?: {
     name: string;
     source: VolumeSource;
