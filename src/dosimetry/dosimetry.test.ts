@@ -90,3 +90,34 @@ describe("calibration and dose", () => {
     expect(m.get(1)!.massG).toBeCloseTo(4 * 1.06, 4);
   });
 });
+
+describe("SPECT header timing", () => {
+  it("reads acquisition and injection time, duration (binary US values) and dose", async () => {
+    const dicomParser = await import("dicom-parser");
+    const { buildPart10, enc, item, s } = await import("../test/dicomFixtures");
+    const { concatBytes } = await import("../export/bytes");
+    const { timePointFromHeader } = await import("./calibration");
+    const rp = concatBytes([
+      enc({ tag: [0x0018, 0x1074], vr: "DS", value: s("DS", "7400000000") }, true),
+      enc({ tag: [0x0018, 0x1078], vr: "DT", value: s("DT", "20261101100000") }, true),
+    ]);
+    const rot = concatBytes([
+      enc({ tag: [0x0018, 0x1242], vr: "IS", value: s("IS", "20000") }, true),
+      enc({ tag: [0x0054, 0x0053], vr: "US", value: Uint8Array.of(60, 0) }, true),
+    ]);
+    const bytes = buildPart10({
+      rows: 2, cols: 2, frames: 1, pixels: [1, 1, 1, 1],
+      extra: [
+        { tag: [0x0008, 0x0022], vr: "DA", value: s("DA", "20261102") },
+        { tag: [0x0008, 0x0032], vr: "TM", value: s("TM", "100000") },
+        { tag: [0x0054, 0x0016], vr: "SQ", value: item(rp) },
+        { tag: [0x0054, 0x0052], vr: "SQ", value: item(rot) },
+        { tag: [0x0054, 0x0021], vr: "US", value: Uint8Array.of(2, 0) },
+      ],
+    });
+    const h = timePointFromHeader(dicomParser.parseDicom(bytes));
+    expect(h.durationSec).toBe(2400);
+    expect(((h.acquisitionMs ?? 0) - (h.injectionMs ?? 0)) / 3.6e6).toBeCloseTo(24, 6);
+    expect(h.injectedMBq).toBeCloseTo(7400, 6);
+  });
+});

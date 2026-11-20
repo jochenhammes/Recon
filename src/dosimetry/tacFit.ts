@@ -260,6 +260,11 @@ export function fitTac(t: number[], y: number[], model: TacModel | "auto", o: Ta
   const ts = order.map((i) => t[i]), ys = order.map((i) => y[i]);
   const n = ts.length;
   if (n === 0) return { model: "mono", ok: false, tia: NaN, curve: () => NaN, note: "keine Messpunkte" };
+  if (!ys.some((v) => v > 0)) return { model: "mono", ok: false, tia: 0, curve: () => 0, note: "keine Aktivität in der Region" };
+  if (ys.some((v) => !(v > 0)) && model !== "trapezoid" && n > 1) {
+    // Points without activity cannot be fitted on relative residuals: trapezoids instead.
+    return { ...trapezoid(ts, ys.map((v) => Math.max(v, 0)), o), note: "Zeitpunkt(e) ohne Aktivität – Trapez statt Fit" };
+  }
   if (model === "hanscheid" || (model === "auto" && n === 1 && !o.teffH)) return hanscheid(ts[n - 1], ys[n - 1]);
   if (model === "madsen" || (model === "auto" && n === 1)) return madsen(ts[n - 1], ys[n - 1], o.teffH ?? o.physHalfLifeH);
   if (n === 1) return { model: model === "auto" ? "mono" : model, ok: false, tia: NaN, curve: () => NaN, note: "Ein Zeitpunkt: Hänscheid oder Madsen wählen" };

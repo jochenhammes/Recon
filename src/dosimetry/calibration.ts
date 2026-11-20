@@ -85,6 +85,19 @@ export function dicomDateTime(date: string | undefined, time: string | undefined
   return new Date(Number(d.slice(0, 4)), Number(d.slice(4, 6)) - 1, Number(d.slice(6, 8)), hh, mm, Math.floor(ss), Math.round((ss % 1) * 1000)).getTime();
 }
 
+/** Numeric element value (binary US/UL/SS/SL or text IS/DS); undefined if absent. */
+function num(ds: DataSet | undefined, tag: string): number | undefined {
+  const el = ds?.elements[tag];
+  if (!ds || !el || el.length === 0) return undefined;
+  let v: number | undefined;
+  if (el.vr === "US") v = ds.uint16(tag);
+  else if (el.vr === "UL") v = ds.uint32(tag);
+  else if (el.vr === "SS") v = ds.int16(tag);
+  else if (el.vr === "SL") v = ds.int32(tag);
+  else v = Number(ds.string(tag));
+  return v !== undefined && Number.isFinite(v) ? v : undefined;
+}
+
 /** Reads timing, duration and decay correction of an NM/SPECT header (missing values stay undefined). */
 export function timePointFromHeader(ds: DataSet): TimePointInfo {
   const str = (tag: string) => ds.string(tag)?.trim() || undefined;
@@ -93,11 +106,11 @@ export function timePointFromHeader(ds: DataSet): TimePointInfo {
   // Duration: projections × time per projection (NM rotation information), else Actual Frame Duration.
   let durationSec: number | undefined;
   const rot = ds.elements["x00540052"]?.items?.[0]?.dataSet;
-  const frameMs = Number(rot?.string("x00181242") ?? ds.string("x00181242"));
-  const frames = Number(rot?.string("x00540053") ?? ds.string("x00540053"));
-  const heads = Number(ds.string("x00540021")) || 1; // detectors acquire simultaneously: counts add up
-  if (frameMs > 0 && frames > 0) durationSec = (frameMs / 1000) * frames * heads;
-  else if (frameMs > 0) durationSec = frameMs / 1000;
+  const frameMs = num(rot, "x00181242") ?? num(ds, "x00181242");
+  const frames = num(rot, "x00540053") ?? num(ds, "x00540053");
+  const heads = num(ds, "x00540021") || 1; // detectors acquire simultaneously: counts add up
+  if (frameMs && frames && frameMs > 0 && frames > 0) durationSec = (frameMs / 1000) * frames * heads;
+  else if (frameMs && frameMs > 0) durationSec = frameMs / 1000;
   const rp = ds.elements["x00540016"]?.items?.[0]?.dataSet;
   const injectionMs =
     dicomDateTime(rp?.string("x00181078")?.slice(0, 8), rp?.string("x00181078")?.slice(8)) ?? dicomDateTime(str("x00080022") ?? str("x00080021"), rp?.string("x00181072")?.trim());

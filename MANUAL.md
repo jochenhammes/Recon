@@ -12,6 +12,7 @@ Beispieldaten (keine Patientendaten).
 6. [Standardraum (MNI), Atlas und SUVR](#6-standardraum-mni-atlas-und-suvr)
 7. [Centiloid](#7-centiloid)
 8. [Kinetik (dynamisches PET)](#8-kinetik-dynamisches-pet)
+   – [8a. Dosimetrie (SPECT/CT)](#8a-dosimetrie-spectct)
 9. [CT-Organsegmentierung](#9-ct-organsegmentierung)
 10. [Tumorlast (MTV)](#10-tumorlast-mtv)
 11. [Analyse und Label-Analyse](#11-analyse-und-label-analyse)
@@ -369,6 +370,69 @@ Grenzen:
 - Logan und MRTM aus dem MATLAB-Paket sind noch nicht übernommen.
 
 Die Frames sollten zerfallskorrigiert sein; bei nicht korrigierten DICOM-Daten warnt die App.
+
+---
+
+## 8a. Dosimetrie (SPECT/CT)
+
+Energiedosis (Gy) für Radionuklidtherapien (Lu-177, Tb-161, I-131, Y-90) aus 1–4 quantitativen SPECT/CT-Zeitpunkten,
+je Organ/Läsion und als Voxel-Dosiskarte mit Dosis-Volumen-Histogramm. **Forschungswerkzeug, kein zertifiziertes
+Medizinprodukt.** Grundlage ist die SPECT-Rekonstruktion des Geräts (OSEM mit CT-Schwächungs-, Streu- und
+Auflösungskorrektur) in **Counts**; die eigene Rekonstruktion der App (ohne Schwächungs- und Streukorrektur) ist dafür
+nicht geeignet.
+
+**Ablauf (Bereich Dosimetrie in der linken Seitenleiste)**
+1. **Zeitpunkte:** SPECT-Datensätze anhaken, zu jedem das CT derselben Aufnahme wählen (wird über die
+   FrameOfReference vorgeschlagen).
+   - Zeit nach Injektion = Aufnahmezeit − Injektionszeit (aus dem DICOM-Header); Injektion, Zeit und Aufnahmedauer
+     lassen sich überschreiben.
+   - Aufnahmedauer = Zeit pro Projektion × Projektionen × Detektoren (NM-Rotationsinformation).
+   - Kontrolle: Gesamtaktivität im Sichtfeld in MBq und in % der (zerfallskorrigierten) injizierten Aktivität.
+   - *Organe auf diesem CT segmentieren* startet die CT-Organsegmentierung ([Abschnitt 9](#9-ct-organsegmentierung)).
+   - *Zeitpunkte registrieren*: rigide CT-CT-Registrierung aller Zeitpunkte auf das CT von Zeitpunkt 1; SPECT und
+     Labelbilder des Zeitpunkts werden mitbewegt. Nötig für die Voxel-Dosiskarte und für Regionen, die für alle
+     Zeitpunkte gelten.
+2. **Nuklid und Kalibrierung:**
+   - Nuklid (Vorschlag aus dem Header) und mittlere Elektronenenergie pro Zerfall. Die Vorgabewerte sind als
+     *ungeprüft* markiert, bis ein geprüfter Wert (ICRP 107 oder NNDC NuDat, „Dose“ der Elektronen) eingetragen ist.
+   - **Kamera-Profil**: Name, Kalibrierfaktor in cps/MBq (Kamera + Kollimator + Energiefenster + Rekonstruktion),
+     optional Recovery-Koeffizienten aus einem Kugelphantom („Volumen ml : RC; …“). Profile werden im Browser
+     gespeichert, das gewählte auch in der Projektdatei; Import/Export als JSON.
+   - Umrechnung: MBq = Counts / (Dauer × Kalibrierfaktor), mit Korrektur des Zerfalls während der Aufnahme
+     (λT / (1 − e^−λT)), außer das Bild ist bereits zerfallskorrigiert.
+3. **Regionen:** Labelbilder anhaken (CT-Organe, Läsionen aus der Tumorlast, eigene Segmentierungen als NIfTI) und je
+   einem Zeitpunkt oder *allen Zeitpunkten* (nach der Registrierung) zuordnen. Regionen gleichen Namens werden über die
+   Zeitpunkte verbunden; vorausgewählt sind Nieren, Leber, Milz, Harnblase und Läsionen. *RC* wendet den
+   Recovery-Koeffizienten an (Läsionen). *Aktivitäten messen* integriert die Aktivitätskonzentration über jede Region;
+   die Masse kommt aus der CT-Dichte (1 + HU/1000, oberhalb von Wasser 1 + 0,6·HU/1000).
+4. **Kurven und Dosis:** Je Region Diagramm, Fit, zeitintegrierte Aktivität (TIA ± Unsicherheit aus der
+   Fit-Kovarianz), Dosis und für die Nieren die BED.
+   - Modelle: monoexponentiell, biexponentiell mit Aufnahmephase, Trapez + Ausläufer, ein Zeitpunkt nach Hänscheid
+     (TIA = A(t)·2t/ln2) oder Madsen (TIA = A(t)·e^λt/λ mit Populations-T_eff).
+   - *Automatisch*: 1 Zeitpunkt → Hänscheid (Madsen, wenn T_eff eingetragen ist); 2 → monoexponentiell; ≥ 3 →
+     biexponentiell, wenn die Aktivität zwischen den ersten Zeitpunkten noch steigt, sonst monoexponentiell; ab 5
+     Punkten nach AICc. Die Auswaschung ist nie langsamer als der physikalische Zerfall.
+   - Dosis = TIA × Elektronenenergie / Masse (lokale Energiedeposition).
+   - BED (Nieren) = D + D²·λ / ((μ + λ)·α/β), λ = ln2/T_eff, μ = ln2/T_rep; Vorgabe α/β = 2,6 Gy, T_rep = 2,8 h
+     (editierbar).
+   - Tabelle groß über dem Viewer und als CSV (alle Messpunkte, Modell, T_eff, TIA, Dosis, BED, DVH-Werte).
+5. **Voxel-Dosiskarte:** auf dem Raster des SPECT von Zeitpunkt 1; alle Zeitpunkte werden über die Registrierung
+   abgetastet.
+   - Je Voxel monoexponentiell (log-linear) oder Trapez + Ausläufer; bei einem Zeitpunkt Hänscheid.
+   - Ohne Kernel: lokale Energiedeposition mit der CT-Dichte (geeignet für Lu-177 und Tb-161; für I-131 fehlen die
+     Photonen, für Y-90 die mm-Reichweite der β-Teilchen).
+   - Mit **Dosis-Voxel-Kernel**: Tabelle „i j k S“ laden (Voxel-S-Werte für Wasser, z. B. nach Lanconelli et al. 2012,
+     in der Voxelgröße des SPECT; nur ein Oktant genügt). Faltung per FFT, Dichteskalierung ρ_Wasser/ρ.
+   - Ergebnis als Datensatz „Dosis (Gy)“ (anzeigen, analysieren, exportieren); DVH mit D2 %, D50 % und D98 % je Region
+     in der Tabelle und als Diagramm.
+
+**Grenzen:** Keine Monte-Carlo-Rechnung und keine deformierbare Registrierung. Photonen-Kreuzdosis zwischen Organen nur
+mit Kernel. Totzeit wird nicht korrigiert (bei hohen Zählraten, z. B. I-131 oder frühen Lu-177-Aufnahmen, beachten).
+Knochenmark sowie Speichel- und Tränendrüsen sind nicht in der CT-Segmentierung enthalten (eigene Segmentierung laden).
+
+**Quellen:** MIRD-Pamphlet 23 und 26 (quantitative Lu-177-SPECT), EANM-Empfehlungen 2022 zur Dosimetrie von
+Lu-177-SSTR- und PSMA-Liganden, EANM-Leitfaden 2018 zur Unsicherheitsanalyse; Hänscheid et al. und Madsen et al.
+(ein Zeitpunkt); Lanconelli et al., Phys Med Biol 2012 (Voxel-S-Werte).
 
 ---
 

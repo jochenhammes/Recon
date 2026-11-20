@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { sanitizePatientId, setExportPatientId, umlaut, withPatientId } from "./core/exportName";
 import { Card } from "./ui/Card";
-import { Activity, BarChart3, Brain, Calculator, Crosshair, Download, Eye, FileCode2, FolderOpen, Gauge, Target, Wand2 } from "lucide-react";
+import { Activity, BarChart3, Brain, Calculator, Crosshair, Download, Eye, FileCode2, FolderOpen, Gauge, Radiation, Target, Wand2 } from "lucide-react";
+import { type DosimetryApi, DosimetryPanel } from "./dosimetry/DosimetryPanel";
+import { type DosimetrySetup, emptySetup } from "./dosimetry/setup";
 import { KineticsPanel, type KineticsApi } from "./kinetics/KineticsPanel";
 import { LayerToggle } from "./ui/LayerToggle";
 import { editedHalfLife } from "./header/radionuclide";
@@ -288,6 +290,8 @@ function App() {
   const [patientId, setPatientId] = useState("");
   setExportPatientId(patientId);
   const [kineticsActivity, setKineticsActivity] = useState<{ label: string; fraction: number | null } | null>(null);
+  const [dosimetry, setDosimetry] = useState<DosimetrySetup>(() => emptySetup());
+  const [dosimetryActivity, setDosimetryActivity] = useState<string | null>(null);
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     try {
       return localStorage.getItem("recon-studio-theme") === "light" ? "light" : "dark";
@@ -589,6 +593,7 @@ function App() {
       tumorIndication,
       tumorTargetId,
       liverRef,
+      dosimetry,
     };
   }
 
@@ -648,6 +653,7 @@ function App() {
       setTumorIndication(st.tumorIndication ?? "lymphoma");
       setTumorTargetId(st.tumorTargetId ?? null);
       setLiverRef(st.liverRef ?? null);
+      setDosimetry({ ...emptySetup(), ...(st.dosimetry ?? {}) });
       setVoi(null);
       setCoregResults({});
       setProjectionSet(null);
@@ -2016,6 +2022,52 @@ function App() {
     return target.id;
   }
 
+  const dosimetryApi: DosimetryApi = {
+    entries: entries.map((e) => ({ id: e.id, label: entryLabel(e), dataset: e.dataset, matrix: e.matrix, modality: ctEntries.includes(e) ? "CT" : datasetModality(e.dataset) })),
+    setup: dosimetry,
+    onSetup: setDosimetry,
+    segmentCt: (ctId) => startCtSegmentation(ctId, "auto"),
+    segRunning: ctSegRunning,
+    registerTimePoints: async (refCtId, pairs, status) => {
+      const refCt = byId(refCtId);
+      if (!refCt) throw new Error("Referenz-CT nicht gefunden.");
+      for (const [n, p] of pairs.entries()) {
+        const ct = live.current.entries.find((e) => e.id === p.ctId);
+        if (!ct) continue;
+        status(`Registrierung ${n + 1}/${pairs.length}: ${entryLabel(ct)}`);
+        const run = runCoregistration(refCt.dataset.current, ct.dataset.current, { dof: 6, cost: "ncc", levels: [8, 4, 2], coarseSearch: true, initial: multiply4(invert4(refCt.matrix), ct.matrix) });
+        const result = await run.promise;
+        const next = multiply4(refCt.matrix, result.matrix);
+        // Followers keep their pose relative to the CT of their time point.
+        const delta = multiply4(next, invert4(ct.matrix));
+        setEntries((prev) => prev.map((e) => (e.id === ct.id ? { ...e, matrix: next } : p.followers.includes(e.id) ? { ...e, matrix: multiply4(delta, e.matrix) } : e)));
+        live.current = { ...live.current, entries: live.current.entries.map((e) => (e.id === ct.id ? { ...e, matrix: next } : p.followers.includes(e.id) ? { ...e, matrix: multiply4(delta, e.matrix) } : e)) };
+      }
+    },
+    putDoseMap: (refSpectId, data, name, replaceId) => {
+      const ref = byId(refSpectId);
+      if (!ref) throw new Error("Referenz-SPECT nicht gefunden.");
+      const vol = ref.dataset.current.withData(data);
+      let max = 0;
+      for (const v of data) if (v > max) max = v;
+      if (replaceId && byId(replaceId)) {
+        setEntries((prev) => prev.map((e) => (e.id === replaceId ? { ...e, matrix: ref.matrix, dataset: { ...e.dataset, original: vol, current: vol, displayName: name }, display: { ...e.display, window: [0, max || 1] } } : e)));
+        return replaceId;
+      }
+      const d = createDataset(vol, { kind: "reconstruction" }, name);
+      const id = `ds${nextEntryId++}`;
+      setEntries((prev) => [...prev, { id, dataset: { ...d, kindLabel: "Dosis", valueUnit: "Gy" }, display: { window: [0, max || 1], lut: "hot", opacity: 0.6, visible: true }, matrix: ref.matrix }]);
+      addOverlay(id);
+      setActiveId(id);
+      return id;
+    },
+    showDataset: (id) => {
+      makeOverlay(id);
+      setActiveId(id);
+    },
+    onActivity: setDosimetryActivity,
+  };
+
   const kineticsApi: KineticsApi = {
     dynamics: entries.filter((e) => e.dataset.dynamic).map((e) => ({ id: e.id, label: entryLabel(e), dataset: e.dataset, inMni: !!e.dataset.derivedFrom })),
     t1s: subjectCandidates.filter((e) => !e.dataset.dynamic).sort((a, b) => Number(isAnatomical(unitSource(b.dataset))) - Number(isAnatomical(unitSource(a.dataset)))).map((e) => ({ id: e.id, label: entryLabel(e) })),
@@ -2708,6 +2760,13 @@ function App() {
       content: <KineticsPanel api={kineticsApi} />,
     },
     {
+      id: "dosimetry",
+      label: "Dosimetrie",
+      shortLabel: "Dosi\u00admetrie",
+      icon: Radiation,
+      content: <DosimetryPanel api={dosimetryApi} />,
+    },
+    {
       id: "tumor",
       label: "Tumorlast",
       shortLabel: "Tumor\u00adlast",
@@ -2989,6 +3048,7 @@ function App() {
   act(exportActivity && { id: "export", label: "Export", detail: exportActivity, tab: "export" });
   act(tripleBusy && { id: "triple", label: "Triple-Window-CT", detail: tripleStatus ?? undefined, tab: "edit" });
   act(imcalcBusy && { id: "imcalc", label: "IMCALC", detail: imcalcBusy, tab: "imcalc" });
+  act(dosimetryActivity && { id: "dosimetry", label: "Dosimetrie", detail: dosimetryActivity, tab: "dosimetry" });
   act(kineticsActivity && { id: "kinetics", label: "Kinetik", detail: kineticsActivity.label, fraction: kineticsActivity.fraction, tab: "kinetics" });
   act(ctSegError && !ctSegRunning && { id: "ctseg-error", label: "CT-Segmentierung", error: ctSegError, tab: "tumor" });
   act(normError && !normRunning && { id: "norm-error", label: "Normalisierung", error: normError, tab: "normalization" });
