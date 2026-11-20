@@ -83,7 +83,7 @@ import { computeStats } from "./analysis/stats";
 import type { SuvResult } from "./analysis/suv";
 import { type UnitMode, formatInput, formatValue, parseInput } from "./components/format";
 import { type LoadedDataset, type VolumeSource, createDataset } from "./dataset/types";
-import { type EditOp, type VoiAction, changesGrid, countAffected } from "./edit/operations";
+import { type EditOp, type VoiAction, changesGrid, countAffected, describeEdit } from "./edit/operations";
 import { type LoadedVolume, decompressGzip, loadVolumeFromFiles } from "./viewer/volumeLoader";
 import { UploadPanel } from "./components/UploadPanel";
 import { VolumeUploadPanel } from "./components/VolumeUploadPanel";
@@ -773,23 +773,29 @@ function App() {
   }
 
   /** Runs edits in the worker and stores the result for the active dataset. */
-  async function commit(entryId: string, base: LoadedDataset, from: "current" | "original", ops: EditOp[], edits: EditOp[]) {
+  async function commit(entryId: string, base: LoadedDataset, from: "current" | "original", ops: EditOp[], edits: EditOp[]): Promise<number | null> {
     setEditBusy(true);
     setError(null);
     try {
-      const { volume: next } = await runEdits(from === "current" ? base.current : base.original, ops);
+      const { volume: next, affected } = await runEdits(from === "current" ? base.current : base.original, ops);
       setDataset(entryId, { ...base, current: next, edits });
       if (ops.some(changesGrid) || (from === "original" && base.edits.some(changesGrid))) setVoi(null);
+      return affected;
     } catch (e) {
       setError(`Bearbeitung fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
+      return null;
     } finally {
       setEditBusy(false);
     }
   }
 
-  function handleApplyEdit(op: EditOp) {
+  async function handleApplyEdit(op: EditOp) {
     if (!dataset || !active || editBusy) return;
-    void commit(active.id, dataset, "current", [op], [...dataset.edits, op]);
+    const target = active;
+    const affected = await commit(target.id, dataset, "current", [op], [...dataset.edits, op]);
+    // Feedback: which dataset changed and how many voxels (value and VOI operations can look subtle in a wide window).
+    if (affected !== null && (op.type === "voi" || op.type === "value" || op.type === "thresholdReplace"))
+      setNotice(`${describeEdit(op, unitFor(target))} – ${affected.toLocaleString("de-DE")} Voxel in ${entryShort(target, 30)} geändert.`);
   }
 
   /** Space a dataset lives in: common mirror/rotation center only within the same space. */
