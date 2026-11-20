@@ -194,7 +194,44 @@ und nimmt alle hier registrierten Datensätze mit.
 ![Registrierungsergebnis prüfen](docs/images/13-registrierung-ergebnis.jpg)
 
 7. **Manuelle Feinkorrektur** (Karte *Transformation*): Verschiebung/Drehung anpassen; Matrix als JSON speichern/laden.
+   - *Drehpunkt*: Volumenmitte oder der Ursprung (die gewählte Landmarke, siehe unten).
+   - Drehen bis ±180° sowie Knöpfe für 90°-Schritte je Achse und für 180° um die Längsachse.
 8. Die Basis lässt sich später wechseln – bestehende Registrierungen bleiben erhalten.
+
+### Ursprung & Landmarken (verschiedene Koordinatensysteme)
+
+NIfTI-Dateien liegen manchmal nicht im selben Koordinatensystem wie die DICOM-Daten derselben Studie. Häufige Gründe:
+- Der Ursprung wurde neu gesetzt, z. B. mit SPM „Set origin/Reorient“.
+- Die Datei hat keine Lageangaben (sform/qform-Code 0; dann gelten nur die Voxelgröße und der Ursprung 0).
+- Ein Konverter hat die Daten neu zentriert.
+
+Die Datensatz-Details zeigen dazu *Patientenkoordinaten* (sform/qform bzw. „keine Lageangaben“) und den *Ursprung*.
+Überlappen Basis und gewählter Datensatz kaum, öffnet sich die Karte **Ursprung & Landmarken** mit einem Hinweis.
+
+1. **Landmarke wählen**: Nasenspitze (Ganzkörper), vordere Kommissur (AC, Hirn), hintere Kommissur (PC), Scheitel,
+   Kinn, Symphyse, Steißbeinspitze oder ein eigener Name.
+2. **In der Basis setzen**:
+   - Mit *nur diesen zeigen* und *Fadenkreuz in die Mitte* den Datensatz finden.
+   - Die Landmarke im Viewer anklicken und mit *Fadenkreuz → Landmarke* speichern.
+3. **Im zu registrierenden Datensatz** dieselbe Landmarke genauso setzen.
+4. **Ursprünge zur Deckung bringen**: Der Datensatz wird so verschoben, dass beide Landmarken übereinanderliegen.
+   - Danach unter *Transformation* um diesen Ursprung drehen (Drehpunkt „Ursprung“, 90°-Schritte), falls er verdreht
+     erscheint.
+   - Ab **drei gemeinsamen Landmarken** (z. B. AC, PC, Scheitel) berechnet *Aus … Landmarken ausrichten* Drehung und
+     Verschiebung automatisch und zeigt den Restfehler in mm.
+5. **Mitbewegen**: Datensätze derselben Aufnahme (gleiche FrameOfReference, z. B. PET zum CT der NIfTI-Studie) folgen.
+6. **Koregistrieren** wie oben.
+   - Die Landmarkenausrichtung ist die Startlage.
+   - Mit eingeschalteter Grobsuche sorgt *Startlage beibehalten* dafür, dass nur ±10° / ±10 mm um diese Lage gesucht
+     wird, statt auf den Schwerpunkt zu springen.
+7. Optional **Ursprung dauerhaft in den Datensatz übernehmen** (wie SPM „Set origin“), für die Basis oder den
+   Datensatz und auf Wunsch für alle Datensätze derselben Aufnahme:
+   - Die Landmarke wird zu (0,0,0); die Lage zu den anderen Datensätzen bleibt erhalten.
+   - Der NIfTI-Export enthält den neuen Ursprung. Der DICOM-Export schreibt eine neue Serie mit neuer FrameOfReference.
+   - *Zurück auf Original-Ursprung* macht das rückgängig.
+   - Vor einer Normalisierung ausführen.
+
+Landmarken werden in der Projektdatei gespeichert.
 
 ---
 

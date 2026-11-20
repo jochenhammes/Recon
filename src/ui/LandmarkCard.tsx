@@ -41,6 +41,8 @@ const fmt = (p: Vec3 | null) => (p ? p.map((v) => v.toFixed(1)).join(" / ") : "�
 /** Landmarks as a common origin: align base and moving dataset at the same anatomical point, optionally take the origin into the dataset. */
 export function LandmarkCard(props: LandmarkCardProps) {
   const [custom, setCustom] = useState("");
+  // Open by default when the coordinate systems do not match on first display; afterwards the card keeps its state.
+  const [openInitially] = useState(props.mismatch);
   const names = [...new Set([...LANDMARK_NAMES, ...props.baseLandmarks.map((l) => l.name), ...props.movingLandmarks.map((l) => l.name)])];
   const has = (side: LandmarkSide, n = props.name) => (side === "base" ? props.baseLandmarks : props.movingLandmarks).some((l) => l.name === n);
   const common = props.movingLandmarks.filter((l) => props.baseLandmarks.some((b) => b.name === l.name)).length;
@@ -96,7 +98,7 @@ export function LandmarkCard(props: LandmarkCardProps) {
     <Card
       title={<>Ursprung &amp; Landmarken</>}
       persistKey="coreg-landmarks"
-      defaultOpen={props.mismatch}
+      defaultOpen={openInitially}
       status={props.mismatch ? { text: "Koordinaten passen nicht", tone: "warn" } : common ? { text: `${common} Landmarke${common === 1 ? "" : "n"}`, tone: "info" } : null}
       info="Liegen zwei Datensätze in verschiedenen Koordinatensystemen (z. B. NIfTI und DICOM derselben Studie), in beiden dieselbe anatomische Landmarke setzen – Nasenspitze bei Ganzkörperdaten, vordere Kommissur (AC) beim Hirn. „Ursprünge zur Deckung bringen“ verschiebt den Datensatz so, dass die Landmarken übereinanderliegen; danach lässt er sich unten um diesen Ursprung drehen. Ab drei gemeinsamen Landmarken werden Drehung und Verschiebung berechnet. Das Ergebnis ist die Startlage für die Koregistrierung. Optional wird der Ursprung (0,0,0) dauerhaft in den Datensatz übernommen (wie SPM „Set origin“), auch für den Export."
     >

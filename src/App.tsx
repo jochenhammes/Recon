@@ -2300,7 +2300,12 @@ function App() {
     if (!moving) return;
     const delta = multiply4(next, invert4(moving.matrix));
     const follow = landmarkFollow ? new Set(followers(moving).map((x) => x.id)) : new Set<string>();
-    setEntries((prev) => prev.map((x) => (x.id === moving.id ? { ...x, matrix: next } : follow.has(x.id) ? { ...x, matrix: multiply4(delta, x.matrix) } : x)));
+    makeOverlay(moving.id);
+    setEntries((prev) =>
+      prev.map((x) =>
+        x.id === moving.id ? { ...x, matrix: next, display: { ...x.display, visible: true } } : follow.has(x.id) ? { ...x, matrix: multiply4(delta, x.matrix) } : x,
+      ),
+    );
     discardResultOnly(moving.id);
   }
 
