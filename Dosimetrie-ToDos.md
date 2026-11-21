@@ -1,6 +1,6 @@
 # Dosimetrie – offene Punkte und Umsetzungsstand
 
-Sammlung für den Bereich **Dosimetrie** (Therapie-Dosimetrie aus SPECT/CT). Benutzerdoku: [MANUAL.md, Kapitel 8a](MANUAL.md#8a-dosimetrie-spectct).
+Sammlung für den Bereich **Dosimetrie** (Therapie-Dosimetrie aus SPECT/CT). Benutzerdoku: [MANUAL.md, Kapitel 9](MANUAL.md#9-dosimetrie-spectct).
 Forschungswerkzeug, kein zertifiziertes Medizinprodukt.
 
 ---
@@ -274,7 +274,7 @@ Forschungswerkzeug, kein zertifiziertes Medizinprodukt.
   - ADR-Workflow als zweiter Hauptweg. Er rechnet das Gleiche in anderer Reihenfolge und bringt ohne MC keinen Gewinn.
   - Alle elf NUKFIT-Funktionen und tri-exponentielle Modelle. Bei 1–4 Zeitpunkten nicht bestimmbar, nur Scheingenauigkeit.
   - Diagnostiknuklide.
-- **Hinweis aus der Literatur:** Für I-131 in Lunge und Knochen ist auch die Faltung mit Wasserkernel nur eine Näherung. Die Grenzen im Handbuch (Kapitel 8a) sollten das nach Einbau der DVKs ausdrücklich nennen.
+- **Hinweis aus der Literatur:** Für I-131 in Lunge und Knochen ist auch die Faltung mit Wasserkernel nur eine Näherung. Die Grenzen im Handbuch (Kapitel 9) sollten das nach Einbau der DVKs ausdrücklich nennen.
 
 ### Quellen
 

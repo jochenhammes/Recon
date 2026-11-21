@@ -12,15 +12,15 @@ Beispieldaten (keine Patientendaten).
 6. [Standardraum (MNI), Atlas und SUVR](#6-standardraum-mni-atlas-und-suvr)
 7. [Centiloid](#7-centiloid)
 8. [Kinetik (dynamisches PET)](#8-kinetik-dynamisches-pet)
-   – [8a. Dosimetrie (SPECT/CT)](#8a-dosimetrie-spectct)
-9. [CT-Organsegmentierung](#9-ct-organsegmentierung)
-10. [Segmentierung & MTV](#10-segmentierung--mtv)
-11. [Analyse und Label-Analyse](#11-analyse-und-label-analyse)
+9. [Dosimetrie (SPECT/CT)](#9-dosimetrie-spectct)
+10. [CT-Organsegmentierung](#10-ct-organsegmentierung)
+11. [Segmentierung & MTV](#11-segmentierung--mtv)
+12. [Analyse und Label-Analyse](#12-analyse-und-label-analyse)
     – [IMCALC: voxelweise Rechnung](#imcalc-voxelweise-rechnung)
-12. [Bearbeiten](#12-bearbeiten)
-13. [DICOM-Header](#13-dicom-header)
-14. [Export](#14-export)
-15. [Tipps und Fehlerbehebung](#15-tipps-und-fehlerbehebung)
+13. [Bearbeiten](#13-bearbeiten)
+14. [DICOM-Header](#14-dicom-header)
+15. [Export](#15-export)
+16. [Tipps und Fehlerbehebung](#16-tipps-und-fehlerbehebung)
 
 ---
 
@@ -450,14 +450,14 @@ Die Frames sollten zerfallskorrigiert sein; bei nicht korrigierten DICOM-Daten w
 
 ---
 
-## 8a. Dosimetrie (SPECT/CT)
+## 9. Dosimetrie (SPECT/CT)
 
 Energiedosis (Gy) für Radionuklidtherapien (**Lu-177, Tb-161, I-131, Y-90**) aus 1–4 quantitativen SPECT/CT- oder
 PET/CT-Zeitpunkten – je Organ und Läsion, als Voxel-Dosiskarte mit Dosis-Volumen-Histogramm, mit BED, Unsicherheit
 und Bericht. **Forschungswerkzeug, kein zertifiziertes Medizinprodukt**; Ergebnisse vor klinischer Verwendung
 unabhängig prüfen.
 
-### 8a.1 Überblick
+### 9.1 Überblick
 
 Der Ablauf folgt dem MIRD-/EANM-Schema:
 
@@ -474,7 +474,7 @@ SPECT/PET je Zeitpunkt ──► Aktivität (MBq) je Region ──► Zeit-Aktiv
 - Die Dosimetrie rechnet immer mit **Counts** bzw. **Bq/ml**, unabhängig vom Umschalter *SUV | Counts/Bq/ml* im
   Viewer.
 
-### 8a.2 Voraussetzungen
+### 9.2 Voraussetzungen
 
 **Bilddaten je Zeitpunkt**
 
@@ -506,7 +506,7 @@ Kalibrierfaktor in cps/MBq für genau diese Kamerakonfiguration (Kamera,
 Kollimator, Energiefenster, Rekonstruktion), aus einer Phantommessung – in der App aus einer Phantomaufnahme
 bestimmbar (Schritt 6). Optional Recovery-Koeffizienten (RC) aus einem Kugelphantom für kleine Läsionen.
 
-### 8a.3 Schritt für Schritt
+### 9.3 Schritt für Schritt
 
 **Schritt 1 – Daten laden**
 1. Bereich **Daten**: alle SPECTs und CTs der Therapie laden (DICOM-Ordner oder Dateien, beliebig viele).
@@ -515,17 +515,19 @@ bestimmbar (Schritt 6). Optional Recovery-Koeffizienten (RC) aus einem Kugelphan
 3. Zwischendurch und am Ende **Projekt speichern** (*.recon*): enthält Datensätze, Registrierung, Labelbilder und
    alle Dosimetrie-Einstellungen.
 
-**Schritt 2 – Organe segmentieren** (am besten je Zeitpunkt)
+**Schritt 2 – Organe segmentieren** (auf T1; je Zeitpunkt nur für „Organkarte je Zeitpunkt“)
 1. Bereich **Segmentierung & MTV** → Karte *CT-Organsegmentierung*: CT wählen, Modell wählen, *Organe segmentieren*
-   ([Abschnitt 9](#9-ct-organsegmentierung)). Alternativ direkt in der Dosimetrie in der Zeitpunkt-Karte bei
+   ([Abschnitt 10](#10-ct-organsegmentierung)). Alternativ direkt in der Dosimetrie in der Zeitpunkt-Karte bei
    *Organe* auf *segmentieren*.
    - **TotalSegmentator 3 mm** (Standard, 117 Strukturen) passt für jedes CT.
    - Die **1,5-mm-Modelle** (TotalSegmentator Organe, MOOSE) sind etwas genauer bei kleinen Organen, brauchen etwa die
      dreifache Zeit und passen nur für Rumpf-/Bauch-CTs in den Speicher.
 2. Ergebnis: Labelbild „CT-Organe · <CT>“. Es wird automatisch dem Zeitpunkt des CTs zugeordnet.
-3. **Warum je Zeitpunkt?** Mit einer eigenen Organkarte wird jedes SPECT in seiner eigenen Anatomie gemessen – Atemlage,
-   Lagerung und Füllung von Blase und Darm spielen keine Rolle, und für die Organdosis ist keine Registrierung nötig.
-   Eine einzige Organkarte für alle Zeitpunkte (Schritt 7) hängt dagegen an der starren Registrierung.
+3. **Eine Organkarte oder je Zeitpunkt?** Standard ist die Organkarte von T1 für alle Zeitpunkte (Schritt 7): einmal
+   segmentieren, Läsionen inklusive, aber abhängig von der starren Registrierung. Mit einer eigenen Organkarte je
+   Zeitpunkt wird jedes SPECT in seiner eigenen Anatomie gemessen – Atemlage, Lagerung und Füllung von Blase und Darm
+   spielen keine Rolle, und für die Organdosis ist keine Registrierung nötig (Schritt 7: *Fehlende Organkarten
+   segmentieren*).
 4. Ergebnis kurz prüfen (Overlay im Viewer, Karte *Regionen*): Nieren, Leber, Milz vollständig?
 
 **Schritt 3 – Läsionen festlegen** (optional, im Bereich *Segmentierung & MTV*)
@@ -541,10 +543,11 @@ bestimmbar (Schritt 6). Optional Recovery-Koeffizienten (RC) aus einem Kugelphan
 4. Ergebnis: Labelbild „Läsionen · <SPECT>“ mit **nur den bestätigten** Läsionen; es gehört automatisch zum Zeitpunkt
    dieses SPECTs.
 5. **Zwei Wege für mehrere Zeitpunkte:**
-   - *Einmal segmentieren* (meist auf T1, wo die Läsionen am besten sichtbar sind) und das Läsionsbild in der Dosimetrie
-     auf **alle Zeitpunkte** stellen (Schritt 7) – stabil, braucht aber eine gute Registrierung.
-   - *Je Zeitpunkt segmentieren* (jedes SPECT nacheinander): die Dosimetrie ordnet die Läsionen über ihre Schwerpunkte
-     zu. Bei späten, verrauschten Aufnahmen kann die Segmentierung instabil werden.
+   - *Einmal segmentieren* auf T1 (wo die Läsionen am besten sichtbar sind) – Standard: die Dosimetrie überträgt
+     Organkarte und Läsionen von T1 über die Registrierung auf alle Zeitpunkte („Von T1 für alle“, Schritt 7). Stabil,
+     braucht aber eine gute Registrierung.
+   - *Je Zeitpunkt segmentieren* (jedes SPECT nacheinander, Quelle „Organkarte je Zeitpunkt“): die Dosimetrie ordnet
+     die Läsionen über ihre Schwerpunkte zu. Bei späten, verrauschten Aufnahmen kann die Segmentierung instabil werden.
 
 **Schritt 4 – Zeitpunkte prüfen** (Bereich **Dosimetrie** → Karte *Zeitpunkte*)
 1. Beim ersten Öffnen gruppiert die App die Datensätze zu **Aufnahmen** – gleiche FrameOfReference, sonst gleiche
@@ -612,9 +615,9 @@ bestimmbar (Schritt 6). Optional Recovery-Koeffizienten (RC) aus einem Kugelphan
 
 **Schritt 7 – Regionen und Messung** (Karte *Regionen*)
 0. **Quelle der Labelbilder** (ab 2 Zeitpunkten, oben in der Karte):
-   - **Von T1 für alle:** Organkarte und Läsionen von T1 gelten über die Registrierung für alle Zeitpunkte (eigene
-     Labelbilder der anderen Zeitpunkte bleiben unbenutzt). Braucht registrierte Zeitpunkte (Warnung sonst) – einmal
-     segmentieren, Läsionen inklusive.
+   - **Von T1 für alle** (Standard): Organkarte und Läsionen von T1 gelten über die Registrierung für alle Zeitpunkte
+     (eigene Labelbilder der anderen Zeitpunkte bleiben unbenutzt). Braucht registrierte Zeitpunkte (Warnung sonst) –
+     einmal segmentieren, Läsionen inklusive. Die Kurven erhalten so einen Messpunkt je Zeitpunkt.
    - **Organkarte je Zeitpunkt:** jeder Zeitpunkt wird mit der Organkarte seines CTs gemessen (keine Registrierung
      nötig, robust gegen Lage- und Füllungsunterschiede). *Fehlende Organkarten segmentieren (n CTs)* segmentiert alle
      CTs ohne Organkarte nacheinander. Läsionen werden nur ausgewertet, wenn jeder Zeitpunkt ein eigenes Läsionsbild
@@ -630,7 +633,7 @@ bestimmbar (Schritt 6). Optional Recovery-Koeffizienten (RC) aus einem Kugelphan
    20 mm); per Auswahl korrigierbar (manuelle Zuordnungen umrandet, *zurücksetzen* möglich). Gemessen wird unter dem
    Namen der T1-Läsion; Läsionen ohne Partner zählen nicht.
 4. **Aktivitäten messen:** Aktivität, Volumen und Masse je Region und Zeitpunkt. Die Masse folgt aus der CT-Dichte
-   (Formeln in 8a.4).
+   (Formeln in 9.4).
 5. Ändern sich danach Labelbilder (Läsion bestätigt/abgewählt, Organkarte neu segmentiert, Zuordnung korrigiert),
    erscheint **Labelbilder geändert – neu messen**; dann erneut messen.
 
@@ -685,7 +688,7 @@ bestimmbar (Schritt 6). Optional Recovery-Koeffizienten (RC) aus einem Kugelphan
   DVH-Kennwerte, Methodenvergleich, Kurven als Grafik, Methodik und Quellen.
 - **CSV** der Tabelle (Schritt 8), **Dosiskarte** als NIfTI (Bereich *Export*), **Projektdatei** (.recon) mit allem.
 
-### 8a.4 Formeln
+### 9.4 Formeln
 
 | Größe | Formel |
 |---|---|
@@ -700,7 +703,7 @@ bestimmbar (Schritt 6). Optional Recovery-Koeffizienten (RC) aus einem Kugelphan
 | Unsicherheit | u(D)/D = √(u_Fit² + u_Kalibr.² + u_RC² + u_Volumen²), k = 1 |
 | Akaike-Gewicht | wᵢ = e^(−Δᵢ/2) / Σⱼ e^(−Δⱼ/2), Δᵢ = AICcᵢ − min AICc |
 
-### 8a.5 Plausibilitätsprüfung
+### 9.5 Plausibilitätsprüfung
 
 - **Zeitpunkte:** Reihenfolge und Stunden p.i. passen zum Therapieprotokoll; Injektionszeit stimmt.
 - **Aktivität im Sichtfeld** (Zeitpunkt-Karte aufklappen): Anteil der injizierten Aktivität plausibel und über die
@@ -714,7 +717,7 @@ bestimmbar (Schritt 6). Optional Recovery-Koeffizienten (RC) aus einem Kugelphan
   β-Reichweite); bei großen Organen sollten beide nahe beieinander liegen.
 - **Labelbilder geändert – neu messen** darf vor dem Bericht nicht mehr angezeigt werden.
 
-### 8a.6 Häufige Probleme
+### 9.6 Häufige Probleme
 
 | Problem | Ursache | Lösung |
 |---|---|---|
@@ -729,7 +732,7 @@ bestimmbar (Schritt 6). Optional Recovery-Koeffizienten (RC) aus einem Kugelphan
 | 1,5-mm-Organmodell bricht ab | CT zu groß für den Browser-Speicher | 3-mm-Modell oder CT zuschneiden (*Bearbeiten → VOI → Auf VOI zuschneiden*) |
 | Läsion fehlt in der Dosimetrie | in *Segmentierung & MTV* nicht bestätigt oder ohne Partner zu T1 | dort bestätigen bzw. Zuordnung in *Regionen* korrigieren, neu messen |
 
-### 8a.7 Grenzen
+### 9.7 Grenzen
 
 - Keine Monte-Carlo-Rechnung; Photonen-Kreuzdosis zwischen Organen nur über einen Kernel; in Lunge und Knochen ist auch
   die Faltung mit Wasserkernel nur eine Näherung (bei I-131 unterschätzt die lokale Deposition dort deutlich).
@@ -739,7 +742,7 @@ bestimmbar (Schritt 6). Optional Recovery-Koeffizienten (RC) aus einem Kugelphan
 - Knochenmark, Speichel- und Tränendrüsen sind nicht in der CT-Segmentierung enthalten (eigene Segmentierung laden).
 - BED-Formel für monoexponentielle Auswaschung; α/β- und Reparaturwerte außer den Nieren-Vorgaben selbst eintragen.
 
-### 8a.8 Quellen
+### 9.8 Quellen
 
 MIRD-Pamphlet 23 und 26 (quantitative SPECT, Lu-177); EANM-Empfehlungen 2022 zur Dosimetrie von Lu-177-SSTR- und
 PSMA-Liganden; EANM-Leitfaden zur Unsicherheitsanalyse (Gear et al., EJNMMI Physics 2018); Hänscheid et al. und Madsen
@@ -749,7 +752,7 @@ et al. (ein Zeitpunkt); Lanconelli et al., Phys Med Biol 2012 (Voxel-S-Werte); I
 ---
 
 
-## 9. CT-Organsegmentierung
+## 10. CT-Organsegmentierung
 
 ![Segmentierung läuft](docs/images/20-ct-segmentierung-laeuft.jpg)
 
@@ -792,7 +795,7 @@ fast vollständiges Versagen).
 
 ---
 
-## 10. Segmentierung & MTV
+## 11. Segmentierung & MTV
 
 ![Einstellungen Tumorlast](docs/images/22-tumorlast-einstellungen.jpg)
 
@@ -838,7 +841,7 @@ fast vollständiges Versagen).
 
 ---
 
-## 11. Analyse und Label-Analyse
+## 12. Analyse und Label-Analyse
 
 Bereich **Analyse**.
 
@@ -910,7 +913,7 @@ Ablauf Z-Karten: Kontrollen in den Standardraum bringen → *Gruppe* → Mittelw
 Differenzbilder ebenfalls mit symmetrischem Fenster. Namen werden vorgeschlagen und lassen sich ändern; die Karte
 *Ergebnisse* listet alle Ergebnisse der Sitzung (*einblenden*).
 
-## 12. Bearbeiten
+## 13. Bearbeiten
 
 ![VOI-Kugel am Fadenkreuz](docs/images/40-bearbeiten-voi.jpg)
 
@@ -923,7 +926,7 @@ Bereich **Bearbeiten**. Die Werte-Operationen (Grenzwert ersetzen, begrenzen, li
    Statistik (Volumen, Mittel, Max, Min, Peak 1 ml); *Bereich innen/außen*, *Aktion* (Wert setzen, skalieren) →
    *Auf VOI anwenden*; *Auf VOI zuschneiden*; *VOI löschen*.
 2. **Triple-Window-CT** (Karte aufklappen; braucht ein CT und seine Organkarte aus der CT-Organsegmentierung,
-   [Abschnitt 9](#9-ct-organsegmentierung)): erzeugt einen künstlichen CT-Datensatz für den schnellen anatomischen
+   [Abschnitt 10](#10-ct-organsegmentierung)): erzeugt einen künstlichen CT-Datensatz für den schnellen anatomischen
    Überblick in **einem** Fenster. Alle Voxel stehen im Weichteilfenster (Standard 40/400); Voxel der Lungen und der
    Trachea werden so umgerechnet, dass sie wie im Lungenfenster (−600/1500) erscheinen, Voxel des Skeletts wie im
    Knochenfenster (300/1500). Fenster als Zentrum/Breite änderbar. Damit die gröbere Organkarte (3 mm) keine
@@ -949,7 +952,7 @@ Bereich **Bearbeiten**. Die Werte-Operationen (Grenzwert ersetzen, begrenzen, li
 
 ---
 
-## 13. DICOM-Header
+## 14. DICOM-Header
 
 ![Header-Editor](docs/images/45-dicom-header.jpg)
 
@@ -970,7 +973,7 @@ Bereich **Bearbeiten**. Die Werte-Operationen (Grenzwert ersetzen, begrenzen, li
 
 ---
 
-## 14. Export
+## 15. Export
 
 ![Export](docs/images/50-export.jpg)
 
@@ -1005,7 +1008,7 @@ Bereich **Export**, Karte **Dateien exportieren**:
 
 ---
 
-## 15. Tipps und Fehlerbehebung
+## 16. Tipps und Fehlerbehebung
 
 - **Erster Aufruf**: Die Seite lädt sich einmal selbst neu (ein Service Worker aktiviert die „Cross-Origin-Isolation“);
   danach rechnet die CT-Segmentierung auf der CPU mit mehreren Threads (ca. 2–3× schneller). In privaten Fenstern

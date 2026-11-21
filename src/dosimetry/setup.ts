@@ -56,7 +56,7 @@ export interface DosimetrySetup {
   /**
    * Where the label maps of the time points come from: "t1" = organ map and lesions of T1 for all (registered) time
    * points; "perTp" = each time point its own organ map (lesions only if every time point has its own lesion map).
-   * Undefined = per time point.
+   * Undefined = "t1" (default).
    */
   labelSource?: "t1" | "perTp";
   /** Label datasets the user switched off (not adopted automatically again). */

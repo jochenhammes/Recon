@@ -257,7 +257,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
   }, [labelNames, setup, tpViews.map((t) => `${t.spectId}:${t.tH}`).join(), energy, nuclide, profile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Label maps per time point (source: T1 for all, or each time point its own) ──
-  const labelSource = setup.labelSource ?? "perTp";
+  const labelSource = setup.labelSource ?? "t1";
   const isLesionSet = (id: string) => tps.some((t) => t.lesionSetId === id) || (!!byId(id) && isLesionMap(byId(id)!));
   const allHaveLesions = tps.length > 1 && tps.every((t) => !!t.lesionSetId && !!byId(t.lesionSetId));
   /** Label sets measured for a time point (first set wins per region). */

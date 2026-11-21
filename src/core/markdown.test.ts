@@ -4,7 +4,7 @@ import { renderMarkdown, slug } from "./markdown";
 
 describe("markdown for the manual", () => {
   it("makes GitHub-style anchors", () => {
-    expect(slug("8a. Dosimetrie (SPECT/CT)")).toBe("8a-dosimetrie-spectct");
+    expect(slug("9. Dosimetrie (SPECT/CT)")).toBe("9-dosimetrie-spectct");
     expect(slug("9. CT-Organsegmentierung")).toBe("9-ct-organsegmentierung");
     expect(slug("10. Segmentierung & MTV")).toBe("10-segmentierung--mtv");
   });
@@ -53,6 +53,6 @@ describe("markdown for the manual", () => {
     const links = [...html.matchAll(/href="#([^"]+)"/g)].map((m) => decodeURIComponent(m[1]));
     const missing = links.filter((l) => !ids.has(l));
     expect(missing).toEqual([]);
-    expect(html).toContain("8a-dosimetrie-spectct");
+    expect(html).toContain("9-dosimetrie-spectct");
   });
 });
