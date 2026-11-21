@@ -5,6 +5,7 @@ import wasmUrl from "onnxruntime-web/ort-wasm-simd-threaded.jsep.wasm?url";
 import mjsUrl from "onnxruntime-web/ort-wasm-simd-threaded.jsep.mjs?url";
 import type { Vec3 } from "../core/geometry";
 import { slidingWindow } from "../segmentation/infer";
+import { transposePatch } from "../segmentation/preprocess";
 
 /** "auto": WebGPU if available (except Firefox, where WebGPU with ONNX Runtime is not yet reliable), else CPU. */
 export type CtSegBackend = "auto" | "webgpu" | "wasm";
@@ -18,6 +19,10 @@ export interface CtSegJob {
   bodyThreshold: number;
   /** Model output: top-k classes with probabilities instead of logits. */
   topkOutput?: number;
+  /** Array order the network expects ("xyz": MONAI, z fastest); patches are transposed before/after the run. */
+  axisOrder?: "zyx" | "xyz";
+  /** Sliding-window step as a fraction of the patch. */
+  stepFraction?: number;
   backend: CtSegBackend;
   /** Shown with the progress (e.g. why the CPU is used). */
   note?: string;
@@ -95,16 +100,21 @@ self.onmessage = async (event: MessageEvent<CtSegJob | { type: "stop" }>) => {
           msg.patch,
           msg.classes,
           async (input) => {
-            const out = await guard(session.run({ [session.inputNames[0]]: new ort.Tensor("float32", input, [1, 1, pz, py, px]) }));
+            const xyz = msg.axisOrder === "xyz";
+            const tensor = xyz
+              ? new ort.Tensor("float32", transposePatch(input, [px, py, pz], 1, true), [1, 1, px, py, pz])
+              : new ort.Tensor("float32", input, [1, 1, pz, py, px]);
+            const out = await guard(session.run({ [session.inputNames[0]]: tensor }));
             const t = out[session.outputNames[0]];
             const data = (await guard(t.getData())) as Float32Array;
             t.dispose?.();
             if (gpuError) throw new Error(gpuError);
-            return data;
+            return xyz ? transposePatch(data, [px, py, pz], data.length / (px * py * pz), false) : data;
           },
           {
             bodyThreshold: msg.bodyThreshold,
             topkOutput: msg.topkOutput,
+            stepFraction: msg.stepFraction,
             onProgress: (p) => post({ type: "progress", progress: { ...p, stage: `Inferenz (${label})`, backend, note } }),
             shouldStop: () => stop,
           },

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Card } from "./Card";
 import { InfoText } from "./Info";
-import { tileTimeLimitSec } from "../segmentation/ctSegment";
+import { CT_MODELS, DEFAULT_CT_MODEL, tileTimeLimitSec } from "../segmentation/ctSegment";
 import { type SegmentProgress, inferenceEstimate } from "../segmentation/infer";
 import type { CtSegBackend } from "../workers/ctseg.worker";
 import type { Option } from "./NormalizationPanel";
@@ -14,7 +14,7 @@ export interface CtSegCardProps {
   status: string | null;
   error: string | null;
   webgpu: boolean;
-  onRun: (ctId: string, backend: CtSegBackend) => void;
+  onRun: (ctId: string, backend: CtSegBackend, modelId: string) => void;
   onCancel: () => void;
 }
 
@@ -24,10 +24,11 @@ const fmtTime = (sec: number) => {
 };
 
 const BACKEND_KEY = "recon-studio-ctseg-backend";
+const MODEL_KEY = "recon-studio-ctseg-model";
 const firefox = typeof navigator !== "undefined" && /firefox/i.test(navigator.userAgent);
 
 
-/** Whole-body CT organ segmentation in the browser (TotalSegmentator "total", 3 mm, ONNX). */
+/** Whole-body CT organ segmentation in the browser (selectable ONNX models, default TotalSegmentator "total" 3 mm). */
 export function CtSegCard(props: CtSegCardProps) {
   const [ctId, setCtId] = useState<string | null>(null);
   const ct = props.cts.find((c) => c.id === ctId) ?? props.cts.find((c) => c.id === props.defaultCtId) ?? props.cts[0] ?? null;
@@ -48,6 +49,23 @@ export function CtSegCard(props: CtSegCardProps) {
       /* not remembered */
     }
   };
+  const [modelId, setModelId] = useState<string>(() => {
+    try {
+      const v = localStorage.getItem(MODEL_KEY);
+      return CT_MODELS.some((m) => m.id === v) ? v! : DEFAULT_CT_MODEL;
+    } catch {
+      return DEFAULT_CT_MODEL;
+    }
+  });
+  const model = CT_MODELS.find((m) => m.id === modelId) ?? CT_MODELS[0];
+  const chooseModel = (id: string) => {
+    setModelId(id);
+    try {
+      localStorage.setItem(MODEL_KEY, id);
+    } catch {
+      /* not remembered */
+    }
+  };
   // Clock for the progress within a tile.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -63,17 +81,22 @@ export function CtSegCard(props: CtSegCardProps) {
     <Card title={<>CT-Organsegmentierung</>} info={
           <>
             <p>
-              117 Strukturen (Organe, Knochen, Gefäße, Muskeln) mit TotalSegmentator „total“ (3 mm) direkt im Browser – die Daten verlassen den Rechner
-              nicht. Das Modell (66 MB) wird beim ersten Mal geladen und im Browser gespeichert. Ergebnis: Label-Datensatz (Atlas) zum CT.
+              Organe, Knochen, Gefäße und Muskeln direkt im Browser segmentieren – die Daten verlassen den Rechner nicht. Das gewählte Modell wird beim
+              ersten Mal geladen und im Browser gespeichert. Ergebnis: Label-Datensatz (Atlas) zum CT.
+            </p>
+            <p>
+              Modelle: <b>TotalSegmentator „total“ 3 mm</b> (117 Strukturen, Standard) und <b>MONAI SegResNet 3 mm</b> (104 Strukturen der
+              TotalSegmentator-v1-Liste; Herz in 5 Teilen, für Ausschluss/Dosimetrie als „Herz“ zusammengefasst). Beide auf dem TotalSegmentator-Datensatz
+              trainiert.
             </p>
             <p>WebGPU ist meist deutlich schneller. Hängt WebGPU oder meldet einen Fehler, wird automatisch auf der CPU weitergerechnet.</p>
             <p>
-              Modell: TotalSegmentator (Wasserthal et al., Radiology: AI 2023), Apache-2.0; nnU-Net (Isensee et al. 2021). Nicht für diagnostische
-              Zwecke zertifiziert.
+              Quellen: TotalSegmentator (Wasserthal et al., Radiology: AI 2023), Apache-2.0; nnU-Net (Isensee et al. 2021); MONAI Model Zoo
+              wholeBody_ct_segmentation, Apache-2.0. Nicht für diagnostische Zwecke zertifiziert.
             </p>
           </>
         } status={props.running ? { text: "läuft", tone: "run" } : null}>
-      <p className="tool-hint">117 Strukturen per TotalSegmentator, lokal im Browser.</p>
+      <p className="tool-hint">{model.info}, lokal im Browser.</p>
       {props.cts.length === 0 ? (
         <p className="tool-hint">Kein CT geladen.</p>
       ) : (
@@ -88,6 +111,18 @@ export function CtSegCard(props: CtSegCardProps) {
               ))}
             </select>
           </label>
+          <label className="field">
+            Modell
+            <select value={model.id} disabled={props.running} onChange={(e) => chooseModel(e.target.value)}>
+              {CT_MODELS.map((m) => (
+                <option key={m.id} value={m.id} title={`${m.info} · ${m.license} · ${m.sizeMb} MB`}>
+                  {m.label}
+                  {m.restriction ? ` – ${m.restriction}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          {model.restriction && <InfoText warn details={`Lizenz ${model.license}: ${model.restriction}.`}>{model.restriction}</InfoText>}
           <label className="field">
             Berechnung
             <select value={backend} disabled={props.running} onChange={(e) => chooseBackend(e.target.value as CtSegBackend)}>
@@ -106,7 +141,7 @@ export function CtSegCard(props: CtSegCardProps) {
             <InfoText details="In Firefox ist WebGPU mit diesem Modell noch unzuverlässig – „Automatisch“ nutzt daher die CPU. Bei WebGPU-Fehlern wird automatisch auf der CPU weitergerechnet.">Firefox: CPU</InfoText>
           ) : null}
           {!props.running ? (
-            <button className="primary-btn" disabled={!ct} onClick={() => ct && props.onRun(ct.id, backend)}>
+            <button className="primary-btn" disabled={!ct} onClick={() => ct && props.onRun(ct.id, backend, model.id)}>
               Organe segmentieren
             </button>
           ) : (

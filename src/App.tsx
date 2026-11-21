@@ -32,8 +32,9 @@ import { LabelList } from "./ui/LabelList";
 import { filteredLabels, labelStats } from "./atlas/labelStats";
 import { TumorPanel, type TumorIndication, type TumorMode } from "./ui/TumorPanel";
 import { CtSegCard } from "./ui/CtSegCard";
+import { canonicalName } from "./segmentation/labelMap";
 import type { SegmentProgress } from "./segmentation/infer";
-import { type CtSegRun, loadModelMeta, runCtSegmentation } from "./segmentation/ctSegment";
+import { CT_MODELS, type CtSegRun, DEFAULT_CT_MODEL, loadModelMeta, runCtSegmentation } from "./segmentation/ctSegment";
 import type { CtSegBackend } from "./workers/ctseg.worker";
 import { type Lesion, type ThresholdMethod, cleanupLesions, lesionStats } from "./tumor/segment";
 import { burdenCsv, splitBurden, tumorBurden } from "./tumor/metrics";
@@ -1467,7 +1468,7 @@ function App() {
     const organs = organEntry;
     const atlas = organs?.dataset.atlas;
     if (!pet || !organs || !atlas) return;
-    const liverId = [...atlas.labels].find(([, n]) => n.replace(/ /g, "_") === "liver")?.[0];
+    const liverId = [...atlas.labels].find(([, n]) => canonicalName(n) === "liver")?.[0];
     if (liverId === undefined) {
       setTumorError("Keine Leber in den Organmasken.");
       return;
@@ -1626,7 +1627,7 @@ function App() {
   }
 
   // ── CT organ segmentation (browser, ONNX) ──
-  function startCtSegmentation(ctId: string, backend: CtSegBackend) {
+  function startCtSegmentation(ctId: string, backend: CtSegBackend, modelId: string = DEFAULT_CT_MODEL) {
     const ct = byId(ctId);
     if (!ct || ctSegRunning) return;
     setCtSegRunning(true);
@@ -1634,7 +1635,8 @@ function App() {
     setCtSegStatus(null);
     setCtSegProgress(null);
     const t0 = performance.now();
-    const run = runCtSegmentation(ct.dataset.current, backend, setCtSegProgress);
+    const model = CT_MODELS.find((m) => m.id === modelId) ?? CT_MODELS[0];
+    const run = runCtSegmentation(ct.dataset.current, backend, setCtSegProgress, model.id);
     ctSegRun.current = run;
     run.promise
       .then((r) => {
@@ -1642,13 +1644,13 @@ function App() {
         const vol = new Volume3D(Float32Array.from(r.labels), r.grid.nz, r.grid.ny, r.grid.nx, [g.spacing[2], g.spacing[1], g.spacing[0]], { ...g, frameOfReferenceUid: ct.dataset.current.geometry.frameOfReferenceUid });
         const labels = new Map(Object.entries(r.meta.labels).filter(([k]) => k !== "0").map(([k, v]) => [Number(k), v.replace(/_/g, " ")]));
         const d = createDataset(vol, { kind: "reconstruction" }, `CT-Organe · ${ct.dataset.displayName}`);
-        const entry = addDataset({ ...d, atlas: { name: `CT-Organe (TotalSegmentator) · ${ct.dataset.displayName}`, labels, attribution: "TotalSegmentator total 3 mm (Wasserthal et al. 2023), Apache-2.0" } });
+        const entry = addDataset({ ...d, atlas: { name: `CT-Organe (${model.short}) · ${ct.dataset.displayName}`, labels, attribution: model.attribution } });
         updateEntry(entry.id, { matrix: ct.matrix });
         addOverlay(entry.id);
         let n = 0;
         for (const v of r.labels) if (v) n++;
         setCtSegStatus(
-          `Fertig in ${((performance.now() - t0) / 1000).toFixed(0)} s (${r.backend === "webgpu" ? "WebGPU" : "CPU"}): ${new Set(r.labels).size - 1} Strukturen, ${((n * g.spacing[0] * g.spacing[1] * g.spacing[2]) / 1e6).toFixed(1)} l segmentiert.${r.note ? ` ${r.note}.` : ""}`,
+          `${model.short}: fertig in ${((performance.now() - t0) / 1000).toFixed(0)} s (${r.backend === "webgpu" ? "WebGPU" : "CPU"}): ${new Set(r.labels).size - 1} Strukturen, ${((n * g.spacing[0] * g.spacing[1] * g.spacing[2]) / 1e6).toFixed(1)} l segmentiert.${r.note ? ` ${r.note}.` : ""}`,
         );
       })
       .catch((e) => {
@@ -3213,7 +3215,7 @@ function App() {
           onOrganChange={(id) => setTumorOrganId(id)}
           autoExclude={tumorAutoExclude}
           onAutoExcludeChange={setTumorAutoExclude}
-          canAutoLiver={!!organEntry?.dataset.atlas && [...organEntry.dataset.atlas.labels.values()].some((n) => n.replace(/ /g, "_") === "liver")}
+          canAutoLiver={!!organEntry?.dataset.atlas && [...organEntry.dataset.atlas.labels.values()].some((n) => canonicalName(n) === "liver")}
           onAutoLiver={autoLiver}
           split={tumor && tumorIndication === "psma" && organEntry ? splitBurden(tumor.lesions) : null}
         />

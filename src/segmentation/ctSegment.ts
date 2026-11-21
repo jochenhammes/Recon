@@ -4,19 +4,47 @@ import { runResample } from "../resample/runner";
 import type { Volume3D } from "../viewer/volume";
 import type { CtSegBackend, CtSegJob } from "../workers/ctseg.worker";
 import type { SegmentProgress } from "./infer";
-import { type ModelMeta, rasGrid } from "./preprocess";
+import { type ModelMeta, normalizeForModel, rasGrid } from "./preprocess";
 
-export const MODEL_BASE = `${import.meta.env.BASE_URL}models/totalseg-total-3mm/`;
+/** CT segmentation models shipped with the app (ONNX, top-k output). */
+export interface CtModelInfo {
+  id: string;
+  /** Folder under public/models/. */
+  dir: string;
+  label: string;
+  /** Short description for the selection (structures, resolution). */
+  info: string;
+  license: string;
+  /** Use restriction shown in the UI (e.g. non-commercial). */
+  restriction?: string;
+  sizeMb: number;
+  /** Short name used in dataset names. */
+  short: string;
+  /** Citation stored with the label dataset. */
+  attribution: string;
+}
+
+export const CT_MODELS: CtModelInfo[] = [
+  { id: "totalseg-3mm", dir: "totalseg-total-3mm", label: "TotalSegmentator total (3 mm)", info: "117 Strukturen · nnU-Net", license: "Apache-2.0", sizeMb: 66, short: "TotalSegmentator", attribution: "TotalSegmentator total 3 mm (Wasserthal et al. 2023), Apache-2.0" },
+  { id: "monai-segresnet-3mm", dir: "monai-segresnet-3mm", label: "MONAI SegResNet (3 mm)", info: "104 Strukturen (TotalSeg v1) · SegResNet", license: "Apache-2.0", sizeMb: 75, short: "MONAI SegResNet", attribution: "MONAI wholeBody_ct_segmentation SegResNet 3 mm (MONAI Consortium; trained on TotalSegmentator data, Wasserthal et al. 2023), Apache-2.0" },
+];
+export const DEFAULT_CT_MODEL = CT_MODELS[0].id;
+
+export const modelBase = (id: string = DEFAULT_CT_MODEL) => `${import.meta.env.BASE_URL}models/${(CT_MODELS.find((m) => m.id === id) ?? CT_MODELS[0]).dir}/`;
+/** Base URL of the default model (kept for existing callers). */
+export const MODEL_BASE = modelBase();
 const CACHE = "recon-studio-models-v1";
 
-export async function loadModelMeta(): Promise<ModelMeta> {
+export async function loadModelMeta(id: string = DEFAULT_CT_MODEL): Promise<ModelMeta> {
+  const MODEL_BASE = modelBase(id);
   const r = await fetch(`${MODEL_BASE}model.json`);
   if (!r.ok) throw new Error(`Modellbeschreibung nicht ladbar (${r.status}).`);
   return r.json();
 }
 
 /** Model bytes from the browser cache, or downloaded once (with progress) and cached. */
-export async function loadModelBytes(meta: ModelMeta, onProgress?: (loaded: number, total: number) => void): Promise<ArrayBuffer> {
+export async function loadModelBytes(meta: ModelMeta, onProgress?: (loaded: number, total: number) => void, id: string = DEFAULT_CT_MODEL): Promise<ArrayBuffer> {
+  const MODEL_BASE = modelBase(id);
   const cache = typeof caches !== "undefined" ? await caches.open(CACHE).catch(() => null) : null;
   // Remove older versions of the model (different checksum) from the cache.
   if (cache) {
@@ -82,7 +110,7 @@ export function tileTimeLimitSec(done: number, elapsedSec: number): number {
 }
 
 /** Full pipeline: model download/cache → RAS 3 mm resampling → normalization → sliding window in a worker. */
-export function runCtSegmentation(ct: Volume3D, backend: CtSegBackend, onProgress: (p: SegmentProgress) => void): CtSegRun {
+export function runCtSegmentation(ct: Volume3D, backend: CtSegBackend, onProgress: (p: SegmentProgress) => void, modelId: string = DEFAULT_CT_MODEL): CtSegRun {
   let worker: Worker | null = null;
   let watchdog: ReturnType<typeof setInterval> | null = null;
   let cancelled = false;
@@ -95,18 +123,13 @@ export function runCtSegmentation(ct: Volume3D, backend: CtSegBackend, onProgres
   const promise = new Promise<CtSegResult>((resolve, reject) => {
     rejectFn = reject;
     (async () => {
-      const meta = await loadModelMeta();
-      const model = await loadModelBytes(meta, (l, t) => onProgress({ done: l, total: t, stage: `Modell laden (${(l / 1e6).toFixed(0)} / ${(t / 1e6).toFixed(0)} MB)` }));
+      const meta = await loadModelMeta(modelId);
+      const model = await loadModelBytes(meta, (l, t) => onProgress({ done: l, total: t, stage: `Modell laden (${(l / 1e6).toFixed(0)} / ${(t / 1e6).toFixed(0)} MB)` }), modelId);
       if (cancelled) return;
       const grid = rasGrid(ct, meta.spacing[0]);
       onProgress({ done: 0, total: 1, stage: "CT auf 3 mm umrechnen" });
       const data = await runResample(ct, worldToVoxelTransform(ct.geometry), grid, "linear", (f) => onProgress({ done: f, total: 1, stage: "CT auf 3 mm umrechnen" }));
-      const [lo, hi] = meta.normalization.clip;
-      const { mean, std } = meta.normalization;
-      for (let i = 0; i < data.length; i++) {
-        const x = Number.isFinite(data[i]) ? data[i] : lo;
-        data[i] = ((x < lo ? lo : x > hi ? hi : x) - mean) / std;
-      }
+      const bodyThreshold = normalizeForModel(data, meta.normalization);
       if (cancelled) return;
 
       // Model and data are copied (not transferred) to the worker, so it can be restarted on the CPU.
@@ -152,8 +175,10 @@ export function runCtSegmentation(ct: Volume3D, backend: CtSegBackend, onProgres
           dims: [grid.nx, grid.ny, grid.nz],
           patch: meta.patchSize,
           classes: Object.keys(meta.labels).length,
-          bodyThreshold: (-500 - mean) / std,
+          bodyThreshold,
           topkOutput: meta.output?.kind === "topk" ? meta.output.k : undefined,
+          axisOrder: meta.axisOrder ?? "zyx",
+          stepFraction: 1 - (meta.overlap ?? 0.2),
           backend: b,
           note,
         };

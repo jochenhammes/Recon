@@ -3,6 +3,7 @@ import { resampleInto } from "../resample/resample";
 import type { Volume3D } from "../viewer/volume";
 import type { VoxelGrid } from "../viewer/types";
 import type { Lesion } from "./segment";
+import { canonicalName } from "../segmentation/labelMap";
 
 /**
  * Coupling of CT organ labels (TotalSegmentator names) with the PET lesion segmentation: physiological
@@ -20,7 +21,7 @@ export const EXCLUSION_PRESETS: Record<"lymphoma" | "psma", string[]> = {
 const BONE = /^(vertebrae|rib|hip|sacrum|femur|humerus|scapula|clavicula|skull|sternum|costal_cartilages)/;
 
 export function isBone(labelName: string): boolean {
-  return BONE.test(labelName.replace(/ /g, "_"));
+  return BONE.test(canonicalName(labelName));
 }
 
 /** Organ label (nearest neighbour) for every voxel of `target`; `w2v` maps the target's own world to label voxels. */
@@ -31,7 +32,8 @@ export function organsOnGrid(labels: VoxelGrid, w2v: WorldToVoxel, target: Volum
   return out;
 }
 
-const norm = (s: string) => s.replace(/ /g, "_");
+/** Canonical structure name, so that labels of every CT model (e.g. heart parts of TotalSegmentator v1) match the presets. */
+const norm = canonicalName;
 
 /**
  * Annotates lesions with their dominant organ (> 50 % of the voxels) and bone location, and excludes

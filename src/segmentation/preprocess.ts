@@ -17,10 +17,88 @@ export interface ModelMeta {
   /** Patch size in array order (z, y, x). */
   patchSize: [number, number, number];
   spacing: [number, number, number];
-  normalization: { clip: [number, number]; mean: number; std: number };
+  /**
+   * CT intensity normalization: nnU-Net z-score with clipping (default) or MONAI's per-image
+   * NormalizeIntensity (nonzero voxels) + ScaleIntensity to a range.
+   */
+  normalization: ZScoreNorm | MonaiNorm;
   labels: Record<string, string>;
   /** Model output format: logits (default) or the top-k classes with probabilities. */
   output?: { kind: "topk"; k: number };
+  /** Array order the network expects: "zyx" (nnU-Net, default; x fastest) or "xyz" (MONAI; z fastest). */
+  axisOrder?: "zyx" | "xyz";
+  /** Sliding-window overlap (fraction of the patch); default 0.2 (step 0.8 as TotalSegmentator "total"). */
+  overlap?: number;
+}
+
+export interface ZScoreNorm {
+  kind?: "zscore";
+  clip: [number, number];
+  mean: number;
+  std: number;
+}
+
+export interface MonaiNorm {
+  kind: "monai";
+  /** Statistics over voxels ≠ 0 only (MONAI NormalizeIntensity nonzero=True). */
+  nonzero: boolean;
+  /** Final range (MONAI ScaleIntensity minv/maxv). */
+  scaleTo: [number, number];
+}
+
+/**
+ * Normalizes resampled CT values (HU) in place for the model and returns the threshold above which a voxel counts
+ * as body (HU −500 in normalized units; used to skip empty images). Non-finite values count as air (−1024 HU).
+ */
+export function normalizeForModel(v: Float32Array, norm: ZScoreNorm | MonaiNorm): number {
+  if (norm.kind === "monai") {
+    let s = 0, s2 = 0, n = 0;
+    for (let i = 0; i < v.length; i++) {
+      if (!Number.isFinite(v[i])) v[i] = -1024;
+      if (norm.nonzero && v[i] === 0) continue;
+      s += v[i];
+      s2 += v[i] * v[i];
+      n++;
+    }
+    const mean = n ? s / n : 0;
+    const std = n ? Math.sqrt(Math.max(s2 / n - mean * mean, 0)) || 1 : 1;
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < v.length; i++) {
+      if (!(norm.nonzero && v[i] === 0)) v[i] = (v[i] - mean) / std;
+      if (v[i] < lo) lo = v[i];
+      if (v[i] > hi) hi = v[i];
+    }
+    const [a, b] = norm.scaleTo;
+    const k = hi > lo ? (b - a) / (hi - lo) : 0;
+    for (let i = 0; i < v.length; i++) v[i] = a + (v[i] - lo) * k;
+    return a + ((-500 - mean) / std - lo) * k;
+  }
+  const [lo, hi] = norm.clip;
+  const { mean, std } = norm;
+  for (let i = 0; i < v.length; i++) {
+    const x = Number.isFinite(v[i]) ? v[i] : lo;
+    v[i] = ((x < lo ? lo : x > hi ? hi : x) - mean) / std;
+  }
+  return (-500 - mean) / std;
+}
+
+/** Reorders a patch between "zyx" (x fastest) and "xyz" (z fastest) layout; `dims` = [nx, ny, nz] of the patch. */
+export function transposePatch(src: Float32Array, dims: [number, number, number], channels: number, toXyz: boolean): Float32Array {
+  const [nx, ny, nz] = dims;
+  const n = nx * ny * nz;
+  const out = new Float32Array(src.length);
+  for (let c = 0; c < channels; c++) {
+    const o = c * n;
+    for (let z = 0; z < nz; z++)
+      for (let y = 0; y < ny; y++)
+        for (let x = 0; x < nx; x++) {
+          const zyx = o + (z * ny + y) * nx + x;
+          const xyz = o + (x * ny + y) * nz + z;
+          if (toXyz) out[xyz] = src[zyx];
+          else out[zyx] = src[xyz];
+        }
+  }
+  return out;
 }
 
 /** RAS-aligned grid (in LPS coordinates) covering a volume placed by `toWorld` voxel → world. */
@@ -58,12 +136,7 @@ export function rasGrid(vol: VoxelGrid, spacingMm: number, toWorld: (i: number, 
 /** CT on the model grid, normalized (clip to the training percentiles, z-score). */
 export function prepareCt(ct: VoxelGrid, w2v: WorldToVoxel, grid: TargetGrid, meta: ModelMeta): Float32Array {
   const v = resampleInto(ct, w2v, grid, "bspline");
-  const [lo, hi] = meta.normalization.clip;
-  const { mean, std } = meta.normalization;
-  for (let i = 0; i < v.length; i++) {
-    const x = Number.isFinite(v[i]) ? v[i] : lo;
-    v[i] = ((x < lo ? lo : x > hi ? hi : x) - mean) / std;
-  }
+  normalizeForModel(v, meta.normalization);
   return v;
 }
 
