@@ -1,7 +1,7 @@
 # Recon Studio – Handbuch
 
 Schritt-für-Schritt-Anleitungen für alle Funktionen. Die Bilder zeigen synthetische Phantome bzw. öffentliche
-Beispieldaten (keine Patientendaten).
+Beispieldaten; die Abbildung in Kapitel 9 stammt aus einer realen xSPECT/CT-Dosimetrie (ohne Patientenkennung).
 
 **Inhalt**
 1. [Oberfläche](#1-oberfläche)
@@ -456,6 +456,12 @@ Energiedosis (Gy) für Radionuklidtherapien (**Lu-177, Tb-161, I-131, Y-90**) au
 PET/CT-Zeitpunkten – je Organ und Läsion, als Voxel-Dosiskarte mit Dosis-Volumen-Histogramm, mit BED, Unsicherheit
 und Bericht. **Forschungswerkzeug, kein zertifiziertes Medizinprodukt**; Ergebnisse vor klinischer Verwendung
 unabhängig prüfen.
+
+![Dosimetrie: Kurven und Dosis neben dem Viewer](docs/images/40-dosimetrie-kurven.jpg)
+
+*Karte „Kurven und Dosis“: Milz mit vier Messpunkten (ca. 4, 28, 103 und 124 h p.i.) und monoexponentiellem Fit,
+Unsicherheit der Dosis, Ergebnistabelle aller Regionen und Bericht; rechts xSPECT Quant (Bq/ml) mit CT, Organkarte und
+Läsion im Viewer.*
 
 ### 9.1 Überblick
 
