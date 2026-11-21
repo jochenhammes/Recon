@@ -2611,3 +2611,171 @@ tr.focus-row td {
   width: 100%;
   font: inherit;
 }
+
+/* ── Dosimetry: time axis and time point cards ── */
+.dos-axis {
+  width: 100%;
+  height: auto;
+  margin: 4px 0 6px;
+  overflow: visible;
+}
+.dos-axis-line {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+.dos-axis-inj {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+.dos-axis-tick {
+  font-size: 9px;
+  fill: var(--text-dim);
+}
+.dos-axis-label {
+  font-size: 10px;
+  fill: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+.dos-axis-pt circle {
+  stroke-width: 1.5;
+}
+.dos-axis-pt.ok circle {
+  fill: var(--success);
+  stroke: var(--success);
+}
+.dos-axis-pt.incomplete circle {
+  fill: var(--warning);
+  stroke: var(--warning);
+}
+.dos-axis-pt.unused circle {
+  fill: var(--surface);
+  stroke: var(--text-dim);
+  stroke-dasharray: 2 2;
+}
+.dos-axis-pt.unused .dos-axis-label {
+  fill: var(--text-dim);
+}
+.dos-axis-pt.selected circle {
+  stroke: var(--accent-strong);
+  stroke-width: 2.5;
+}
+.dos-tp-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 8px 8px;
+  margin: 8px 0;
+  background: var(--surface);
+}
+.dos-tp-card.open {
+  border-color: var(--accent-border);
+}
+.dos-tp-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: 0;
+  padding: 0 0 4px;
+  color: var(--text-h);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.dos-tp-head strong {
+  color: var(--accent-strong);
+}
+.dos-tp-when {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.dos-tp-when b {
+  color: var(--text-h);
+}
+.dos-tp-warn {
+  color: var(--warning);
+}
+.dos-tp-roles {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 8px;
+  margin: 0 0 6px;
+  font-size: 12px;
+  align-items: center;
+}
+.dos-tp-roles dt {
+  color: var(--text-dim);
+}
+.dos-tp-roles dd {
+  margin: 0;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+.dos-tp-roles dd select {
+  min-width: 0;
+  flex: 1;
+}
+.dos-unit {
+  flex-shrink: 0;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+}
+.dos-seg {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.dos-chip {
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+}
+.dos-chip.ok {
+  color: var(--success);
+  border-color: var(--success);
+}
+.dos-chip.missing {
+  color: var(--warning);
+  border-color: var(--warning);
+}
+.dos-chip.na {
+  color: var(--text-dim);
+}
+.dos-tp-details {
+  margin-top: 6px;
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+.dos-spare {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  margin: 6px 0;
+}
+.dos-unassigned {
+  margin: 6px 0;
+  font-size: 12px;
+}
+.dos-unassigned-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 3px 0;
+}
+.dos-unassigned-row .export-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -2155,7 +2155,14 @@ function App() {
     entries: entries.map((e) => ({ id: e.id, label: entryLabel(e), dataset: e.dataset, matrix: e.matrix, modality: ctEntries.includes(e) ? "CT" : datasetModality(e.dataset) })),
     setup: dosimetry,
     onSetup: setDosimetry,
-    segmentCt: (ctId) => startCtSegmentation(ctId, "auto"),
+    segmentCt: (ctId, modelId) => startCtSegmentation(ctId, "auto", modelId),
+    showTimePoint: (baseId, overlayIds) => {
+      changeBase(baseId);
+      for (const id of overlayIds) makeOverlay(id);
+      setOverlayIds(overlayIds.filter((id) => id !== baseId));
+      setEntries((prev) => prev.map((e) => (overlayIds.includes(e.id) ? { ...e, display: { ...e.display, visible: true } } : e)));
+      if (overlayIds[0]) setActiveId(overlayIds[0]);
+    },
     segRunning: ctSegRunning,
     registerTimePoints: async (refCtId, pairs, status) => {
       const refCt = byId(refCtId);

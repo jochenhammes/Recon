@@ -5,6 +5,7 @@ import { csvText, csvWithInfo } from "../core/csv";
 import type { Mat4 } from "../core/transform";
 import type { LoadedDataset } from "../dataset/types";
 import { currentNuclide } from "../header/radionuclide";
+import { shortName } from "../dataset/describe";
 import { Chart, type ChartSeries } from "../kinetics/Chart";
 import { BigTable } from "../ui/BigTable";
 import { Card } from "../ui/Card";
@@ -15,6 +16,8 @@ import { DEFAULT_ENERGIES, THERAPY_NUCLIDES, localDepositionDose, nuclideById } 
 import { DEFAULT_ORGANS, type DosRegionOptions, type DosimetrySetup, bedMono, regionKey } from "./setup";
 import { TAC_MODEL_LABELS, type TacFit, type TacModel, fitTac } from "./tacFit";
 import { type DvhStats, densityMap, doseFromTia, dvh, parseKernel, regionDoses, voxelTia } from "./voxelDose";
+import { type SessionItem, acquisitionMs, fmtDateTime, groupSessions, hoursPi, studyUidOf } from "./sessions";
+import { type TpCardView, type UnassignedItem, TimePointsCard } from "./TimePointsCard";
 
 export interface DosEntry {
   id: string;
@@ -28,8 +31,10 @@ export interface DosimetryApi {
   entries: DosEntry[];
   setup: DosimetrySetup;
   onSetup: (update: (s: DosimetrySetup) => DosimetrySetup) => void;
-  /** Starts the CT organ segmentation (result appears as a label dataset). */
-  segmentCt: (ctId: string) => void;
+  /** Starts the CT organ segmentation with a model (result appears as a label dataset). */
+  segmentCt: (ctId: string, modelId?: string) => void;
+  /** Shows a time point in the viewer: base dataset plus overlays (others leave the overlay stack). */
+  showTimePoint: (baseId: string, overlayIds: string[]) => void;
   segRunning: boolean;
   /** Registers each time point's CT rigidly onto the reference CT and moves its followers along. */
   registerTimePoints: (refCtId: string, pairs: { ctId: string; followers: string[] }[], status: (s: string) => void) => Promise<void>;
@@ -49,6 +54,9 @@ interface TpView {
   tH?: number;
   durationSec?: number;
   decayCorrected: boolean;
+  /** Counts (camera profile needed) or a quantitative image in Bq/ml. */
+  unit: "Counts" | "Bq/ml";
+  /** MBq per unit of the image value summed over voxels (Counts: calibration; Bq/ml: voxel volume). */
   mbqPerCount: number;
   fovMBq?: number;
   pctInjected?: number;
@@ -85,10 +93,10 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
   const spectCandidates = entries.filter((e) => !e.dataset.atlas && !e.dataset.template && !e.dataset.derivedFrom && !["CT", "MR"].includes(e.modality) && e.dataset.valueUnit !== "Gy");
   const cts = entries.filter((e) => e.modality === "CT" && !e.dataset.atlas);
   const labelCandidates = entries.filter((e) => e.dataset.atlas);
-  const tps = setup.timePoints.filter((tp) => byId(tp.spectId));
+  const tpsRaw = setup.timePoints.filter((tp) => byId(tp.spectId));
 
   // ── Nuclide and energy ──
-  const firstSpect = byId(tps[0]?.spectId);
+  const firstSpect = byId(tpsRaw[0]?.spectId);
   const firstHeader = firstSpect?.dataset.source.kind === "dicom" ? firstSpect.dataset.source.files[0].dataSet : undefined;
   const headerNuclide = firstHeader ? currentNuclide(firstHeader).match?.id : undefined;
   const nuclideId = setup.nuclide;
@@ -103,6 +111,41 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
   const injectedMBq = setup.injection.activityMBq ?? headerInfo?.injectedMBq;
   const profile = setup.profile;
 
+  // ── Acquisition sessions (automatic grouping from FrameOfReference, study and acquisition time) ──
+  const isOrganMap = (e: DosEntry) => /^CT-Organe/.test(e.dataset.displayName) || /^CT-Organe/.test(e.dataset.atlas?.name ?? "");
+  const isLesionMap = (e: DosEntry) => /Läsion/i.test(e.dataset.displayName) || /Läsion/i.test(e.dataset.atlas?.name ?? "");
+  const groupKey = entries.map((e) => `${e.id}:${e.dataset.current.geometry.frameOfReferenceUid ?? ""}:${e.dataset.displayName}`).join("|");
+  const grouping = useMemo(() => {
+    const item = (e: DosEntry, role: SessionItem["role"]): SessionItem => ({
+      id: e.id,
+      role,
+      acqMs: acquisitionMs(e.dataset),
+      frameOfReference: e.dataset.current.geometry.frameOfReferenceUid,
+      studyUid: studyUidOf(e.dataset),
+    });
+    const items: SessionItem[] = [
+      ...spectCandidates.map((e) => item(e, "functional")),
+      ...cts.map((e) => item(e, "ct")),
+      ...labelCandidates.map((e): SessionItem => {
+        const parent = cts.find((c) => e.dataset.displayName === `CT-Organe · ${c.dataset.displayName}`)?.id ?? e.dataset.derivedFrom?.sourceId;
+        return { ...item(e, "label"), parentId: parent, kind: isOrganMap(e) ? "organs" : isLesionMap(e) ? "lesions" : "other" };
+      }),
+    ];
+    return groupSessions(items);
+  }, [groupKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sessionOf = (id: string | undefined) => grouping.sessions.find((g) => id && [...g.functional, ...g.cts, ...g.organs, ...g.lesions, ...g.otherLabels].includes(id));
+  /** Time points proposed from the sessions (one per session with a functional image). */
+  const suggested = grouping.sessions
+    .filter((g) => g.functional.length)
+    .map((g) => ({ spectId: g.functional[0], ctId: g.cts[0], organSetId: g.organs[0], lesionSetId: g.lesions[0] }));
+  const sig = (l: { spectId: string; ctId?: string; organSetId?: string; lesionSetId?: string }[]) => l.map((t) => [t.spectId, t.ctId ?? "", t.organSetId ?? "", t.lesionSetId ?? ""].join(",")).sort().join("|");
+  // Organ map shown for a time point: explicit choice, else the organ map of its CT.
+  const organIdOf = (tp: { ctId?: string; organSetId?: string }) => (tp.organSetId && byId(tp.organSetId) ? tp.organSetId : tp.ctId ? organSetOf(tp.ctId)?.id : undefined);
+  const suggestionDiffers = suggested.length > 0 && sig(suggested) !== sig(tpsRaw.map((t) => ({ ...t, organSetId: organIdOf(t) })));
+  // Time points in chronological order (the first is the reference of the registration and the voxel map).
+  const tpTime = (tp: (typeof tpsRaw)[number]) => tp.tHoursManual ?? hoursPi(acquisitionMs(byId(tp.spectId)!.dataset), setup.injection.timeMs ?? headerInfo?.injectionMs) ?? acquisitionMs(byId(tp.spectId)!.dataset) ?? Infinity;
+  const tps = [...tpsRaw].sort((a, b) => tpTime(a) - tpTime(b));
+
   // ── Time points ──
   const tpViews: TpView[] = tps.map((tp) => {
     const e = byId(tp.spectId)!;
@@ -113,13 +156,24 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
     const tH = tp.tHoursManual ?? tAuto;
     const durationSec = tp.durationSecManual ?? h?.durationSec;
     const decayCorrected = tp.decayCorrected ?? (!!h?.decayCorrection && h.decayCorrection.toUpperCase() !== "NONE");
-    if (h?.units && h.units.toUpperCase() !== "CNTS") note.push(`Einheit im Header: ${h.units}`);
-    if (decayCorrected && h?.decayCorrection?.toUpperCase() === "ADMIN") note.push("Bild auf Injektion zerfallskorrigiert – Zeitachse prüfen");
-    const mbqPerCount = profile && nuclide && durationSec ? countsToMBq(durationSec, profile.cpsPerMBq, nuclide.halfLifeSec, decayCorrected) : NaN;
+    const quant = isQuantitative(h?.units, e.dataset.valueUnit);
+    const unit: TpView["unit"] = quant ? "Bq/ml" : "Counts";
+    if (h?.units && !quant && h.units.toUpperCase() !== "CNTS") note.push(`Einheit im Header: ${h.units} – wie Counts behandelt`);
+    let mbqPerCount: number;
+    if (quant) {
+      const [sx, sy, sz] = e.dataset.current.geometry.spacing;
+      // Bq/ml × ml per voxel → Bq; images decay corrected to the injection are brought back to the acquisition time.
+      const toAcq = h?.decayCorrection?.toUpperCase() === "ADMIN" && tH !== undefined && nuclide ? Math.exp((-Math.LN2 * tH * 3600) / nuclide.halfLifeSec) : 1;
+      if (h?.decayCorrection?.toUpperCase() === "ADMIN") note.push(tH !== undefined ? "auf Injektion zerfallskorrigiert – auf Aufnahmezeit zurückgerechnet" : "auf Injektion zerfallskorrigiert – Zeit p.i. fehlt");
+      mbqPerCount = ((sx * sy * sz) / 1000) * 1e-6 * toAcq;
+    } else {
+      if (decayCorrected && h?.decayCorrection?.toUpperCase() === "ADMIN") note.push("Bild auf Injektion zerfallskorrigiert – Zeitachse prüfen");
+      mbqPerCount = profile && nuclide && durationSec ? countsToMBq(durationSec, profile.cpsPerMBq, nuclide.halfLifeSec, decayCorrected) : NaN;
+    }
     const sum = positiveSum(e.dataset.current.data);
     const fovMBq = Number.isFinite(mbqPerCount) ? sum * mbqPerCount : undefined;
     const pctInjected = fovMBq !== undefined && injectedMBq && tH !== undefined && nuclide ? (100 * fovMBq) / (injectedMBq * Math.exp((-Math.LN2 * tH) / halfLifeH)) : undefined;
-    return { spectId: tp.spectId, label: e.label, ctId: tp.ctId, tH, durationSec, decayCorrected, mbqPerCount, fovMBq, pctInjected, headerNote: note };
+    return { spectId: tp.spectId, label: e.label, ctId: tp.ctId, tH, durationSec, decayCorrected, unit, mbqPerCount, fovMBq, pctInjected, headerNote: note };
   });
 
   // ── Regions ──
@@ -161,19 +215,78 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
   }, [labelNames, setup, tpViews.map((t) => `${t.spectId}:${t.tH}`).join(), energy, nuclide, profile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Actions ──
-  function addTimePoint(id: string, on: boolean) {
+  type TpPatch = Partial<DosimetrySetup["timePoints"][number]>;
+
+  /** Label sets of a time point follow its organ/lesion choice (measured for this time point only). */
+  function withTpLabels(s: DosimetrySetup, tp: DosimetrySetup["timePoints"][number], prev?: DosimetrySetup["timePoints"][number]): DosimetrySetup {
+    let labelSets = s.labelSets;
+    for (const [oldId, newId] of [
+      [prev?.organSetId, tp.organSetId],
+      [prev?.lesionSetId, tp.lesionSetId],
+    ] as const) {
+      if (oldId && oldId !== newId) labelSets = labelSets.filter((l) => !(l.id === oldId && l.tp === (prev?.spectId ?? tp.spectId)));
+      if (newId) labelSets = [...labelSets.filter((l) => l.id !== newId), { id: newId, tp: tp.spectId }];
+    }
+    const dismissed = (s.labelSetsDismissed ?? []).filter((x) => x !== tp.organSetId && x !== tp.lesionSetId);
+    return { ...s, labelSets, labelSetsDismissed: dismissed };
+  }
+
+  function addTimePoints(list: TpPatch[]) {
     set((s) => {
-      if (!on) return { ...s, timePoints: s.timePoints.filter((t) => t.spectId !== id) };
-      const e = byId(id);
-      const fo = e?.dataset.current.geometry.frameOfReferenceUid;
-      const ct = cts.find((c) => fo && c.dataset.current.geometry.frameOfReferenceUid === fo);
-      return { ...s, timePoints: [...s.timePoints, { spectId: id, ctId: ct?.id }] };
+      let next: DosimetrySetup = { ...s, timePointsAuto: true };
+      for (const tp of list) {
+        if (!tp.spectId || next.timePoints.some((t) => t.spectId === tp.spectId)) continue;
+        const e = byId(tp.spectId);
+        const fo = e?.dataset.current.geometry.frameOfReferenceUid;
+        const full = { ...tp, spectId: tp.spectId, ctId: tp.ctId ?? cts.find((c) => fo && c.dataset.current.geometry.frameOfReferenceUid === fo)?.id };
+        next = withTpLabels({ ...next, timePoints: [...next.timePoints, full] }, full);
+      }
+      return next;
     });
   }
 
-  function updateTp(id: string, patch: Partial<DosimetrySetup["timePoints"][number]>) {
-    set((s) => ({ ...s, timePoints: s.timePoints.map((t) => (t.spectId === id ? { ...t, ...patch } : t)) }));
+  function removeTimePoint(id: string) {
+    set((s) => ({ ...s, timePoints: s.timePoints.filter((t) => t.spectId !== id), labelSets: s.labelSets.filter((l) => l.tp !== id) }));
   }
+
+  /** Replaces the time points by the automatic grouping, keeping manual times and durations. */
+  function applySuggestion() {
+    set((s) => {
+      let next: DosimetrySetup = { ...s, timePointsAuto: true, timePoints: [], labelSets: s.labelSets.filter((l) => l.tp === "all") };
+      for (const g of suggested) {
+        const old = s.timePoints.find((t) => t.spectId === g.spectId);
+        const tp = { ...old, ...g, registered: old?.registered && old.ctId === g.ctId };
+        next = withTpLabels({ ...next, timePoints: [...next.timePoints, tp] }, tp);
+      }
+      return next;
+    });
+  }
+
+  function updateTp(id: string, patch: TpPatch) {
+    set((s) => {
+      const prev = s.timePoints.find((t) => t.spectId === id);
+      if (!prev) return s;
+      const tp = { ...prev, ...patch };
+      // Another image or CT: the registration of this time point (or of all, for the reference) is void.
+      const moved = (patch.spectId !== undefined && patch.spectId !== prev.spectId) || (patch.ctId !== undefined && patch.ctId !== prev.ctId);
+      if (moved) tp.registered = false;
+      const isRef = tps[0]?.spectId === id;
+      let next: DosimetrySetup = {
+        ...s,
+        timePoints: s.timePoints.map((t) => (t.spectId === id ? tp : moved && isRef ? { ...t, registered: false } : t)),
+        labelSets: patch.spectId && patch.spectId !== id ? s.labelSets.map((l) => (l.tp === id ? { ...l, tp: patch.spectId! } : l)) : s.labelSets,
+        measurements: patch.spectId && patch.spectId !== id ? Object.fromEntries(Object.entries(s.measurements).filter(([k]) => k !== id)) : s.measurements,
+      };
+      if ("organSetId" in patch || "lesionSetId" in patch) next = withTpLabels(next, tp, prev);
+      return next;
+    });
+  }
+
+  // First visit: time points from the automatic grouping (later only on request).
+  useEffect(() => {
+    if (setup.timePointsAuto || setup.timePoints.length || !suggested.length) return;
+    applySuggestion();
+  }, [grouping]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Time point a label dataset belongs to: same FrameOfReference as its CT/SPECT, or the organ map of its CT. */
   function tpOfLabelSet(id: string, timePoints: DosimetrySetup["timePoints"]): string | undefined {
@@ -283,6 +396,8 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
         followers: [tp.spectId, ...setup.labelSets.filter((l) => l.tp === tp.spectId).map((l) => l.id)],
       }));
       await api.registerTimePoints(ref.ctId, pairs, setStatus);
+      const done = new Set(pairs.map((p) => p.followers[0]));
+      set((s) => ({ ...s, timePoints: s.timePoints.map((t) => (done.has(t.spectId) ? { ...t, registered: true } : t)) }));
       setStatus(`${pairs.length} Zeitpunkt(e) auf das CT von ${ref.label} registriert. Bitte die Überlagerung prüfen.`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -404,7 +519,48 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
     : [];
   const selDvh = sel ? dvhs.get(sel.key) : undefined;
 
+  const allCalibrated = tpViews.length > 0 && tpViews.every((t) => Number.isFinite(t.mbqPerCount));
+  const opt = (e: DosEntry) => ({ id: e.id, label: shortName(e.dataset.displayName), acqMs: acquisitionMs(e.dataset) });
   const usedTpIds = new Set(tps.map((t) => t.spectId));
+  const cardViews: TpCardView[] = tpViews.map((v) => {
+    const tp = tps.find((t) => t.spectId === v.spectId)!;
+    const e = byId(v.spectId)!;
+    const acqMs = acquisitionMs(e.dataset);
+    const ctAcq = tp.ctId ? acquisitionMs(byId(tp.ctId)!.dataset) : undefined;
+    const warnings: string[] = [];
+    if (acqMs !== undefined && ctAcq !== undefined && Math.abs(acqMs - ctAcq) > 3 * HOUR)
+      warnings.push(`CT ${(Math.abs(acqMs - ctAcq) / HOUR).toFixed(1).replace(".", ",")} h von der Aufnahme entfernt (${fmtDateTime(ctAcq)}) – richtiges CT?`);
+    if ((sessionOf(v.spectId)?.functional.length ?? 0) > 1) warnings.push("Zur selben Aufnahme gehören mehrere Funktionsbilder – richtiges Bild gewählt?");
+    if (acqMs === undefined && tp.tHoursManual === undefined) warnings.push("Kein Aufnahmedatum im Header – Zeit p.i. bitte eingeben.");
+    if (!tp.ctId) warnings.push("Kein CT: Masse aus der Dichte, Organsegmentierung und Registrierung nicht möglich.");
+    return {
+      spectId: v.spectId,
+      label: v.label,
+      ctId: tp.ctId,
+      organSetId: organIdOf(tp),
+      lesionSetId: tp.lesionSetId,
+      acqMs,
+      tH: v.tH,
+      tHoursManual: tp.tHoursManual,
+      durationSecManual: tp.durationSecManual,
+      durationSec: v.durationSec,
+      decayCorrected: v.decayCorrected,
+      unit: v.unit,
+      calibrated: Number.isFinite(v.mbqPerCount),
+      registered: !!tp.registered,
+      fovMBq: v.fovMBq,
+      pctInjected: v.pctInjected,
+      notes: v.headerNote,
+      warnings,
+    };
+  });
+  const spare = grouping.sessions
+    .filter((g) => g.functional.length && !g.functional.some((id) => usedTpIds.has(id)))
+    .map((g) => ({ key: g.key, label: byId(g.functional[0])?.label ?? "", acqMs: g.acqMs, h: hoursPi(g.acqMs, injectionMs) }));
+  const used = new Set(tps.flatMap((t) => [t.spectId, t.ctId, organIdOf(t), t.lesionSetId]).filter(Boolean));
+  const unassigned: UnassignedItem[] = grouping.unassigned
+    .filter((u) => !used.has(u.id) && !setup.labelSets.some((l) => l.id === u.id))
+    .map((u) => ({ id: u.id, label: byId(u.id)?.label ?? u.id, role: u.role }));
 
   return (
     <>
@@ -412,102 +568,57 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
         Forschungswerkzeug · SPECT vom Gerät
       </InfoText>
 
-      <Card title={<>Zeitpunkte</>} status={tps.length ? { text: `${tps.length}`, tone: "info" } : null} persistKey="dos-tp"
-        info="SPECT-Datensätze der Therapie (1–4 Zeitpunkte) mit dem CT derselben Aufnahme. Der Zeitpunkt nach Injektion wird aus Aufnahme- und Injektionszeit im DICOM-Header berechnet und kann überschrieben werden; ebenso die Aufnahmedauer (Projektionen × Zeit pro Projektion × Detektoren).">
-        {spectCandidates.length === 0 && <p className="tool-hint">Erst SPECT-Daten (und die zugehörigen CTs) laden.</p>}
-        <div className="imcalc-list export-list">
-          {spectCandidates.map((e) => (
-            <label key={e.id} className="checkbox-field">
-              <input type="checkbox" checked={usedTpIds.has(e.id)} disabled={!!busy} onChange={(ev) => addTimePoint(e.id, ev.target.checked)} />
-              <span className="export-item-name">{e.label}</span>
-              <em className="export-item-grid">{e.modality}</em>
-            </label>
-          ))}
-        </div>
-        <div className="field-row">
-          <label className="field">
-            Injektion (Datum/Zeit)
-            <input
-              type="datetime-local"
-              value={injectionMs ? toLocalInput(injectionMs) : ""}
-              onChange={(e) => set((s) => ({ ...s, injection: { ...s.injection, timeMs: e.target.value ? new Date(e.target.value).getTime() : undefined } }))}
-            />
-          </label>
-          <label className="field">
-            Aktivität (MBq)
-            <input type="text" inputMode="decimal" value={injectedMBq ?? ""} onChange={(e) => set((s) => ({ ...s, injection: { ...s.injection, activityMBq: numOrUndef(e.target.value) } }))} />
-          </label>
-        </div>
-        {tpViews.map((tp, n) => (
-          <div key={tp.spectId} className="dos-tp">
-            <strong>
-              {n + 1}. {tp.label}
-            </strong>
-            <div className="field-row three">
-              <label className="field">
-                CT
-                <select value={tp.ctId ?? ""} onChange={(e) => updateTp(tp.spectId, { ctId: e.target.value || undefined })}>
-                  <option value="">– keins –</option>
-                  {cts.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                t p.i. (h)
-                <input type="text" inputMode="decimal" placeholder={tp.tH !== undefined ? tp.tH.toFixed(2) : "fehlt"} value={setup.timePoints.find((t) => t.spectId === tp.spectId)?.tHoursManual ?? ""} onChange={(e) => updateTp(tp.spectId, { tHoursManual: numOrUndef(e.target.value) })} />
-              </label>
-              <label className="field">
-                Dauer (s)
-                <input type="text" inputMode="decimal" placeholder={tp.durationSec !== undefined ? String(Math.round(tp.durationSec)) : "fehlt"} value={setup.timePoints.find((t) => t.spectId === tp.spectId)?.durationSecManual ?? ""} onChange={(e) => updateTp(tp.spectId, { durationSecManual: numOrUndef(e.target.value) })} />
-              </label>
-            </div>
-            <label className="checkbox-field">
-              <input type="checkbox" checked={tp.decayCorrected} onChange={(e) => updateTp(tp.spectId, { decayCorrected: e.target.checked })} />
-              <span>Bild bereits zerfallskorrigiert (auf Aufnahmebeginn)</span>
-            </label>
-            <p className="tool-hint">
-              t = {fmt(tp.tH)} h · Dauer {fmt(tp.durationSec)} s · Sichtfeld {fmt(tp.fovMBq)} MBq
-              {tp.pctInjected !== undefined ? ` (${fmt(tp.pctInjected)} % der injizierten Aktivität)` : ""}
-              {tp.headerNote.length ? ` · ${tp.headerNote.join(" · ")}` : ""}
-            </p>
-            {tp.ctId &&
-              (() => {
-                const organs = organSetOf(tp.ctId!);
-                if (!organs)
-                  return (
-                    <button className="secondary-btn" disabled={api.segRunning} onClick={() => api.segmentCt(tp.ctId!)}>
-                      {api.segRunning ? "Segmentierung läuft …" : "Organe auf diesem CT segmentieren"}
-                    </button>
-                  );
-                const used = setup.labelSets.some((l) => l.id === organs.id);
-                return (
-                  <p className="tool-hint">
-                    Organe vorhanden: {organs.label}
-                    {used ? " – wird verwendet" : " – abgewählt (unter Regionen)"}.{" "}
-                    <button
-                      className="link-btn"
-                      disabled={api.segRunning}
-                      onClick={() => window.confirm("Die Organe dieses CTs sind schon segmentiert. Trotzdem neu segmentieren?") && api.segmentCt(tp.ctId!)}
-                    >
-                      {api.segRunning ? "Segmentierung läuft …" : "neu segmentieren"}
-                    </button>
-                  </p>
-                );
-              })()}
-          </div>
-        ))}
-        {tpViews.length > 1 && (
-          <>
-            <button className="secondary-btn" disabled={!!busy || !tpViews[0].ctId} onClick={() => void register()}>
-              Zeitpunkte registrieren (CT → CT von Zeitpunkt 1)
-            </button>
-            <InfoText details="Rigide CT-CT-Registrierung; SPECT und Labelbilder des Zeitpunkts werden mitbewegt. Nötig für Voxel-Dosiskarten und für Regionen, die für alle Zeitpunkte gelten.">Für Voxelkarte nötig</InfoText>
-          </>
-        )}
-      </Card>
+      <TimePointsCard
+        views={cardViews}
+        spare={spare}
+        unassigned={unassigned}
+        options={{
+          functional: spectCandidates.map(opt),
+          cts: cts.map(opt),
+          organs: labelCandidates.filter(isOrganMap).map(opt),
+          lesions: labelCandidates.filter((e) => !isOrganMap(e)).map(opt),
+        }}
+        injection={{ ms: injectionMs, mbq: injectedMBq, fromHeader: setup.injection.timeMs === undefined && headerInfo?.injectionMs !== undefined }}
+        onInjection={(patch) =>
+          set((s) => ({
+            ...s,
+            injection: {
+              timeMs: patch.timeMs === undefined ? s.injection.timeMs : (patch.timeMs ?? undefined),
+              activityMBq: patch.activityMBq === undefined ? s.injection.activityMBq : (patch.activityMBq ?? undefined),
+            },
+          }))
+        }
+        suggestionDiffers={suggestionDiffers}
+        onApplySuggestion={applySuggestion}
+        onUpdate={updateTp}
+        onAddSession={(key) => {
+          const g = grouping.sessions.find((x) => x.key === key);
+          if (g?.functional[0]) addTimePoints([{ spectId: g.functional[0], ctId: g.cts[0], organSetId: g.organs[0], lesionSetId: g.lesions[0] }]);
+        }}
+        onAddFunctional={(id) => addTimePoints([{ spectId: id }])}
+        onAssign={(itemId, role, spectId) => {
+          if (role === "functional") updateTp(spectId, { spectId: itemId });
+          else if (role === "ct") updateTp(spectId, { ctId: itemId });
+          else {
+            const e = byId(itemId);
+            updateTp(spectId, e && isOrganMap(e) ? { organSetId: itemId } : { lesionSetId: itemId });
+          }
+        }}
+        onRemove={removeTimePoint}
+        onShow={(id) => {
+          const tp = tps.find((t) => t.spectId === id);
+          if (!tp) return;
+          const organ = organIdOf(tp);
+          api.showTimePoint(tp.ctId ?? tp.spectId, [tp.ctId ? tp.spectId : undefined, organ, tp.lesionSetId].filter((x): x is string => !!x));
+        }}
+        onSegment={(ctId, modelId) => {
+          if (organSetOf(ctId) && !window.confirm("Die Organe dieses CTs sind schon segmentiert. Trotzdem neu segmentieren?")) return;
+          api.segmentCt(ctId, modelId);
+        }}
+        segRunning={api.segRunning}
+        onRegister={() => void register()}
+        busy={!!busy}
+      />
 
       <Card title={<>Nuklid und Kalibrierung</>} persistKey="dos-cal" status={profile ? { text: profile.name, tone: "ok" } : { text: "fehlt", tone: "warn" }}
         info="Kalibrierfaktor der Kamerakonfiguration (Kamera, Kollimator, Energiefenster, Rekonstruktion) in cps/MBq: Counts im SPECT / (Aufnahmedauer × Faktor) = MBq. Der Zerfall während der Aufnahme wird korrigiert. Recovery-Koeffizienten (Kugelphantom) korrigieren den Partialvolumeneffekt kleiner Läsionen.">
@@ -603,10 +714,10 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
             })}
           </div>
         )}
-        <button className="primary-btn" disabled={!!busy || !tpViews.length || !setup.labelSets.length || !profile} onClick={() => void measure()}>
+        <button className="primary-btn" disabled={!!busy || !tpViews.length || !setup.labelSets.length || !allCalibrated} onClick={() => void measure()}>
           Aktivitäten messen
         </button>
-        {!profile && <p className="tool-hint">Kamera-Profil fehlt (Nuklid und Kalibrierung).</p>}
+        {!allCalibrated && <p className="tool-hint">Kalibrierung unvollständig: Kamera-Profil (Nuklid und Kalibrierung) bzw. Aufnahmedauer fehlt.</p>}
       </Card>
 
       <Card title={<>Kurven und Dosis</>} persistKey="dos-res" status={rows.length ? { text: `${rows.length} Regionen`, tone: "ok" } : null}
@@ -736,7 +847,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
             </span>
           )}
         </p>
-        <button className="primary-btn" disabled={!!busy || !tpViews.length || !profile || energy === undefined} onClick={() => void doseMap()}>
+        <button className="primary-btn" disabled={!!busy || !tpViews.length || !allCalibrated || energy === undefined} onClick={() => void doseMap()}>
           {doseEntry ? "Dosiskarte neu berechnen" : "Dosiskarte berechnen"}
         </button>
         {doseEntry && (
@@ -757,6 +868,11 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
   }
 }
 
+/** Quantitative activity-concentration image (DICOM Units BQML, or a value unit Bq/ml set in the app). */
+function isQuantitative(units: string | undefined, valueUnit: string | undefined): boolean {
+  return units?.trim().toUpperCase() === "BQML" || /^k?bq\/ml$/i.test(valueUnit ?? "");
+}
+
 const sums = new WeakMap<Float32Array, number>();
 /** Sum of the positive values (cached per array: computed once per dataset version). */
 function positiveSum(data: Float32Array): number {
@@ -772,12 +888,6 @@ function positiveSum(data: Float32Array): number {
 function numOrUndef(s: string): number | undefined {
   const v = Number(s.replace(",", ".").trim());
   return s.trim() === "" || !Number.isFinite(v) ? undefined : v;
-}
-
-function toLocalInput(ms: number): string {
-  const d = new Date(ms);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 /** Camera profiles: choose, edit, import/export (stored in the browser; the chosen one also in the project). */

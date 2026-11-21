@@ -14,6 +14,12 @@ export interface DosTimePoint {
   durationSecManual?: number;
   /** The image is already decay corrected (to the acquisition start). */
   decayCorrected?: boolean;
+  /** Organ map (CT segmentation) of this time point. */
+  organSetId?: string;
+  /** Lesion label map of this time point. */
+  lesionSetId?: string;
+  /** Registered onto the CT of the first time point (reset when its datasets change). */
+  registered?: boolean;
 }
 
 /** A label dataset used for the regions; `tp` = SPECT id of its time point, or "all" (registered time points). */
@@ -38,6 +44,8 @@ export interface DosimetrySetup {
   profile?: CameraProfile;
   injection: { timeMs?: number; activityMBq?: number };
   timePoints: DosTimePoint[];
+  /** The time points were set once from the automatic grouping (not repeated automatically). */
+  timePointsAuto?: boolean;
   labelSets: DosLabelSet[];
   /** Label datasets the user switched off (not adopted automatically again). */
   labelSetsDismissed?: string[];

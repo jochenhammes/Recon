@@ -520,7 +520,9 @@ function buildDicomVolume(parsed: ParsedDicomFile[]): LoadedVolume {
         parsed[0].spacing[0],
         parsed[0].frameOfReferenceUid,
       )
-    : undefined;
+    : // Without positions: axis-aligned stand-in geometry, but keep the FrameOfReference (CT and SPECT of one
+      // acquisition still belong together, e.g. for the dosimetry time points).
+      { ...identityGeometry([parsed[0].spacing[2], parsed[0].spacing[1], parsed[0].spacing[0]]), frameOfReferenceUid: parsed[0].frameOfReferenceUid };
   const volume = new Volume3D(data, nz, rows, cols, parsed[0].spacing, geometry);
   return {
     volume,
