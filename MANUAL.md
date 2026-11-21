@@ -444,116 +444,279 @@ Die Frames sollten zerfallskorrigiert sein; bei nicht korrigierten DICOM-Daten w
 
 ## 8a. Dosimetrie (SPECT/CT)
 
-Energiedosis (Gy) für Radionuklidtherapien (Lu-177, Tb-161, I-131, Y-90) aus 1–4 quantitativen SPECT/CT- oder
-PET/CT-Zeitpunkten, je Organ/Läsion und als Voxel-Dosiskarte mit Dosis-Volumen-Histogramm. **Forschungswerkzeug, kein
-zertifiziertes Medizinprodukt.** Grundlage ist die SPECT-Rekonstruktion des Geräts (OSEM mit CT-Schwächungs-, Streu-
-und Auflösungskorrektur) in **Counts** (mit Kalibrierfaktor) oder ein quantitatives Bild in **Bq/ml** (PET,
-quantitative SPECT; kein Faktor nötig). Die eigene Rekonstruktion der App ist dafür nicht geeignet. Werte immer mit
-Counts bzw. Bq/ml, unabhängig vom Umschalter SUV im Viewer.
+Energiedosis (Gy) für Radionuklidtherapien (**Lu-177, Tb-161, I-131, Y-90**) aus 1–4 quantitativen SPECT/CT- oder
+PET/CT-Zeitpunkten – je Organ und Läsion, als Voxel-Dosiskarte mit Dosis-Volumen-Histogramm, mit BED, Unsicherheit
+und Bericht. **Forschungswerkzeug, kein zertifiziertes Medizinprodukt**; Ergebnisse vor klinischer Verwendung
+unabhängig prüfen.
 
-**Ablauf (Bereich Dosimetrie in der linken Seitenleiste)**
-1. **Zeitpunkte:** Die geladenen Datensätze werden automatisch zu **Aufnahmen** gruppiert – über FrameOfReference,
-   Studie und Aufnahmezeit aus dem DICOM-Header (CT und SPECT/PET innerhalb von 90 min); beim ersten Öffnen wird je
-   Aufnahme mit Funktionsbild ein Zeitpunkt angelegt.
-   - **Zeitachse** oben: Injektion bei 0, Zeitpunkte als Marker in Stunden p.i. (grün = vollständig, gelb =
-     unvollständig, grau gestrichelt = weitere Aufnahme, nicht verwendet – Klick fügt sie hinzu). Ohne Injektionszeit
-     zeigt die Achse Stunden ab der ersten Aufnahme.
-   - **Je Zeitpunkt eine Karte** mit Datum/Uhrzeit, Stunden p.i. und den Rollen *SPECT/PET* (mit Einheit Counts oder
-     Bq/ml), *CT*, *Organe* und *Läsionen*, jeweils per Auswahl änderbar (zeitlich nahe Datensätze stehen oben).
-     Fehlt eine Organkarte, segmentiert *segmentieren* das CT mit dem gewählten Modell
-     ([Abschnitt 9](#9-ct-organsegmentierung)).
-   - **Status:** t p.i., Dauer, Kalibrierung, registriert. **Warnungen:** CT mehr als 3 h von der Aufnahme entfernt,
-     mehrere Funktionsbilder in einer Aufnahme, kein Datum, kein CT.
-   - Klick auf den Kopf einer Karte: t p.i., Dauer und Zerfallskorrektur überschreiben, Aktivität im Sichtfeld
-     (MBq, % der injizierten Aktivität), *Im Viewer zeigen* (CT als Basis, Funktionsbild, Organe und Läsionen als
-     Overlay), *Zeitpunkt entfernen*.
-   - **Nicht zugeordnet:** Datensätze ohne Datum oder Bezug (z. B. NIfTI) lassen sich einem Zeitpunkt zuordnen.
-     *Zuordnung aus den Aufnahmen übernehmen* setzt die Zeitpunkte neu aus der Gruppierung (manuelle Zeiten und von
-     Hand zugeordnete Labelbilder bleiben).
-   - Injektion (Zeit, Aktivität) aus dem Header, überschreibbar; Aufnahmedauer = Zeit pro Projektion × Projektionen ×
-     Detektoren.
-   - *Zeitpunkte registrieren*: rigide CT-CT-Registrierung aller Zeitpunkte auf T1; Funktionsbild und Labelbilder
-     werden mitbewegt. Nötig für die Voxel-Dosiskarte, für Labelbilder „alle Zeitpunkte“ und die Läsionszuordnung.
-2. **Nuklid und Kalibrierung:**
-   - Nuklid (Vorschlag aus dem Header) und mittlere Elektronenenergie pro Zerfall (β⁻ + Konversions- und
-     Auger-Elektronen) nach ICRP Publication 107 (Summen nach MIRDspecs): Lu-177 147,92 keV, Tb-161 202,48 keV,
-     I-131 191,84 keV, Y-90 933,1 keV. Ein eigener Wert kann eingetragen werden. Die Photonenenergie (Lu-177 35,09,
-     Tb-161 36,52, I-131 382,75 keV/Zerfall) wird angezeigt, geht aber nur über einen Dosis-Voxel-Kernel ein.
-   - Halbwertszeiten ebenfalls nach ICRP 107: Lu-177 6,647 d, Tb-161 6,906 d, I-131 8,021 d, Y-90 64,1 h (gelten auch
-     für den Nuklid-Editor im DICOM-Header).
-   - **Kamera-Profil**: Name, Kalibrierfaktor in cps/MBq (Kamera + Kollimator + Energiefenster + Rekonstruktion),
-     optional Recovery-Koeffizienten aus einem Kugelphantom („Volumen ml : RC; …“). Profile werden im Browser
-     gespeichert, das gewählte auch in der Projektdatei; Import/Export als JSON.
-   - Umrechnung: MBq = Counts / (Dauer × Kalibrierfaktor), mit Korrektur des Zerfalls während der Aufnahme
-     (λT / (1 − e^−λT)), außer das Bild ist bereits zerfallskorrigiert.
-   - **Kalibrierfaktor aus Phantomaufnahme bestimmen:** Phantom-SPECT (ganzes Phantom im Sichtfeld) wählen, bekannte
-     Aktivität und Messzeit (Aktivimeter) eingeben; Aufnahmezeit und -dauer kommen aus dem Header. Faktor =
-     Counts / Dauer / A(Aufnahmebeginn), Zerfall vor und während der Aufnahme korrigiert. *In Kamera-Profil übernehmen*
-     ersetzt den Faktor des gewählten Profils oder legt ein neues an.
-   - Bilder in **Bq/ml** brauchen keinen Faktor: MBq = Summe × Voxelvolumen; auf die Injektion zerfallskorrigierte
-     Bilder (ADMIN) werden auf die Aufnahmezeit zurückgerechnet.
-3. **Regionen:** Automatisch übernommene Labelbilder sind angehakt; weitere anhaken (CT-Organe, Läsionen aus der
-   Segmentierung & MTV, eigene Segmentierungen als NIfTI), abgewählte werden nicht erneut übernommen. Je Labelbild
-   den Zeitpunkt oder *alle Zeitpunkte* (nach der Registrierung) wählen. Regionen gleichen Namens werden über die
-   Zeitpunkte verbunden; vorausgewählt sind Nieren, Leber, Milz, Harnblase und Läsionen. *RC* wendet den
-   Recovery-Koeffizienten an (Läsionen).
-   **Läsionen über Zeitpunkte:** Haben mehrere Zeitpunkte ein eigenes Läsionsbild, werden die Läsionen nach der
-   Registrierung über ihre Schwerpunkte einander zugeordnet (optimale Paarung, höchstens 20 mm Abstand, einstellbar).
-   Die Tabelle zeigt je Läsion von T1 den Partner und den Abstand; per Auswahl korrigierbar. Gemessen wird unter dem
-   Namen der T1-Läsion, Läsionen ohne Partner zählen nicht.
-   Läsionen kommen aus **Segmentierung & MTV** (nur die dort bestätigten). Ändern sich Labelbilder nach der Messung –
-   Läsion bestätigt/abgewählt, Organkarte neu segmentiert, Zuordnung korrigiert –, erscheint *Labelbilder geändert –
-   neu messen*. *Aktivitäten messen* integriert die Aktivitätskonzentration über jede Region;
-   die Masse kommt aus der CT-Dichte (1 + HU/1000, oberhalb von Wasser 1 + 0,6·HU/1000).
-4. **Kurven und Dosis:** Je Region Diagramm, Fit, zeitintegrierte Aktivität (TIA ± Unsicherheit aus der
-   Fit-Kovarianz), Dosis und für die Nieren die BED.
-   - Modelle: monoexponentiell, biexponentiell mit Aufnahmephase, Trapez + Ausläufer, ein Zeitpunkt nach Hänscheid
-     (TIA = A(t)·2t/ln2) oder Madsen (TIA = A(t)·e^λt/λ mit Populations-T_eff).
-   - *Automatisch*: 1 Zeitpunkt → Hänscheid (Madsen, wenn T_eff eingetragen ist); 2 → monoexponentiell; ≥ 3 →
-     biexponentiell, wenn die Aktivität zwischen den ersten Zeitpunkten noch steigt, sonst monoexponentiell; ab 5
-     Punkten nach AICc. Die Auswaschung ist nie langsamer als der physikalische Zerfall.
-   - Dosis = TIA × Elektronenenergie / Masse (lokale Energiedeposition).
-   - BED = D + D²·λ / ((μ + λ)·α/β), λ = ln2/T_eff, μ = ln2/T_rep – für **jede Region**, für die α/β und
-     Reparatur-Halbwertszeit eingetragen sind (Zeile anklicken, Felder unter dem Modell). Für die Nieren gelten ohne
-     eigene Werte die Vorgaben α/β = 2,6 Gy, T_rep = 2,8 h (unter der Tabelle, editierbar); für andere Organe und
-     Läsionen gibt es bewusst keine Vorgaben.
-   - **D2/D50/D98** kommen aus der Voxel-Dosiskarte: bis sie berechnet ist, steht in der Spalte *nach Voxelkarte*;
-     Labelbilder, die weder zu T1 gehören noch für alle Zeitpunkte gelten, zeigen *nicht auf T1*.
-   - **Akaike-Gewichte** (ab 4 Zeitpunkten; mono gegen biexponentiell ab 5) mit der gewichteten TIA – zur Information,
-     das Ergebnis nutzt das gewählte Modell.
-   - **Unsicherheit nach EANM 2018:** relative Unsicherheiten für Kalibrierung, Recovery und Volumen eintragen (aus
-     eigenen Messungen; keine Vorgaben); sie werden mit der Fit-Unsicherheit quadratisch addiert (k = 1) und je Region
-     mit Anteilen angezeigt.
-   - Tabelle groß über dem Viewer und als CSV (alle Messpunkte, Modell, T_eff, TIA, Dosis, Unsicherheit mit Anteilen,
-     BED, DVH-Werte).
-   - **Bericht anzeigen** öffnet den Bericht groß über dem Viewer (dort *Drucken / PDF*, *HTML*, Schließen mit Esc);
-     **HTML** lädt ihn herunter, **PDF** öffnet direkt den Druckdialog. Inhalt: alle Zwischenergebnisse – Zeitpunkte mit Datum, t p.i., Dauer,
-     Kalibrierung und Registrierung, Aktivitäten, Modell und Parameter, Akaike-Gewichte, TIA und Dosis mit
-     Unsicherheit, BED, DVH, Methodenvergleich, Methodik und Quellen; Kurven als Grafik. Dateiname mit Patient-ID.
-5. **Voxel-Dosiskarte:** auf dem Raster des SPECT von Zeitpunkt 1; alle Zeitpunkte werden über die Registrierung
-   abgetastet.
-   - Je Voxel monoexponentiell (log-linear) oder Trapez + Ausläufer; bei einem Zeitpunkt Hänscheid.
-   - Ohne Kernel: lokale Energiedeposition mit der CT-Dichte (geeignet für Lu-177 und Tb-161; für I-131 fehlen die
-     Photonen, für Y-90 die mm-Reichweite der β-Teilchen).
-   - Mit **Dosis-Voxel-Kernel**: Tabelle „i j k S“ laden (Voxel-S-Werte für Wasser, z. B. nach Lanconelli et al. 2012,
-     in der Voxelgröße des SPECT; nur ein Oktant genügt). Faltung per FFT, Dichteskalierung ρ_Wasser/ρ.
-   - Die Rechnung läuft im Hintergrund (Seite bleibt bedienbar) und lässt sich abbrechen.
-   - Mit Kernel wird zusätzlich die lokale Deposition gerechnet: **Methodenvergleich** je Region (mittlere Dosis lokal /
-     Kernel, Abweichung in %) als Plausibilitätsprüfung. In Lunge und Knochen ist auch die Faltung mit Wasserkernel nur
-     eine Näherung (bei I-131 unterschätzt die lokale Deposition dort deutlich).
-   - Ergebnis als Datensatz „Dosis (Gy)“ (anzeigen, analysieren, exportieren); DVH mit D2 %, D50 % und D98 % je Region
-     in der Tabelle und als Diagramm.
+### 8a.1 Überblick
 
-**Grenzen:** Keine Monte-Carlo-Rechnung und keine deformierbare Registrierung. Photonen-Kreuzdosis zwischen Organen nur
-mit Kernel. Totzeit wird nicht korrigiert (bei hohen Zählraten, z. B. I-131 oder frühen Lu-177-Aufnahmen, beachten).
-Knochenmark sowie Speichel- und Tränendrüsen sind nicht in der CT-Segmentierung enthalten (eigene Segmentierung laden).
+Der Ablauf folgt dem MIRD-/EANM-Schema:
 
-**Quellen:** MIRD-Pamphlet 23 und 26 (quantitative Lu-177-SPECT), EANM-Empfehlungen 2022 zur Dosimetrie von
-Lu-177-SSTR- und PSMA-Liganden, EANM-Leitfaden 2018 zur Unsicherheitsanalyse; Hänscheid et al. und Madsen et al.
-(ein Zeitpunkt); Lanconelli et al., Phys Med Biol 2012 (Voxel-S-Werte); ICRP Publication 107 (Eckerman & Endo 2008,
-Zerfallsdaten).
+```
+SPECT/PET je Zeitpunkt ──► Aktivität (MBq) je Region ──► Zeit-Aktivitäts-Kurve ──► TIA (MBq·h) ──► Dosis (Gy)
+   (Kalibrierung)            (Organkarte, Läsionen,        (Fit: mono, bi,          (∫ A dt)       (TIA × E / m)
+                              CT-Dichte → Masse)            Trapez, 1 Zeitpunkt)
+```
+
+- **Organ-/Läsionsdosis** (Karte *Kurven und Dosis*): mittlere Dosis je Region aus der Aktivität der ganzen Region,
+  lokale Energiedeposition der Elektronen.
+- **Voxel-Dosiskarte** (Karte *Voxel-Dosiskarte*): Zeitintegral je Voxel auf dem Raster von T1, lokale Deposition oder
+  Faltung mit einem Dosis-Voxel-Kernel; daraus DVH und D2/D50/D98.
+- Die Dosimetrie rechnet immer mit **Counts** bzw. **Bq/ml**, unabhängig vom Umschalter *SUV | Counts/Bq/ml* im
+  Viewer.
+
+### 8a.2 Voraussetzungen
+
+**Bilddaten je Zeitpunkt**
+
+| Daten | Anforderung |
+|---|---|
+| SPECT (oder PET) | Rekonstruktion des Geräts mit CT-Schwächungs-, Streu- und Auflösungskorrektur (z. B. OSEM), als DICOM. In **Counts** (Einheit CNTS) mit Kalibrierfaktor oder quantitativ in **Bq/ml** (BQML). Die eigene SPECT-Rekonstruktion der App ist dafür *nicht* geeignet. |
+| CT | Das CT derselben Aufnahme (Dichte für die Masse, Organsegmentierung, Registrierung). Ohne CT wird mit 1 g/ml gerechnet. |
+| Organkarte | Aus der CT-Organsegmentierung der App oder eigene Segmentierung (NIfTI mit Regionsnamen). |
+| Läsionsbild | Optional, aus *Segmentierung & MTV* (nur bestätigte Läsionen) oder eigene Segmentierung. |
+
+Üblich sind 3–4 Zeitpunkte (z. B. 4, 24, 48, 96–168 h p.i.); mit 1 Zeitpunkt rechnet die App nach Hänscheid oder
+Madsen, mit 2 monoexponentiell.
+
+**Aus dem DICOM-Header gelesen** (alles in der App überschreibbar)
+
+| Angabe | DICOM-Feld |
+|---|---|
+| Aufnahmezeit | AcquisitionDate/-Time (0008,0022/0032), sonst Serien-/Erstellungszeit |
+| Injektionszeit | RadiopharmaceuticalStartDateTime (0018,1078) bzw. StartTime (0018,1072) |
+| Injizierte Aktivität | RadionuclideTotalDose (0018,1074) |
+| Nuklid | Radionuclide Code Sequence (0054,0300) |
+| Aufnahmedauer | Zeit pro Projektion (0018,1242) × Projektionen (0054,0053) × Detektoren (0054,0021), sonst ActualFrameDuration |
+| Einheit | Units (0054,1001): CNTS oder BQML |
+| Zerfallskorrektur | DecayCorrection (0054,1102): NONE, START oder ADMIN |
+| Zusammengehörigkeit | FrameOfReferenceUID (0020,0052), StudyInstanceUID (0020,000D) |
+
+**Kalibrierung** (nur für Bilder in Counts): Kalibrierfaktor in cps/MBq für genau diese Kamerakonfiguration (Kamera,
+Kollimator, Energiefenster, Rekonstruktion), aus einer Phantommessung – in der App aus einer Phantomaufnahme
+bestimmbar (Schritt 6). Optional Recovery-Koeffizienten (RC) aus einem Kugelphantom für kleine Läsionen.
+
+### 8a.3 Schritt für Schritt
+
+**Schritt 1 – Daten laden**
+1. Bereich **Daten**: alle SPECTs und CTs der Therapie laden (DICOM-Ordner oder Dateien, beliebig viele).
+2. Die Datensatzliste zeigt unter jedem Namen Aufnahmedatum und -uhrzeit. Optional die **Patient-ID** eintragen (Präfix
+   der Exportnamen und des Berichts).
+3. Zwischendurch und am Ende **Projekt speichern** (*.recon*): enthält Datensätze, Registrierung, Labelbilder und
+   alle Dosimetrie-Einstellungen.
+
+**Schritt 2 – Organe segmentieren** (am besten je Zeitpunkt)
+1. Bereich **Segmentierung & MTV** → Karte *CT-Organsegmentierung*: CT wählen, Modell wählen, *Organe segmentieren*
+   ([Abschnitt 9](#9-ct-organsegmentierung)). Alternativ direkt in der Dosimetrie in der Zeitpunkt-Karte bei
+   *Organe* auf *segmentieren*.
+   - **TotalSegmentator 3 mm** (Standard, 117 Strukturen) passt für jedes CT.
+   - Die **1,5-mm-Modelle** (TotalSegmentator Organe, MOOSE) sind etwas genauer bei kleinen Organen, brauchen etwa die
+     dreifache Zeit und passen nur für Rumpf-/Bauch-CTs in den Speicher.
+2. Ergebnis: Labelbild „CT-Organe · <CT>“. Es wird automatisch dem Zeitpunkt des CTs zugeordnet.
+3. **Warum je Zeitpunkt?** Mit einer eigenen Organkarte wird jedes SPECT in seiner eigenen Anatomie gemessen – Atemlage,
+   Lagerung und Füllung von Blase und Darm spielen keine Rolle, und für die Organdosis ist keine Registrierung nötig.
+   Eine einzige Organkarte für alle Zeitpunkte (Schritt 7) hängt dagegen an der starren Registrierung.
+4. Ergebnis kurz prüfen (Overlay im Viewer, Karte *Regionen*): Nieren, Leber, Milz vollständig?
+
+**Schritt 3 – Läsionen festlegen** (optional, im Bereich *Segmentierung & MTV*)
+1. Unter *Tumorlast* das **SPECT** (bzw. PET) des Zeitpunkts wählen. Ohne SUV gelten die Schwellen in Counts bzw. Bq/ml:
+   *41 % des Läsionsmaximums* (Erkennung ab x % des Bildmaximums), *Anteil des Bildmaximums*, *Leber-basiert* oder
+   eine *eigene Schwelle*. Die App zeigt Bildmaximum und resultierende Schwelle an.
+2. *Läsionen segmentieren*, dann in der Liste prüfen: bestätigen (✓) oder abwählen; physiologische Anreicherung
+   (Nieren, Blase …) lässt sich über die Organmasken automatisch ausschließen.
+3. **Zielläsionen gezielt:** Karte *Läsion manuell (Fadenkreuz)* – Fadenkreuz in die Läsion klicken, Grenze wählen
+   (Vorgabe 40 % des Maximums), *Läsion am Fadenkreuz hinzufügen*. Die Läsion wächst in 3D vom nahen Maximum (Umkreis
+   10 mm) über alle verbundenen Voxel oberhalb der Grenze (höchstens 60 mm), bereits vorhandene Läsionen bleiben
+   unberührt; sie wird als bestätigt übernommen.
+4. Ergebnis: Labelbild „Läsionen · <SPECT>“ mit **nur den bestätigten** Läsionen; es gehört automatisch zum Zeitpunkt
+   dieses SPECTs.
+5. **Zwei Wege für mehrere Zeitpunkte:**
+   - *Einmal segmentieren* (meist auf T1, wo die Läsionen am besten sichtbar sind) und das Läsionsbild in der Dosimetrie
+     auf **alle Zeitpunkte** stellen (Schritt 7) – stabil, braucht aber eine gute Registrierung.
+   - *Je Zeitpunkt segmentieren* (jedes SPECT nacheinander): die Dosimetrie ordnet die Läsionen über ihre Schwerpunkte
+     zu. Bei späten, verrauschten Aufnahmen kann die Segmentierung instabil werden.
+
+**Schritt 4 – Zeitpunkte prüfen** (Bereich **Dosimetrie** → Karte *Zeitpunkte*)
+1. Beim ersten Öffnen gruppiert die App die Datensätze zu **Aufnahmen** – gleiche FrameOfReference, sonst gleiche
+   Studie und Aufnahmezeit innerhalb von 90 min – und legt je Aufnahme mit SPECT/PET einen Zeitpunkt an.
+2. **Injektion** (Datum/Zeit, MBq) oben kontrollieren; „(Header)“ zeigt, dass der Wert aus dem DICOM stammt.
+3. **Zeitachse:** Injektion bei 0, Zeitpunkte in Stunden p.i. Grün = vollständig, gelb = etwas fehlt, grau
+   gestrichelt = weitere Aufnahme, nicht verwendet (Klick fügt sie als Zeitpunkt hinzu). Ohne Injektionszeit zählt die
+   Achse ab der ersten Aufnahme – die Dosimetrie braucht aber die Zeit nach Injektion.
+4. **Je Zeitpunkt eine Karte** (T1, T2 … in zeitlicher Reihenfolge; T1 ist Referenz für Registrierung und Voxelkarte):
+   - Kopf: Datum, Uhrzeit, Stunden p.i.
+   - Rollen *SPECT/PET* (Badge *Counts* oder *Bq/ml*), *CT*, *Organe*, *Läsionen* – jeweils per Auswahl änderbar;
+     zeitlich nahe Datensätze stehen oben.
+   - Status: *t p.i.*, *Dauer* (nur Counts), *Kalibrierung* bzw. *Bq/ml*, *registriert* (ab T2).
+   - Warnungen (⚠): CT mehr als 3 h von der Aufnahme entfernt, mehrere Funktionsbilder in einer Aufnahme, kein
+     Aufnahmedatum, kein CT.
+   - Klick auf den Kopf: t p.i. und Dauer überschreiben, *zerfallskorrigiert* setzen, **Aktivität im Sichtfeld**
+     (MBq und % der injizierten, zerfallskorrigierten Aktivität – grobe Plausibilität), *Im Viewer zeigen* (CT als
+     Basis, SPECT, Organe und Läsionen als Overlay), *Zeitpunkt entfernen*.
+5. **Nicht zugeordnet:** Datensätze ohne Datum oder Bezug (z. B. NIfTI-Segmentierungen) per Auswahl einem Zeitpunkt
+   zuweisen (als Funktionsbild, CT oder Labelbild).
+6. *Zuordnung aus den Aufnahmen übernehmen* erscheint, wenn die Zeitpunkte von der automatischen Gruppierung abweichen;
+   manuelle Zeiten und von Hand zugeordnete Labelbilder bleiben dabei erhalten.
+
+**Schritt 5 – Zeitpunkte registrieren** (nötig für Voxelkarte, Läsionszuordnung und Labelbilder „alle Zeitpunkte“)
+- **Weg A – in der Dosimetrie:** *Zeitpunkte registrieren (CT → CT von T1)*. Starre CT-CT-Registrierung jedes
+  Zeitpunkts auf T1; SPECT und Labelbilder des Zeitpunkts werden mitbewegt.
+- **Weg B – im Bereich Koregistrierung:** CT von T1 als Basis, die CTs der übrigen Zeitpunkte mit **starrer**
+  Registrierung (nicht affin) registrieren und übernehmen. Datensätze derselben Aufnahme (gleiche FrameOfReference:
+  SPECT, Organkarte, Läsionsbild) folgen ihrem CT – in der Liste eingerückt mit „folgt mit“. Steht ein SPECT als
+  eigene Zeile, hat es eine andere FrameOfReference und würde einzeln registriert.
+- Beide Wege sind gleichwertig; die Dosimetrie erkennt die Registrierung in jedem Fall (Status *registriert*).
+- **Kontrolle:** je Zeitpunkt *Im Viewer zeigen* bzw. CT von T1 und CT des Zeitpunkts überlagern – Wirbelsäule,
+  Nieren und Leber sollten deckungsgleich sein. Die Registrierung ist starr für den ganzen Körper; einzelne Organe
+  können dennoch einige Millimeter abweichen.
+
+**Schritt 6 – Nuklid und Kalibrierung** (Karte *Nuklid und Kalibrierung*)
+1. **Nuklid** prüfen (Vorschlag aus dem Header). Mittlere Elektronenenergie pro Zerfall nach ICRP 107 (β⁻ +
+   Konversions- und Auger-Elektronen): Lu-177 147,92 keV, Tb-161 202,48 keV, I-131 191,84 keV, Y-90 933,1 keV; ein
+   eigener Wert ist möglich. Halbwertszeiten: Lu-177 6,647 d, Tb-161 6,906 d, I-131 8,021 d, Y-90 64,1 h.
+2. **Kamera-Profil** wählen oder anlegen (*Neu*): Name, cps/MBq, Kollimator, Energiefenster, optional RC-Tabelle
+   („Volumen ml : RC; …“, z. B. „0,5:0,3; 26,5:0,8“). Profile liegen im Browser und in der Projektdatei;
+   *Profile exportieren/importieren* (JSON) überträgt sie auf andere Rechner.
+3. **Kalibrierfaktor aus einer Phantomaufnahme** (*Kalibrierfaktor aus Phantomaufnahme bestimmen …*):
+   - Phantom (z. B. Zylinder mit bekannter Aktivität) mit derselben Kamera, Kollimator, Fenster und Rekonstruktion
+     messen; das ganze Phantom muss im Sichtfeld liegen.
+   - Phantom-SPECT laden und wählen, Aktivität und Messzeitpunkt (Aktivimeter) eingeben – Aufnahmezeit und -dauer
+     kommen aus dem Header.
+   - Die App zeigt die Summe der Counts und den Faktor; *In Kamera-Profil übernehmen* ersetzt den Faktor des gewählten
+     Profils oder legt ein neues an.
+4. **Bilder in Bq/ml** brauchen keinen Faktor (Status „Bq/ml“). Auf die Injektion zerfallskorrigierte Bilder (ADMIN)
+   werden auf die Aufnahmezeit zurückgerechnet.
+
+**Schritt 7 – Regionen und Messung** (Karte *Regionen*)
+1. Labelbilder der Zeitpunkte sind automatisch angehakt; weitere anhaken bzw. abwählen. Je Labelbild den
+   **Zeitpunkt** oder **alle Zeitpunkte** wählen (*alle* = auf die anderen Zeitpunkte über die Registrierung
+   übertragen).
+2. Regionen gleichen Namens werden über die Zeitpunkte verbunden. Vorausgewählt: Nieren, Leber, Milz, Harnblase,
+   Läsionen; weitere Regionen anhaken. *RC* wendet den Recovery-Koeffizienten an (vor allem kleine Läsionen).
+3. **Läsionen über Zeitpunkte** (bei je Zeitpunkt segmentierten Läsionen): Tabelle T1-Läsion × Zeitpunkt mit Partner
+   und Abstand. Zuordnung nach der Registrierung über die Schwerpunkte (optimale Paarung, *max. Abstand* Vorgabe
+   20 mm); per Auswahl korrigierbar (manuelle Zuordnungen umrandet, *zurücksetzen* möglich). Gemessen wird unter dem
+   Namen der T1-Läsion; Läsionen ohne Partner zählen nicht.
+4. **Aktivitäten messen:** Aktivität, Volumen und Masse je Region und Zeitpunkt. Die Masse folgt aus der CT-Dichte
+   (Formeln in 8a.4).
+5. Ändern sich danach Labelbilder (Läsion bestätigt/abgewählt, Organkarte neu segmentiert, Zuordnung korrigiert),
+   erscheint **Labelbilder geändert – neu messen**; dann erneut messen.
+
+**Schritt 8 – Kurven und Dosis** (Karte *Kurven und Dosis*)
+1. Tabelle je Region: Masse, Modell, T_eff, TIA, Dosis, BED, D2/D50/D98. Zeile anklicken → Diagramm (Messpunkte und
+   Fit), Modellwahl, DVH.
+2. **Modell** (je Region): *automatisch* oder fest:
+
+   | Modell | Verwendung |
+   |---|---|
+   | Monoexponentiell | Standard ab 2 Zeitpunkten, reine Auswaschung |
+   | Biexponentiell mit Aufnahme | ≥ 3 Zeitpunkte, wenn die Aktivität anfangs noch steigt (Aufnahmephase) |
+   | Trapez + Ausläufer | modellfrei zwischen den Punkten, Ausläufer monoexponentiell aus den letzten beiden Punkten |
+   | Ein Zeitpunkt (Hänscheid) | TIA = A(t)·2t/ln 2 – günstig bei Messung nahe der effektiven Halbwertszeit |
+   | Ein Zeitpunkt (Madsen) | TIA = A(t)·e^{λt}/λ mit Populations-T_eff (Feld *T_eff Population*) |
+
+   *Automatisch:* 1 Zeitpunkt → Hänscheid (Madsen, wenn T_eff eingetragen ist); 2 → monoexponentiell; ≥ 3 →
+   biexponentiell, wenn die Aktivität zwischen den ersten beiden Zeitpunkten steigt, sonst monoexponentiell; ab
+   5 Punkten nach AICc. Die Auswaschung ist nie langsamer als der physikalische Zerfall.
+3. **Akaike-Gewichte** (ab 4 Zeitpunkten; Vergleich mono/biexponentiell ab 5): Gewicht je Modell und die damit
+   gewichtete TIA – zur Information, das Ergebnis nutzt weiter das gewählte Modell.
+4. **Unsicherheit (EANM 2018):** unter der Tabelle relative Standardunsicherheiten eintragen – *u Kalibr.* (z. B.
+   Streuung wiederholter Phantommessungen), *u RC* (nur Regionen mit RC), *u Volumen* (Segmentierung). Keine Vorgaben;
+   ohne Eingabe zählt nur die Fit-Unsicherheit. Die Anteile werden quadratisch addiert (k = 1) und je Region angezeigt.
+5. **BED:** für jede Region mit α/β und Reparatur-Halbwertszeit (Zeile anklicken, Felder *α/β (Gy) für BED* und
+   *Reparatur-T½ (h)*). Für die Nieren gelten ohne eigene Werte die Vorgaben unter der Tabelle (α/β = 2,6 Gy,
+   T_rep = 2,8 h); für andere Organe und Läsionen gibt es bewusst keine Vorgaben. Formel für monoexponentielle
+   Auswaschung mit der T_eff des Fits.
+6. **D2/D50/D98** erscheinen erst nach der Voxel-Dosiskarte (Spalte zeigt sonst *nach Voxelkarte*); nur für
+   Labelbilder von T1 oder „alle Zeitpunkte“ (*nicht auf T1* sonst).
+7. Tabelle groß über dem Viewer (⤢) mit Suche, Sortierung und **CSV** (alle Messpunkte, Modell, T_eff, TIA, Dosis,
+   Unsicherheit mit Anteilen, BED, DVH-Werte).
+
+**Schritt 9 – Voxel-Dosiskarte** (Karte *Voxel-Dosiskarte*, aufklappen)
+1. **Integration je Voxel:** *Monoexponentiell (log-linear)* oder *Trapez + Ausläufer*; bei einem Zeitpunkt Hänscheid.
+   Alle Zeitpunkte werden über die Registrierung auf das Raster des SPECT von T1 abgetastet.
+2. **Ohne Kernel:** lokale Energiedeposition der Elektronen mit der CT-Dichte – geeignet für Lu-177 und Tb-161;
+   für I-131 fehlen die Photonen, für Y-90 die Reichweite der β-Teilchen (mm).
+3. **Mit Dosis-Voxel-Kernel:** *Kernel-Voxel (mm)* und *Einheit* eintragen, dann die *Kernel-Tabelle* laden
+   (Textdatei, Zeilen „i j k S“: Voxelversatz und S-Wert für Wasser, ein Oktant genügt; Voxelgröße wie das SPECT).
+   Faltung per FFT, Dichteskalierung ρ_Wasser/ρ. Zusätzlich wird die lokale Deposition gerechnet:
+   **Methodenvergleich** je Region (mittlere Dosis lokal / Kernel, Δ %).
+4. *Dosiskarte berechnen*: läuft im Hintergrund, *Abbrechen* möglich. Ergebnis als Datensatz **„Dosis (Gy)“** über
+   dem SPECT (anzeigen, in *Analyse* auswerten, im Bereich *Export* als NIfTI speichern – als DICOM nur ohne
+   Original-Header) und das DVH je Region.
+
+**Schritt 10 – Bericht und Export**
+- **Bericht anzeigen:** großer Bericht über dem Viewer, darin *Drucken / PDF* und *HTML*; Schließen mit Esc.
+  Direkt: *HTML* (Download) und *PDF* (Druckdialog). Inhalt: Nuklid, Energie und Quelle, Injektion, Kalibrierung,
+  Zeitpunkte (Datum, t p.i., Dauer, Einheit, Faktor, Datensätze, Registrierung, Aktivität im Sichtfeld), je Region
+  Volumen, Masse, RC, Messpunkte, Modell, T_eff, TIA, Dosis mit Unsicherheit und Anteilen, Akaike-Gewichte, BED,
+  DVH-Kennwerte, Methodenvergleich, Kurven als Grafik, Methodik und Quellen.
+- **CSV** der Tabelle (Schritt 8), **Dosiskarte** als NIfTI (Bereich *Export*), **Projektdatei** (.recon) mit allem.
+
+### 8a.4 Formeln
+
+| Größe | Formel |
+|---|---|
+| Aktivität (Counts) | A = C / (T · CF) · λT / (1 − e^−λT); C = Counts in der Region, T = Aufnahmedauer (s), CF = cps/MBq; der Faktor korrigiert den Zerfall während der Aufnahme (entfällt bei zerfallskorrigierten Bildern) |
+| Aktivität (Bq/ml) | A = Σ Wert × Voxelvolumen (ml) × 10⁻⁶ MBq |
+| Kalibrierfaktor (Phantom) | CF = C / (T · A₀ · e^−λΔt) · λT / (1 − e^−λT); A₀ zur Messzeit, Δt bis Aufnahmebeginn |
+| Recovery | A_korr = A / RC(Volumen), RC log-interpoliert aus der Profiltabelle |
+| Dichte aus CT | ρ = 1 + HU/1000 (g/ml); oberhalb von Wasser ρ = 1 + 0,6 · HU/1000 |
+| TIA | Ã = ∫₀^∞ A(t) dt (MBq·h) nach dem gewählten Modell |
+| Dosis | D = Ã · 3,6·10⁹ · E · 1,602·10⁻¹⁶ J/keV / m (Gy); E = Elektronenenergie (keV/Zerfall), m in kg |
+| BED | BED = D + D² · λ / ((μ + λ) · α/β); λ = ln 2/T_eff, μ = ln 2/T_rep |
+| Unsicherheit | u(D)/D = √(u_Fit² + u_Kalibr.² + u_RC² + u_Volumen²), k = 1 |
+| Akaike-Gewicht | wᵢ = e^(−Δᵢ/2) / Σⱼ e^(−Δⱼ/2), Δᵢ = AICcᵢ − min AICc |
+
+### 8a.5 Plausibilitätsprüfung
+
+- **Zeitpunkte:** Reihenfolge und Stunden p.i. passen zum Therapieprotokoll; Injektionszeit stimmt.
+- **Aktivität im Sichtfeld** (Zeitpunkt-Karte aufklappen): Anteil der injizierten Aktivität plausibel und über die
+  Zeit fallend. Stark abweichende Werte deuten auf falsches Kamera-Profil, falsche Dauer, falsche Einheit oder
+  Zerfallskorrektur hin.
+- **Kurven:** Messpunkte liegen auf dem Fit; T_eff nicht länger als die physikalische Halbwertszeit (die App begrenzt
+  das); Hinweise unter dem Diagramm beachten.
+- **Massen:** Organvolumen und -massen plausibel (unvollständige Segmentierung erkennt man oft am Volumen).
+- **Registrierung:** Überlagerung je Zeitpunkt geprüft (Schritt 5).
+- **Methodenvergleich:** große Abweichungen lokal/Kernel bei kleinen Regionen sind erwartbar (Kreuzbestrahlung,
+  β-Reichweite); bei großen Organen sollten beide nahe beieinander liegen.
+- **Labelbilder geändert – neu messen** darf vor dem Bericht nicht mehr angezeigt werden.
+
+### 8a.6 Häufige Probleme
+
+| Problem | Ursache | Lösung |
+|---|---|---|
+| Ein SPECT erscheint unter „Nicht zugeordnet“ | kein Aufnahmedatum (z. B. NIfTI) und keine FrameOfReference | per Auswahl einem Zeitpunkt zuordnen oder als neuen Zeitpunkt anlegen |
+| Falsches CT bei einem Zeitpunkt (⚠ „CT … h entfernt“) | mehrere CTs am selben Tag oder unterschiedliche FrameOfReference | in der Zeitpunkt-Karte bei *CT* das richtige wählen |
+| *Kalibrierung* bleibt gelb | Bild in Counts ohne Kamera-Profil oder ohne Aufnahmedauer | Profil wählen/anlegen; Dauer in der aufgeklappten Karte eintragen |
+| Status *registriert* bleibt gelb | Zeitpunkte noch nicht registriert | Schritt 5 (Weg A oder B) |
+| Region hat zu einem Zeitpunkt keine Messwerte | dieser Zeitpunkt hat keine eigene Organkarte bzw. kein Läsionsbild | dort segmentieren oder das Labelbild unter *Regionen* auf „alle Zeitpunkte“ stellen |
+| D2/D50/D98 zeigen *nach Voxelkarte* | DVH stammt aus der Voxelkarte | *Dosiskarte berechnen* |
+| BED zeigt „–“ | keine α/β und Reparatur-Halbwertszeit für diese Region (oder keine T_eff) | Zeile anklicken und Werte eintragen |
+| Kernel wird abgelehnt | Voxelgröße des Kernels ≠ Voxelgröße des SPECT | Kernel in der passenden Voxelgröße verwenden |
+| 1,5-mm-Organmodell bricht ab | CT zu groß für den Browser-Speicher | 3-mm-Modell oder CT zuschneiden (*Bearbeiten → VOI → Auf VOI zuschneiden*) |
+| Läsion fehlt in der Dosimetrie | in *Segmentierung & MTV* nicht bestätigt oder ohne Partner zu T1 | dort bestätigen bzw. Zuordnung in *Regionen* korrigieren, neu messen |
+
+### 8a.7 Grenzen
+
+- Keine Monte-Carlo-Rechnung; Photonen-Kreuzdosis zwischen Organen nur über einen Kernel; in Lunge und Knochen ist auch
+  die Faltung mit Wasserkernel nur eine Näherung (bei I-131 unterschätzt die lokale Deposition dort deutlich).
+- Registrierung nur starr (ganzer Körper), keine deformierbare Registrierung – betrifft Voxelkarte, Labelbilder „alle
+  Zeitpunkte“ und Läsionszuordnung.
+- Keine Totzeitkorrektur (hohe Zählraten bei I-131 oder frühen Lu-177-Aufnahmen beachten).
+- Knochenmark, Speichel- und Tränendrüsen sind nicht in der CT-Segmentierung enthalten (eigene Segmentierung laden).
+- BED-Formel für monoexponentielle Auswaschung; α/β- und Reparaturwerte außer den Nieren-Vorgaben selbst eintragen.
+
+### 8a.8 Quellen
+
+MIRD-Pamphlet 23 und 26 (quantitative SPECT, Lu-177); EANM-Empfehlungen 2022 zur Dosimetrie von Lu-177-SSTR- und
+PSMA-Liganden; EANM-Leitfaden zur Unsicherheitsanalyse (Gear et al., EJNMMI Physics 2018); Hänscheid et al. und Madsen
+et al. (ein Zeitpunkt); Lanconelli et al., Phys Med Biol 2012 (Voxel-S-Werte); ICRP Publication 107 (Eckerman & Endo
+2008, Zerfallsdaten); OpenDose3D (Fragoso-Negrín et al., J Nucl Med 2026) zum Methodenvergleich.
 
 ---
+
 
 ## 9. CT-Organsegmentierung
 
