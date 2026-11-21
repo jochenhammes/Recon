@@ -69,7 +69,10 @@ if (typeof window === 'undefined') {
         const coi = {
             shouldRegister: () => true,
             shouldDeregister: () => false,
-            coepCredentialless: () => !(window.chrome || window.netscape),
+            // Recon Studio loads only same-origin resources, so "require-corp" works everywhere. Safari does not
+            // support "credentialless" (the upstream default for non-Chrome/Firefox browsers): with it the page was
+            // not cross-origin isolated there and ONNX Runtime fell back to a single CPU thread.
+            coepCredentialless: () => false,
             doReload: () => window.location.reload(),
             quiet: false,
             ...window.coi
