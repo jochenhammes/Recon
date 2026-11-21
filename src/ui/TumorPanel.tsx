@@ -44,6 +44,9 @@ export interface TumorPanelProps {
   /** e.g. "SUV (Körpergewicht)" or a warning when no SUV is available. */
   unitInfo: string;
   suvAvailable: boolean;
+  /** Adds a lesion at the crosshair by region growing down to the fraction of its maximum. */
+  onAddLesionAtCursor: (fraction: number) => void;
+  cursorSet: boolean;
   /** Unit of the image values when there is no SUV (Counts, Bq/ml). */
   rawUnit: string;
   /** Maximum of the image (raw units), for thresholds relative to it. */
@@ -97,6 +100,7 @@ export function TumorPanel(props: TumorPanelProps) {
   const [minMl, setMinMl] = useState("0.5");
   const [imgPct, setImgPct] = useState("30");
   const [detectPct, setDetectPct] = useState("20");
+  const [growPct, setGrowPct] = useState("40");
   const suv = props.suvAvailable;
   const unit = suv ? "SUV" : props.rawUnit || "Originalwert";
   const lbl = {
@@ -256,6 +260,28 @@ export function TumorPanel(props: TumorPanelProps) {
           {props.busy ? "Wird segmentiert …" : "Läsionen segmentieren"}
         </button>
         {props.error && <div className="error-banner">{props.error}</div>}
+      </Card>
+
+      <Card
+        title={<>Läsion manuell (Fadenkreuz)</>}
+        persistKey="tumor-manual"
+        info="Einzelne Zielläsionen gezielt erfassen: Fadenkreuz in die Läsion setzen (Klick in den Viewer) und hinzufügen. Gesucht wird das Maximum im Umkreis von 10 mm; von dort wächst die Läsion in 3D über alle verbundenen Voxel mit mindestens dem eingestellten Anteil dieses Maximums (höchstens 60 mm vom Maximum entfernt, bestehende Läsionen bleiben unberührt). Die Läsion wird als bestätigt übernommen – ohne vorherige automatische Segmentierung entsteht ein neues Ergebnis nur aus manuellen Läsionen. Für die Dosimetrie z. B. die Zielläsionen auf dem SPECT des ersten Zeitpunkts definieren."
+      >
+        <div className="field-row">
+          <label className="field">
+            Grenze (% des Maximums)
+            <input value={growPct} onChange={(e) => setGrowPct(e.target.value)} />
+          </label>
+          <button
+            className="primary-btn"
+            disabled={props.busy || !props.targetId || !props.cursorSet || !(num(growPct) > 0 && num(growPct) < 100)}
+            onClick={() => props.onAddLesionAtCursor(num(growPct) / 100)}
+            title={props.cursorSet ? "Läsion am Fadenkreuz hinzufügen" : "Erst das Fadenkreuz in die Läsion setzen"}
+          >
+            Läsion am Fadenkreuz hinzufügen
+          </button>
+        </div>
+        <p className="tool-hint">Grenze relativ zum Maximum der Läsion ({suv ? "SUV" : unit}); üblich 40–50 %.</p>
       </Card>
 
       {b && (

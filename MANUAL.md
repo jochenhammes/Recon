@@ -612,6 +612,11 @@ fast vollständiges Versagen).
 5. **Organmasken (CT)** wählen: Läsionen überwiegend in Organen mit physiologischer Anreicherung (FDG: Gehirn, Herz,
    Nieren, Blase; PSMA: Nieren, Blase, Leber, Milz, Darm, Magen) werden automatisch ausgeschlossen.
 6. **Mindestvolumen** je Läsion, dann **Läsionen segmentieren**.
+   **Läsion manuell (Fadenkreuz):** Fadenkreuz in eine Läsion setzen, *Grenze (% des Maximums)* wählen (Vorgabe 40 %)
+   und *Läsion am Fadenkreuz hinzufügen*: gesucht wird das Maximum im Umkreis von 10 mm, von dort wächst die Läsion in
+   3D über alle verbundenen Voxel mit mindestens diesem Anteil des Maximums (höchstens 60 mm weit, vorhandene Läsionen
+   bleiben unberührt). Die Läsion wird als bestätigt übernommen; ohne automatische Segmentierung entsteht ein Ergebnis
+   nur aus manuellen Zielläsionen – z. B. für die Dosimetrie auf dem SPECT des ersten Zeitpunkts.
 
 ![Ergebnis Tumorlast](docs/images/23-tumorlast-ergebnis.jpg)
 

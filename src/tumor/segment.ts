@@ -167,6 +167,7 @@ export function lesionStats(volume: Volume3D, labels: Int32Array, suvFactor: num
       centroid: voxelToWorld(volume.geometry, a.cx / a.n, a.cy / a.n, a.cz / a.n),
       maxIndex: a.maxIndex,
       included: prev.get(id)?.included ?? true,
+      reviewed: prev.get(id)?.reviewed,
       note: prev.get(id)?.note,
       organ: prev.get(id)?.organ,
       bone: prev.get(id)?.bone,
@@ -253,4 +254,68 @@ export function cleanupLesions(labels: Int32Array, lesions: Lesion[], order: (a:
     if (id) out[i] = map.get(id) ?? 0;
   }
   return { labels: out, lesions: kept.map((l) => ({ ...l, id: map.get(l.id)! })) };
+}
+
+export interface GrowOptions {
+  /** Boundary as a fraction of the lesion maximum (e.g. 0.4). */
+  fraction: number;
+  /** Search radius around the seed for the lesion maximum (mm). */
+  searchMm?: number;
+  /** The region never extends farther than this from the maximum (mm) – guards against leaking into organs. */
+  maxRadiusMm?: number;
+  /** Voxels that already belong to a lesion (not taken over). */
+  occupied?: Int32Array;
+}
+
+/**
+ * Manual lesion from a seed point (crosshair): the maximum within `searchMm` of the seed, then 3D region growing
+ * (26-neighbourhood) over voxels ≥ fraction × maximum, connected to the maximum, within `maxRadiusMm`.
+ * Returns the voxel indices, or null when there is no activity near the seed.
+ */
+export function growLesion(volume: Volume3D, seed: [number, number, number], o: GrowOptions): { voxels: number[]; max: number; maxIndex: number; threshold: number } | null {
+  const { nx, ny, nz, data } = volume;
+  const [sx, sy, sz] = volume.geometry.spacing;
+  const search = o.searchMm ?? 10, maxR = o.maxRadiusMm ?? 60;
+  const idx = (i: number, j: number, k: number) => (k * ny + j) * nx + i;
+  // Maximum near the seed.
+  let max = -Infinity, mi = -1, mj = -1, mk = -1;
+  const ri = Math.ceil(search / sx), rj = Math.ceil(search / sy), rk = Math.ceil(search / sz);
+  for (let k = Math.max(0, seed[2] - rk); k <= Math.min(nz - 1, seed[2] + rk); k++)
+    for (let j = Math.max(0, seed[1] - rj); j <= Math.min(ny - 1, seed[1] + rj); j++)
+      for (let i = Math.max(0, seed[0] - ri); i <= Math.min(nx - 1, seed[0] + ri); i++) {
+        const d2 = ((i - seed[0]) * sx) ** 2 + ((j - seed[1]) * sy) ** 2 + ((k - seed[2]) * sz) ** 2;
+        if (d2 > search * search) continue;
+        const v = data[idx(i, j, k)];
+        if (v > max && !(o.occupied && o.occupied[idx(i, j, k)] > 0)) {
+          max = v;
+          mi = i;
+          mj = j;
+          mk = k;
+        }
+      }
+  if (mi < 0 || !(max > 0)) return null;
+  const threshold = o.fraction * max;
+  const seen = new Uint8Array(data.length);
+  const start = idx(mi, mj, mk);
+  const queue = [start];
+  seen[start] = 1;
+  const voxels: number[] = [];
+  while (queue.length) {
+    const p = queue.pop()!;
+    voxels.push(p);
+    const i = p % nx, j = Math.floor(p / nx) % ny, k = Math.floor(p / (nx * ny));
+    for (let dk = -1; dk <= 1; dk++)
+      for (let dj = -1; dj <= 1; dj++)
+        for (let di = -1; di <= 1; di++) {
+          const a = i + di, b = j + dj, c = k + dk;
+          if (a < 0 || b < 0 || c < 0 || a >= nx || b >= ny || c >= nz) continue;
+          const q = idx(a, b, c);
+          if (seen[q]) continue;
+          seen[q] = 1;
+          if (data[q] < threshold || (o.occupied && o.occupied[q] > 0)) continue;
+          if (((a - mi) * sx) ** 2 + ((b - mj) * sy) ** 2 + ((c - mk) * sz) ** 2 > maxR * maxR) continue;
+          queue.push(q);
+        }
+  }
+  return { voxels, max, maxIndex: start, threshold };
 }

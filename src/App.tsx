@@ -38,7 +38,7 @@ import { canonicalName } from "./segmentation/labelMap";
 import type { SegmentProgress } from "./segmentation/infer";
 import { CT_MODELS, type CtModelInfo, type CtSegResult, type CtSegRun, DEFAULT_CT_MODEL, loadModelMeta, runCtSegmentation } from "./segmentation/ctSegment";
 import type { CtSegBackend } from "./workers/ctseg.worker";
-import { type Lesion, type ThresholdMethod, cleanupLesions, lesionStats } from "./tumor/segment";
+import { type Lesion, type ThresholdMethod, cleanupLesions, growLesion, lesionStats } from "./tumor/segment";
 import { burdenCsv, splitBurden, tumorBurden } from "./tumor/metrics";
 import { EXCLUSION_PRESETS, annotateLesions, autoLiverCenter, organsOnGrid } from "./tumor/organs";
 import { runTumorSegmentation } from "./tumor/runner";
@@ -1627,6 +1627,39 @@ function App() {
     tumorStatsTimer.current = setTimeout(() => {
       setTumor((t) => (t && t.labels === labels ? { ...t, lesions: lesionStats(v, labels, tumorFactor, t.lesions), version: t.version + 1 } : t));
     }, 300);
+  }
+
+  /**
+   * Manual lesion at the crosshair: maximum within 10 mm, 3D region growing down to `fraction` × maximum (max. 60 mm
+   * from the maximum), added as a new, confirmed lesion. Starts a new result when none exists for this PET/SPECT.
+   */
+  function addLesionAtCursor(fraction: number) {
+    const e = tumorEntry;
+    const w2v = e && w2vById.get(e.id);
+    setTumorError(null);
+    if (!e || !w2v) return;
+    if (!cursor) return setTumorError("Erst das Fadenkreuz in die Läsion setzen (Klick in den Viewer).");
+    const v = e.dataset.current;
+    const seed = applyWorldToVoxel(w2v, cursor).map(Math.round) as [number, number, number];
+    if (seed.some((x, a) => x < 0 || x >= [v.nx, v.ny, v.nz][a])) return setTumorError("Das Fadenkreuz liegt außerhalb dieses Datensatzes.");
+    const same = tumor && tumor.entryId === e.id;
+    const labels = same ? tumor.labels : new Int32Array(v.data.length);
+    const r = growLesion(v, seed, { fraction, occupied: labels });
+    if (!r || !r.voxels.length) return setTumorError("Keine Aktivität in der Nähe des Fadenkreuzes (10 mm) – oder dort ist schon eine Läsion.");
+    const id = (same ? tumor.lesions.reduce((m, l) => Math.max(m, l.id), 0) : 0) + 1;
+    const next = same ? labels.slice() : labels;
+    for (const p of r.voxels) next[p] = id;
+    const prev = same ? tumor.lesions : [];
+    const lesions = lesionStats(v, next, tumorFactor, prev).map((l) =>
+      l.id === id ? { ...l, included: true, reviewed: true, note: `manuell, Grenze ${Math.round(fraction * 100)} % des Maximums` } : l,
+    );
+    const pctText = `manuell: Region Growing ab Fadenkreuz, ${Math.round(fraction * 100)} % des Läsionsmaximums`;
+    setTumor(
+      same
+        ? { ...tumor, labels: next, lesions, version: tumor.version + 1, description: tumor.description.includes("manuell") ? tumor.description : `${tumor.description}; ${pctText}` }
+        : { entryId: e.id, labels: next, lesions, description: pctText, version: 0, datasetId: undefined },
+    );
+    setFocusLesionId(id);
   }
 
   function gotoLesion(id: number) {
@@ -3301,6 +3334,8 @@ function App() {
               : `Kein SUV verfügbar${tumorSuv && !tumorSuv.ok ? ` (${tumorSuv.reason})` : ""} – z. B. Therapie-SPECT in Counts. Schwellen gelten in der Einheit des Bildes (${tumorRawUnit || "Originalwerte"}) oder relativ zum Maximum; feste SUV-Schwellen (2,5 / 3 / 4) sind dann nicht anwendbar. TLG/TL-PSMA ist das Produkt aus Volumen und mittlerem Wert in dieser Einheit.`
           }
           suvAvailable={!!tumorSuv?.ok}
+          onAddLesionAtCursor={addLesionAtCursor}
+          cursorSet={!!cursor}
           rawUnit={tumorRawUnit}
           rawMax={tumorRawMax}
           liver={liverRef && liverRef.entryId === tumorEntry?.id ? liverRef : null}
