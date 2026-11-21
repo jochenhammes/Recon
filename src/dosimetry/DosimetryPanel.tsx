@@ -14,6 +14,7 @@ import { type CameraProfile, countsToMBq, loadProfiles, parseProfiles, recoveryF
 import { type Placed, measureRegions } from "./dose";
 import { DEFAULT_ENERGIES, THERAPY_NUCLIDES, localDepositionDose, nuclideById } from "./nuclideData";
 import { DEFAULT_ORGANS, type DosRegionOptions, type DosimetrySetup, bedMono, regionKey } from "./setup";
+import { PhantomCalibration } from "./PhantomCalibration";
 import { TAC_MODEL_LABELS, type TacFit, type TacModel, fitTac } from "./tacFit";
 import { type DvhStats, densityMap, doseFromTia, dvh, parseKernel, regionDoses, voxelTia } from "./voxelDose";
 import { type SessionItem, acquisitionMs, fmtDateTime, groupSessions, hoursPi, studyUidOf } from "./sessions";
@@ -668,6 +669,19 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
             setProfiles(merged);
             saveProfiles(merged);
           }} />
+        {profileNote(profile)}
+        <PhantomCalibration
+          candidates={spectCandidates.filter((e) => !usedTpIds.has(e.id))}
+          halfLifeSec={nuclide?.halfLifeSec}
+          nuclide={nuclideId}
+          onUse={(cps, note) => {
+            if (profile && window.confirm(`Kalibrierfaktor im Profil „${profile.name}“ durch ${cps} cps/MBq ersetzen?\n(Abbrechen = neues Profil anlegen)`)) {
+              saveProfile({ ...profile, cpsPerMBq: cps, nuclide: nuclideId, note });
+            } else {
+              saveProfile({ id: `cam${Date.now()}`, name: `Phantom ${new Date().toLocaleDateString("de-DE")}`, nuclide: nuclideId, cpsPerMBq: cps, note });
+            }
+          }}
+        />
       </Card>
 
       <Card title={<>Regionen</>} persistKey="dos-reg" status={labelNames.size ? { text: `${[...labelNames.keys()].filter((k) => regionOpts(k).enabled).length} aktiv`, tone: "info" } : null}
@@ -866,6 +880,10 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
   function place(e: DosEntry): Placed {
     return { volume: e.dataset.current, matrix: e.matrix };
   }
+}
+
+function profileNote(p: CameraProfile | undefined) {
+  return p?.note ? <p className="tool-hint">Kalibrierung: {p.note}</p> : null;
 }
 
 /** Quantitative activity-concentration image (DICOM Units BQML, or a value unit Bq/ml set in the app). */

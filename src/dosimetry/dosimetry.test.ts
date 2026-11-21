@@ -136,3 +136,15 @@ describe("SPECT header timing", () => {
     expect(h.injectedMBq).toBeCloseTo(7400, 6);
   });
 });
+
+describe("calibration from a phantom", () => {
+  it("is the inverse of countsToMBq, including decay before and during the acquisition", async () => {
+    const { calibrationFromPhantom, countsToMBq } = await import("./calibration");
+    const half = 6.647 * 86400, cf = 12.5, T = 1800;
+    const refMs = Date.UTC(2026, 0, 1, 8), acqMs = refMs + 3 * 3.6e6, a0 = 500;
+    const aStart = a0 * Math.exp((-Math.LN2 / half) * 3 * 3600);
+    const counts = aStart / countsToMBq(T, cf, half);
+    expect(calibrationFromPhantom({ counts, durationSec: T, activityMBq: a0, activityTimeMs: refMs, acquisitionMs: acqMs, halfLifeSec: half })).toBeCloseTo(cf, 9);
+    expect(calibrationFromPhantom({ counts: 0, durationSec: T, activityMBq: a0, activityTimeMs: refMs, acquisitionMs: acqMs, halfLifeSec: half })).toBeNaN();
+  });
+});

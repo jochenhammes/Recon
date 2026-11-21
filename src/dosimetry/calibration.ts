@@ -135,3 +135,27 @@ export function countsToMBq(durationSec: number, cpsPerMBq: number, halfLifeSec:
   const during = decayCorrected || lt < 1e-9 ? 1 : lt / (1 - Math.exp(-lt));
   return during / (durationSec * cpsPerMBq);
 }
+
+/**
+ * Calibration factor (cps/MBq) from a phantom acquisition with known activity: the activity is decayed from its
+ * reference time to the acquisition start, the counts are corrected for the decay during the acquisition – the
+ * inverse of `countsToMBq` (counts × countsToMBq(T, CF) = A at the acquisition start).
+ */
+export function calibrationFromPhantom(o: {
+  counts: number;
+  durationSec: number;
+  activityMBq: number;
+  /** Time of the known activity (ms). */
+  activityTimeMs: number;
+  /** Acquisition start (ms). */
+  acquisitionMs: number;
+  halfLifeSec: number;
+  decayCorrected?: boolean;
+}): number {
+  if (!(o.counts > 0) || !(o.durationSec > 0) || !(o.activityMBq > 0)) return NaN;
+  const lambda = Math.LN2 / o.halfLifeSec;
+  const aStart = o.activityMBq * Math.exp((-lambda * (o.acquisitionMs - o.activityTimeMs)) / 1000);
+  const lt = lambda * o.durationSec;
+  const during = o.decayCorrected || lt < 1e-9 ? 1 : lt / (1 - Math.exp(-lt));
+  return (o.counts * during) / (o.durationSec * aStart);
+}
