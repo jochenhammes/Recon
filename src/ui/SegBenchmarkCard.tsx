@@ -57,7 +57,12 @@ export function SegBenchmarkCard(props: SegBenchmarkCardProps) {
   const [keep, setKeep] = useState(false);
   const ct = props.cts.find((c) => c.id === ctId) ?? props.cts[0] ?? null;
   const label = (id: string) => CT_MODELS.find((m) => m.id === id)?.label ?? id;
-  const short = (id: string) => CT_MODELS.find((m) => m.id === id)?.short ?? id;
+  // Column header: the part in parentheses ("3 mm", "1,5 mm") when unique among the shown models, else the short name.
+  const column = (id: string) => {
+    const tag = (x: string) => label(x).match(/\(([^)]+)\)/)?.[1];
+    const t = tag(id);
+    return t && props.results.filter((r) => tag(r.modelId) === t).length === 1 ? t : (CT_MODELS.find((m) => m.id === id)?.short ?? id);
+  };
   const ok = props.results.filter((r) => !r.error);
   // Structures scored by all successful models (fair mean), then the union for the table.
   const withDice = ok.filter((r) => r.dice);
@@ -263,7 +268,7 @@ export function SegBenchmarkCard(props: SegBenchmarkCardProps) {
                   <th>Struktur</th>
                   {ok.map((r) => (
                     <th key={r.modelId} title={label(r.modelId)}>
-                      {short(r.modelId)}
+                      {column(r.modelId)}
                     </th>
                   ))}
                 </tr>
