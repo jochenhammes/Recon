@@ -12,7 +12,23 @@ export interface CameraProfile {
   /** Recovery coefficients from a sphere phantom: volume (ml) → RC (0 … 1). */
   recovery?: { volumeMl: number; rc: number }[];
   note?: string;
+  /**
+   * Absolutely quantitative SPECT (e.g. Siemens xSPECT Quant): the images contain Bq/ml, no calibration factor is
+   * used (cpsPerMBq is ignored); the recovery coefficients still apply.
+   */
+  quantitative?: boolean;
 }
+
+/** Built-in default profile: quantitative images in Bq/ml (no calibration factor needed). */
+export const QUANT_PROFILE: CameraProfile = {
+  id: "builtin-bqml",
+  name: "Quantitativ (Bq/ml, z. B. xSPECT Quant)",
+  nuclide: "alle",
+  cpsPerMBq: 0,
+  quantitative: true,
+  note: "Bilder enthalten Aktivitätskonzentration in Bq/ml – kein Kalibrierfaktor",
+};
+export const isBuiltinProfile = (p: CameraProfile | undefined) => p?.id === QUANT_PROFILE.id;
 
 const STORE_KEY = "recon.dosimetry.cameraProfiles";
 
@@ -28,7 +44,7 @@ export function loadProfiles(): CameraProfile[] {
 
 export function saveProfiles(list: CameraProfile[]): void {
   try {
-    localStorage.setItem(STORE_KEY, JSON.stringify(list));
+    localStorage.setItem(STORE_KEY, JSON.stringify(list.filter((p) => !isBuiltinProfile(p))));
   } catch {
     /* storage unavailable: profiles live in the project file only */
   }

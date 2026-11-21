@@ -29,6 +29,8 @@ export interface TpCardView {
   decayCorrected: boolean;
   /** "Counts" (needs camera profile) or "Bq/ml" (quantitative). */
   unit: "Counts" | "Bq/ml";
+  /** Where the unit comes from (header, camera profile or chosen by hand). */
+  unitSource: "Header" | "Profil" | "manuell";
   calibrated: boolean;
   registered: boolean;
   fovMBq?: number;
@@ -55,7 +57,7 @@ export interface TimePointsCardProps {
   /** The automatic grouping differs from the current time points. */
   suggestionDiffers: boolean;
   onApplySuggestion: () => void;
-  onUpdate: (spectId: string, patch: Partial<{ spectId: string; ctId: string; organSetId: string; lesionSetId: string; tHoursManual: number; durationSecManual: number; decayCorrected: boolean }>) => void;
+  onUpdate: (spectId: string, patch: Partial<{ spectId: string; ctId: string; organSetId: string; lesionSetId: string; tHoursManual: number; durationSecManual: number; decayCorrected: boolean; unitOverride: "Counts" | "Bq/ml" | undefined }>) => void;
   onAddSession: (key: string) => void;
   onAddFunctional: (id: string) => void;
   onAssign: (itemId: string, role: UnassignedItem["role"], spectId: string) => void;
@@ -195,9 +197,16 @@ export function TimePointsCard(p: TimePointsCardProps) {
               <dt>{v.unit === "Bq/ml" ? "PET/SPECT" : "SPECT"}</dt>
               <dd>
                 <RoleSelect value={v.spectId} options={p.options.functional} near={v.acqMs} empty="–" onChange={(id) => id && p.onUpdate(v.spectId, { spectId: id })} />
-                <span className="dos-unit" title={v.unit === "Bq/ml" ? "Quantitativ – kein Kalibrierfaktor nötig" : "Counts – Kalibrierfaktor (Kamera-Profil) nötig"}>
-                  {v.unit}
-                </span>
+                <select
+                  className="dos-unit"
+                  value={v.unitSource === "manuell" ? v.unit : ""}
+                  title={`Einheit des Bildes: ${v.unit} (${v.unitSource === "manuell" ? "von Hand" : v.unitSource === "Header" ? "aus dem DICOM-Header" : "nach dem Kamera-Profil"}). ${v.unit === "Bq/ml" ? "Quantitativ – kein Kalibrierfaktor nötig." : "Counts – Kalibrierfaktor (Kamera-Profil) nötig."}`}
+                  onChange={(e) => p.onUpdate(v.spectId, { unitOverride: (e.target.value || undefined) as "Counts" | "Bq/ml" | undefined })}
+                >
+                  <option value="">{v.unitSource === "manuell" ? "automatisch" : `${v.unit} (${v.unitSource})`}</option>
+                  <option value="Counts">Counts</option>
+                  <option value="Bq/ml">Bq/ml</option>
+                </select>
               </dd>
               <dt>CT</dt>
               <dd>

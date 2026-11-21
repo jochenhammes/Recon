@@ -493,7 +493,8 @@ Madsen, mit 2 monoexponentiell.
 | Zerfallskorrektur | DecayCorrection (0054,1102): NONE, START oder ADMIN |
 | Zusammengehörigkeit | FrameOfReferenceUID (0020,0052), StudyInstanceUID (0020,000D) |
 
-**Kalibrierung** (nur für Bilder in Counts): Kalibrierfaktor in cps/MBq für genau diese Kamerakonfiguration (Kamera,
+**Kalibrierung** (nur für Bilder in Counts; quantitative Bilder in Bq/ml, z. B. xSPECT Quant, brauchen keine):
+Kalibrierfaktor in cps/MBq für genau diese Kamerakonfiguration (Kamera,
 Kollimator, Energiefenster, Rekonstruktion), aus einer Phantommessung – in der App aus einer Phantomaufnahme
 bestimmbar (Schritt 6). Optional Recovery-Koeffizienten (RC) aus einem Kugelphantom für kleine Läsionen.
 
@@ -575,9 +576,17 @@ bestimmbar (Schritt 6). Optional Recovery-Koeffizienten (RC) aus einem Kugelphan
 1. **Nuklid** prüfen (Vorschlag aus dem Header). Mittlere Elektronenenergie pro Zerfall nach ICRP 107 (β⁻ +
    Konversions- und Auger-Elektronen): Lu-177 147,92 keV, Tb-161 202,48 keV, I-131 191,84 keV, Y-90 933,1 keV; ein
    eigener Wert ist möglich. Halbwertszeiten: Lu-177 6,647 d, Tb-161 6,906 d, I-131 8,021 d, Y-90 64,1 h.
-2. **Kamera-Profil** wählen oder anlegen (*Neu*): Name, cps/MBq, Kollimator, Energiefenster, optional RC-Tabelle
-   („Volumen ml : RC; …“, z. B. „0,5:0,3; 26,5:0,8“). Profile liegen im Browser und in der Projektdatei;
-   *Profile exportieren/importieren* (JSON) überträgt sie auf andere Rechner.
+2. **Kamera-Profil:** Standard ist **„Quantitativ (Bq/ml, z. B. xSPECT Quant)“** – für absolut quantitative SPECT
+   (z. B. Siemens xSPECT Quant) oder PET, deren Bilder echte Aktivitätskonzentrationen enthalten: kein
+   Kalibrierfaktor nötig.
+   - *Mit RC als eigenes Profil* legt davon eine Kopie mit Recovery-Koeffizienten an (Partialvolumeneffekt kleiner
+     Läsionen gilt auch bei quantitativen Kameras).
+   - Für SPECT in **Counts**: *Neu* – Name, cps/MBq, Kollimator, Energiefenster, optional RC-Tabelle
+     („Volumen ml : RC; …“, z. B. „0,5:0,3; 26,5:0,8“). Das Häkchen *Quantitativ (Bq/ml)* macht ein eigenes Profil
+     ohne Faktor.
+   - Profile liegen im Browser und in der Projektdatei; *Profile exportieren/importieren* (JSON) überträgt sie.
+   - Status der Karte: *Bq/ml* bzw. Profilname; *Faktor fehlt*, wenn Bilder in Counts vorliegen, aber das
+     quantitative Profil gewählt ist.
 3. **Kalibrierfaktor aus einer Phantomaufnahme** (*Kalibrierfaktor aus Phantomaufnahme bestimmen …*):
    - Phantom (z. B. Zylinder mit bekannter Aktivität) mit derselben Kamera, Kollimator, Fenster und Rekonstruktion
      messen; das ganze Phantom muss im Sichtfeld liegen.
@@ -585,8 +594,13 @@ bestimmbar (Schritt 6). Optional Recovery-Koeffizienten (RC) aus einem Kugelphan
      kommen aus dem Header.
    - Die App zeigt die Summe der Counts und den Faktor; *In Kamera-Profil übernehmen* ersetzt den Faktor des gewählten
      Profils oder legt ein neues an.
-4. **Bilder in Bq/ml** brauchen keinen Faktor (Status „Bq/ml“). Auf die Injektion zerfallskorrigierte Bilder (ADMIN)
-   werden auf die Aufnahmezeit zurückgerechnet.
+4. **Einheit je Zeitpunkt:** Die App liest sie aus Units (0054,1001): `BQML` → Bq/ml, `CNTS` → Counts; fehlt die
+   Angabe (z. B. NIfTI), entscheidet das Kamera-Profil (quantitativ → Bq/ml). In der Zeitpunkt-Karte zeigt die
+   Auswahl neben dem SPECT die Einheit mit Herkunft („Bq/ml (Header)“, „Counts (Profil)“) und lässt sich **von Hand
+   auf Counts oder Bq/ml stellen** – z. B. wenn ein quantitativer Export die Einheit nicht korrekt setzt. Prüfen über
+   die *Aktivität im Sichtfeld* (% der injizierten Aktivität).
+5. **Bilder in Bq/ml** brauchen keinen Faktor und keine Aufnahmedauer (Status „Bq/ml“). Auf die Injektion
+   zerfallskorrigierte Bilder (ADMIN) werden auf die Aufnahmezeit zurückgerechnet.
 
 **Schritt 7 – Regionen und Messung** (Karte *Regionen*)
 1. Labelbilder der Zeitpunkte sind automatisch angehakt; weitere anhaken bzw. abwählen. Je Labelbild den
@@ -689,7 +703,7 @@ bestimmbar (Schritt 6). Optional Recovery-Koeffizienten (RC) aus einem Kugelphan
 |---|---|---|
 | Ein SPECT erscheint unter „Nicht zugeordnet“ | kein Aufnahmedatum (z. B. NIfTI) und keine FrameOfReference | per Auswahl einem Zeitpunkt zuordnen oder als neuen Zeitpunkt anlegen |
 | Falsches CT bei einem Zeitpunkt (⚠ „CT … h entfernt“) | mehrere CTs am selben Tag oder unterschiedliche FrameOfReference | in der Zeitpunkt-Karte bei *CT* das richtige wählen |
-| *Kalibrierung* bleibt gelb | Bild in Counts ohne Kamera-Profil oder ohne Aufnahmedauer | Profil wählen/anlegen; Dauer in der aufgeklappten Karte eintragen |
+| *Kalibrierung* bleibt gelb (Karte *Nuklid und Kalibrierung*: „Faktor fehlt“) | Bild in Counts, aber quantitatives Profil gewählt, oder Aufnahmedauer fehlt | Profil mit cps/MBq wählen bzw. aus Phantom bestimmen; ist das Bild in Wahrheit quantitativ, die Einheit in der Zeitpunkt-Karte auf Bq/ml stellen; Dauer in der aufgeklappten Karte eintragen |
 | Status *registriert* bleibt gelb | Zeitpunkte noch nicht registriert | Schritt 5 (Weg A oder B) |
 | Region hat zu einem Zeitpunkt keine Messwerte | dieser Zeitpunkt hat keine eigene Organkarte bzw. kein Läsionsbild | dort segmentieren oder das Labelbild unter *Regionen* auf „alle Zeitpunkte“ stellen |
 | D2/D50/D98 zeigen *nach Voxelkarte* | DVH stammt aus der Voxelkarte | *Dosiskarte berechnen* |

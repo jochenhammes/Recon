@@ -10,7 +10,7 @@ import { Chart, type ChartSeries } from "../kinetics/Chart";
 import { BigTable } from "../ui/BigTable";
 import { Card } from "../ui/Card";
 import { InfoText } from "../ui/Info";
-import { type CameraProfile, countsToMBq, loadProfiles, parseProfiles, recoveryFor, saveProfiles, timePointFromHeader } from "./calibration";
+import { type CameraProfile, QUANT_PROFILE, countsToMBq, isBuiltinProfile, loadProfiles, parseProfiles, recoveryFor, saveProfiles, timePointFromHeader } from "./calibration";
 import { type Placed, measureRegions } from "./dose";
 import { DEFAULT_ENERGIES, THERAPY_NUCLIDES, localDepositionDose, nuclideById } from "./nuclideData";
 import { DEFAULT_ORGANS, type DosRegionOptions, type DosimetrySetup, bedMono, regionKey } from "./setup";
@@ -66,6 +66,8 @@ interface TpView {
   decayCorrected: boolean;
   /** Counts (camera profile needed) or a quantitative image in Bq/ml. */
   unit: "Counts" | "Bq/ml";
+  /** Where the unit comes from. */
+  unitSource: "Header" | "Profil" | "manuell";
   /** MBq per unit of the image value summed over voxels (Counts: calibration; Bq/ml: voxel volume). */
   mbqPerCount: number;
   fovMBq?: number;
@@ -125,7 +127,8 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
   const headerInfo = firstHeader ? timePointFromHeader(firstHeader) : undefined;
   const injectionMs = setup.injection.timeMs ?? headerInfo?.injectionMs;
   const injectedMBq = setup.injection.activityMBq ?? headerInfo?.injectedMBq;
-  const profile = setup.profile;
+  // Default: the built-in quantitative profile (Bq/ml images need no calibration factor).
+  const profile = setup.profile ?? QUANT_PROFILE;
 
   // ── Acquisition sessions (automatic grouping from FrameOfReference, study and acquisition time) ──
   const isOrganMap = (e: DosEntry) => /^CT-Organe/.test(e.dataset.displayName) || /^CT-Organe/.test(e.dataset.atlas?.name ?? "");
@@ -178,9 +181,14 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
     const tH = tp.tHoursManual ?? tAuto;
     const durationSec = tp.durationSecManual ?? h?.durationSec;
     const decayCorrected = tp.decayCorrected ?? (!!h?.decayCorrection && h.decayCorrection.toUpperCase() !== "NONE");
-    const quant = isQuantitative(h?.units, e.dataset.valueUnit);
+    // Unit: chosen by hand, else from the header (BQML / CNTS), else from the camera profile (quantitative or not).
+    const headerUnit = h?.units?.trim().toUpperCase();
+    const headerQuant = isQuantitative(h?.units, e.dataset.valueUnit);
+    const quant = tp.unitOverride ? tp.unitOverride === "Bq/ml" : headerQuant ? true : headerUnit === "CNTS" ? false : !!profile.quantitative;
     const unit: TpView["unit"] = quant ? "Bq/ml" : "Counts";
-    if (h?.units && !quant && h.units.toUpperCase() !== "CNTS") note.push(`Einheit im Header: ${h.units} – wie Counts behandelt`);
+    const unitSource: TpView["unitSource"] = tp.unitOverride ? "manuell" : headerQuant || headerUnit === "CNTS" ? "Header" : "Profil";
+    if (tp.unitOverride && headerUnit && (headerQuant ? "Bq/ml" : "Counts") !== tp.unitOverride) note.push(`Header: ${headerQuant ? "Bq/ml" : headerUnit === "CNTS" ? "Counts" : headerUnit} – von Hand auf ${tp.unitOverride} gestellt`);
+    else if (headerUnit && !headerQuant && headerUnit !== "CNTS") note.push(`Einheit im Header: ${h!.units} – wie ${unit} behandelt`);
     let mbqPerCount: number;
     if (quant) {
       const [sx, sy, sz] = e.dataset.current.geometry.spacing;
@@ -190,12 +198,12 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
       mbqPerCount = ((sx * sy * sz) / 1000) * 1e-6 * toAcq;
     } else {
       if (decayCorrected && h?.decayCorrection?.toUpperCase() === "ADMIN") note.push("Bild auf Injektion zerfallskorrigiert – Zeitachse prüfen");
-      mbqPerCount = profile && nuclide && durationSec ? countsToMBq(durationSec, profile.cpsPerMBq, nuclide.halfLifeSec, decayCorrected) : NaN;
+      mbqPerCount = !profile.quantitative && profile.cpsPerMBq > 0 && nuclide && durationSec ? countsToMBq(durationSec, profile.cpsPerMBq, nuclide.halfLifeSec, decayCorrected) : NaN;
     }
     const sum = positiveSum(e.dataset.current.data);
     const fovMBq = Number.isFinite(mbqPerCount) ? sum * mbqPerCount : undefined;
     const pctInjected = fovMBq !== undefined && injectedMBq && tH !== undefined && nuclide ? (100 * fovMBq) / (injectedMBq * Math.exp((-Math.LN2 * tH) / halfLifeH)) : undefined;
-    return { spectId: tp.spectId, label: e.label, ctId: tp.ctId, tH, durationSec, decayCorrected, unit, mbqPerCount, fovMBq, pctInjected, headerNote: note };
+    return { spectId: tp.spectId, label: e.label, ctId: tp.ctId, tH, durationSec, decayCorrected, unit, unitSource, mbqPerCount, fovMBq, pctInjected, headerNote: note };
   });
 
   // ── Regions ──
@@ -628,7 +636,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
     const csv = csvWithInfo([head.join(sep), ...lines], [
       ["Nuklid", nuclideId],
       ["Elektronenenergie keV/Zerfall", String(energy ?? "")],
-      ["Kamera-Profil", profile ? `${profile.name} (${profile.cpsPerMBq} cps/MBq)` : ""],
+      ["Kamera-Profil", profile.quantitative ? `${profile.name} (Bq/ml, kein Kalibrierfaktor)` : `${profile.name} (${profile.cpsPerMBq} cps/MBq)`],
       ["Injektion", injectionMs ? new Date(injectionMs).toLocaleString("de-DE") : ""],
       ["Injizierte Aktivität MBq", String(injectedMBq ?? "")],
       ["Methode", "Lokale Energiedeposition der Elektronen (Organ/Läsion); Voxelkarte: " + (setup.voxel.kernel ? `Kernel ${setup.voxel.kernel.name}` : "lokal")],
@@ -652,11 +660,12 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
       halfLife: nuclide?.halfLifeText ?? "",
       electronKeV: energy,
       energySource: setup.energyOverride[nuclideId] !== undefined ? "eigener Wert" : (DEFAULT_ENERGIES[nuclideId]?.source ?? ""),
-      calibration: tpViews.every((t) => t.unit === "Bq/ml")
-        ? "quantitative Bilder (Bq/ml), kein Kalibrierfaktor"
-        : profile
-          ? `${profile.name}: ${profile.cpsPerMBq} cps/MBq${profile.collimator ? `, Kollimator ${profile.collimator}` : ""}${profile.window ? `, Fenster ${profile.window}` : ""}${profile.recovery?.length ? `; RC ${profile.recovery.map((r) => `${r.volumeMl} ml → ${r.rc}`).join(", ")}` : ""}${profile.note ? ` (${profile.note})` : ""}`
-          : "fehlt",
+      calibration: (() => {
+        const rcText = profile.recovery?.length ? `; RC ${profile.recovery.map((r) => `${r.volumeMl} ml → ${r.rc}`).join(", ")}` : "";
+        if (tpViews.every((t) => t.unit === "Bq/ml")) return `quantitative Bilder (Bq/ml), kein Kalibrierfaktor (Profil ${profile.name})${rcText}`;
+        if (profile.quantitative) return `Bilder in Counts, aber quantitatives Profil gewählt – Kalibrierung fehlt`;
+        return `${profile.name}: ${profile.cpsPerMBq} cps/MBq${profile.collimator ? `, Kollimator ${profile.collimator}` : ""}${profile.window ? `, Fenster ${profile.window}` : ""}${rcText}${profile.note ? ` (${profile.note})` : ""}`;
+      })(),
       injection: `${injectionMs ? new Date(injectionMs).toLocaleString("de-DE") : "Zeit fehlt"} · ${injectedMBq !== undefined ? `${injectedMBq} MBq` : "Aktivität fehlt"}`,
       timePoints: views.map((v, n) => ({
         label: `T${n + 1}: ${v.label}`,
@@ -775,6 +784,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
       durationSec: v.durationSec,
       decayCorrected: v.decayCorrected,
       unit: v.unit,
+      unitSource: v.unitSource,
       calibrated: Number.isFinite(v.mbqPerCount),
       registered: isRegistered(tp),
       fovMBq: v.fovMBq,
@@ -850,8 +860,11 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
         busy={!!busy}
       />
 
-      <Card title={<>Nuklid und Kalibrierung</>} persistKey="dos-cal" status={profile ? { text: profile.name, tone: "ok" } : { text: "fehlt", tone: "warn" }}
-        info="Kalibrierfaktor der Kamerakonfiguration (Kamera, Kollimator, Energiefenster, Rekonstruktion) in cps/MBq: Counts im SPECT / (Aufnahmedauer × Faktor) = MBq. Der Zerfall während der Aufnahme wird korrigiert. Recovery-Koeffizienten (Kugelphantom) korrigieren den Partialvolumeneffekt kleiner Läsionen.">
+      <Card
+        title={<>Nuklid und Kalibrierung</>}
+        persistKey="dos-cal"
+        status={tpViews.some((t) => t.unit === "Counts") && profile.quantitative ? { text: "Faktor fehlt", tone: "warn" } : { text: profile.quantitative ? "Bq/ml" : profile.name, tone: "ok" }}
+        info="Standard ist das Profil „Quantitativ (Bq/ml, z. B. xSPECT Quant)“: Bilder mit echten Aktivitätskonzentrationen brauchen keinen Kalibrierfaktor. Für SPECT in Counts ein Profil mit Kalibrierfaktor der Kamerakonfiguration (Kamera, Kollimator, Energiefenster, Rekonstruktion) in cps/MBq anlegen oder aus einer Phantomaufnahme bestimmen: Counts / (Aufnahmedauer × Faktor) = MBq, Zerfall während der Aufnahme korrigiert. Recovery-Koeffizienten (Kugelphantom) korrigieren den Partialvolumeneffekt kleiner Läsionen – auch bei quantitativen Bildern („Mit RC als eigenes Profil“).">
         <div className="field-row">
           <label className="field">
             Nuklid{headerNuclide && headerNuclide !== nuclideId ? ` (Header: ${headerNuclide})` : ""}
@@ -904,7 +917,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
           halfLifeSec={nuclide?.halfLifeSec}
           nuclide={nuclideId}
           onUse={(cps, note) => {
-            if (profile && window.confirm(`Kalibrierfaktor im Profil „${profile.name}“ durch ${cps} cps/MBq ersetzen?\n(Abbrechen = neues Profil anlegen)`)) {
+            if (!profile.quantitative && window.confirm(`Kalibrierfaktor im Profil „${profile.name}“ durch ${cps} cps/MBq ersetzen?\n(Abbrechen = neues Profil anlegen)`)) {
               saveProfile({ ...profile, cpsPerMBq: cps, nuclide: nuclideId, note });
             } else {
               saveProfile({ id: `cam${Date.now()}`, name: `Phantom ${new Date().toLocaleDateString("de-DE")}`, nuclide: nuclideId, cpsPerMBq: cps, note });
@@ -1338,21 +1351,25 @@ function ProfileEditor({
   onDelete: (id: string) => void;
   onImport: (list: CameraProfile[]) => void;
 }) {
-  const [draft, setDraft] = useState<{ name: string; cps: string; collimator: string; window: string; rc: string } | null>(null);
+  const [draft, setDraft] = useState<{ name: string; cps: string; collimator: string; window: string; rc: string; quantitative: boolean } | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const list = current && !profiles.some((p) => p.id === current.id) ? [...profiles, current] : profiles;
+  // The built-in quantitative profile is always offered first.
+  const own = profiles.filter((p) => !isBuiltinProfile(p));
+  const list = [QUANT_PROFILE, ...own, ...(current && !isBuiltinProfile(current) && !own.some((p) => p.id === current.id) ? [current] : [])];
+  const cur = current ?? QUANT_PROFILE;
   const edit = (p?: CameraProfile) =>
     setDraft({
-      name: p?.name ?? "",
-      cps: p ? String(p.cpsPerMBq) : "",
+      name: p ? (isBuiltinProfile(p) ? "xSPECT Quant mit RC" : p.name) : "",
+      cps: p && !p.quantitative ? String(p.cpsPerMBq) : "",
       collimator: p?.collimator ?? "",
       window: p?.window ?? "",
       rc: (p?.recovery ?? []).map((r) => `${r.volumeMl}:${r.rc}`).join("; "),
+      quantitative: p ? !!p.quantitative : false,
     });
   function commit() {
     if (!draft) return;
     const cps = Number(draft.cps.replace(",", "."));
-    if (!draft.name.trim() || !(cps > 0)) return setErr("Name und Kalibrierfaktor (cps/MBq > 0) angeben.");
+    if (!draft.name.trim() || (!draft.quantitative && !(cps > 0))) return setErr(draft.quantitative ? "Name angeben." : "Name und Kalibrierfaktor (cps/MBq > 0) angeben – oder „quantitativ (Bq/ml)“ wählen.");
     const recovery = draft.rc
       .split(/[;\n]+/)
       .map((s) => s.trim())
@@ -1363,7 +1380,17 @@ function ProfileEditor({
       });
     if (recovery.some((r) => !(r.volumeMl > 0) || !(r.rc > 0) || r.rc > 1.5)) return setErr("Recovery-Koeffizienten als „Volumen_ml:RC; …“ angeben, z. B. „0,5:0,3; 26,5:0,8“.");
     setErr(null);
-    onSave({ id: current && draft.name === current.name ? current.id : `cam${Date.now()}`, name: draft.name.trim(), nuclide, cpsPerMBq: cps, collimator: draft.collimator || undefined, window: draft.window || undefined, recovery: recovery.length ? recovery : undefined });
+    const keepId = current && !isBuiltinProfile(current) && draft.name === current.name;
+    onSave({
+      id: keepId ? current!.id : `cam${Date.now()}`,
+      name: draft.name.trim(),
+      nuclide: draft.quantitative ? "alle" : nuclide,
+      cpsPerMBq: draft.quantitative ? 0 : cps,
+      quantitative: draft.quantitative || undefined,
+      collimator: draft.collimator || undefined,
+      window: draft.window || undefined,
+      recovery: recovery.length ? recovery : undefined,
+    });
     setDraft(null);
   }
   return (
@@ -1371,24 +1398,22 @@ function ProfileEditor({
       <div className="field-row">
         <label className="field">
           Kamera-Profil
-          <select value={current?.id ?? ""} onChange={(e) => onSelect(list.find((p) => p.id === e.target.value))}>
-            <option value="">– wählen –</option>
+          <select value={cur.id} onChange={(e) => onSelect(list.find((p) => p.id === e.target.value))}>
             {list.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.name} · {p.nuclide} · {p.cpsPerMBq} cps/MBq
+                {p.quantitative ? `${p.name}${isBuiltinProfile(p) ? "" : " · Bq/ml"}` : `${p.name} · ${p.nuclide} · ${p.cpsPerMBq} cps/MBq`}
               </option>
             ))}
           </select>
         </label>
       </div>
-      {current && current.nuclide !== nuclide && <p className="tool-hint tool-warning">Profil ist für {current.nuclide} kalibriert, gewählt ist {nuclide}.</p>}
-      {current && (
-        <p className="tool-hint">
-          {current.collimator ? `Kollimator ${current.collimator} · ` : ""}
-          {current.window ? `Fenster ${current.window} · ` : ""}
-          {current.recovery?.length ? `RC: ${current.recovery.map((r) => `${r.volumeMl} ml → ${r.rc}`).join(", ")}` : "keine Recovery-Koeffizienten"}
-        </p>
-      )}
+      {!cur.quantitative && cur.nuclide !== nuclide && <p className="tool-hint tool-warning">Profil ist für {cur.nuclide} kalibriert, gewählt ist {nuclide}.</p>}
+      <p className="tool-hint">
+        {cur.quantitative ? "Quantitative Bilder (Bq/ml) – kein Kalibrierfaktor · " : ""}
+        {cur.collimator ? `Kollimator ${cur.collimator} · ` : ""}
+        {cur.window ? `Fenster ${cur.window} · ` : ""}
+        {cur.recovery?.length ? `RC: ${cur.recovery.map((r) => `${r.volumeMl} ml → ${r.rc}`).join(", ")}` : "keine Recovery-Koeffizienten"}
+      </p>
       {draft ? (
         <div className="dos-profile">
           <div className="field-row">
@@ -1398,9 +1423,13 @@ function ProfileEditor({
             </label>
             <label className="field">
               cps/MBq
-              <input type="text" inputMode="decimal" value={draft.cps} onChange={(e) => setDraft({ ...draft, cps: e.target.value })} />
+              <input type="text" inputMode="decimal" disabled={draft.quantitative} placeholder={draft.quantitative ? "nicht nötig" : ""} value={draft.cps} onChange={(e) => setDraft({ ...draft, cps: e.target.value })} />
             </label>
           </div>
+          <label className="checkbox-field">
+            <input type="checkbox" checked={draft.quantitative} onChange={(e) => setDraft({ ...draft, quantitative: e.target.checked })} />
+            <span>Quantitativ (Bilder in Bq/ml, z. B. xSPECT Quant) – kein Kalibrierfaktor</span>
+          </label>
           <div className="field-row">
             <label className="field">
               Kollimator
@@ -1429,13 +1458,11 @@ function ProfileEditor({
           <button className="chip-btn" onClick={() => edit()}>
             Neu
           </button>
-          {current && (
-            <button className="chip-btn" onClick={() => edit(current)}>
-              Ändern
-            </button>
-          )}
-          {current && (
-            <button className="chip-btn" onClick={() => window.confirm(`Profil „${current.name}“ löschen?`) && (onDelete(current.id), onSelect(undefined))}>
+          <button className="chip-btn" onClick={() => edit(cur)} title={isBuiltinProfile(cur) ? "Als eigenes Profil mit Recovery-Koeffizienten speichern" : undefined}>
+            {isBuiltinProfile(cur) ? "Mit RC als eigenes Profil" : "Ändern"}
+          </button>
+          {!isBuiltinProfile(cur) && (
+            <button className="chip-btn" onClick={() => window.confirm(`Profil „${cur.name}“ löschen?`) && (onDelete(cur.id), onSelect(undefined))}>
               Löschen
             </button>
           )}

@@ -19,6 +19,8 @@ export interface DosTimePoint {
   organSetId?: string;
   /** Lesion label map of this time point. */
   lesionSetId?: string;
+  /** Unit of the functional image chosen by hand (else from the header / the camera profile). */
+  unitOverride?: "Counts" | "Bq/ml";
   /** Registered onto the CT of the first time point (reset when its datasets change). */
   registered?: boolean;
 }

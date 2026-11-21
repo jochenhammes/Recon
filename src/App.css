@@ -2811,3 +2811,9 @@ tr.focus-row td {
   border: 0;
   background: #fff;
 }
+select.dos-unit {
+  width: auto;
+  padding: 1px 4px;
+  font-size: 10.5px;
+  border-radius: 8px;
+}
