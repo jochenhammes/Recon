@@ -36,6 +36,9 @@ export interface DosRegionOptions {
   teffH?: number;
   /** Apply the recovery coefficient of the camera profile. */
   recovery: boolean;
+  /** α/β (Gy) and repair half-time (h) for the BED of this region (kidneys: defaults of `bed`). */
+  alphaBeta?: number;
+  repairH?: number;
 }
 
 export interface DosimetrySetup {

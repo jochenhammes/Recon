@@ -513,8 +513,12 @@ Counts bzw. Bq/ml, unabhängig vom Umschalter SUV im Viewer.
      biexponentiell, wenn die Aktivität zwischen den ersten Zeitpunkten noch steigt, sonst monoexponentiell; ab 5
      Punkten nach AICc. Die Auswaschung ist nie langsamer als der physikalische Zerfall.
    - Dosis = TIA × Elektronenenergie / Masse (lokale Energiedeposition).
-   - BED (Nieren) = D + D²·λ / ((μ + λ)·α/β), λ = ln2/T_eff, μ = ln2/T_rep; Vorgabe α/β = 2,6 Gy, T_rep = 2,8 h
-     (editierbar).
+   - BED = D + D²·λ / ((μ + λ)·α/β), λ = ln2/T_eff, μ = ln2/T_rep – für **jede Region**, für die α/β und
+     Reparatur-Halbwertszeit eingetragen sind (Zeile anklicken, Felder unter dem Modell). Für die Nieren gelten ohne
+     eigene Werte die Vorgaben α/β = 2,6 Gy, T_rep = 2,8 h (unter der Tabelle, editierbar); für andere Organe und
+     Läsionen gibt es bewusst keine Vorgaben.
+   - **D2/D50/D98** kommen aus der Voxel-Dosiskarte: bis sie berechnet ist, steht in der Spalte *nach Voxelkarte*;
+     Labelbilder, die weder zu T1 gehören noch für alle Zeitpunkte gelten, zeigen *nicht auf T1*.
    - **Akaike-Gewichte** (ab 4 Zeitpunkten; mono gegen biexponentiell ab 5) mit der gewichteten TIA – zur Information,
      das Ergebnis nutzt das gewählte Modell.
    - **Unsicherheit nach EANM 2018:** relative Unsicherheiten für Kalibrierung, Recovery und Volumen eintragen (aus

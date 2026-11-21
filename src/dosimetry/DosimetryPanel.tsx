@@ -212,6 +212,11 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
   }, [setup.labelSets, entries, tps.map((t) => t.lesionSetId).join()]); // eslint-disable-line react-hooks/exhaustive-deps
   const regionOpts = (key: string): DosRegionOptions =>
     setup.regions[key] ?? { enabled: DEFAULT_ORGANS.includes(key) || key.startsWith("läsion"), model: "auto", recovery: key.startsWith("läsion") };
+  /** BED parameters of a region: own values, else the kidney defaults for kidneys. */
+  const bedParams = (name: string, o: DosRegionOptions) => {
+    const kidney = /kidney|niere/i.test(name);
+    return { alphaBeta: o.alphaBeta ?? (kidney ? setup.bed.alphaBeta : undefined), repairH: o.repairH ?? (kidney ? setup.bed.repairHalfTimeH : undefined), kidney };
+  };
   const setRegion = (key: string, patch: Partial<DosRegionOptions>) => set((s) => ({ ...s, regions: { ...s.regions, [key]: { ...regionOpts(key), ...patch } } }));
 
   const rows: RegionRow[] = useMemo(() => {
@@ -233,8 +238,9 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
       const doseGy = fit.ok || fit.tia === 0 ? localDepositionDose(fit.tia, energy, massG / 1000) : NaN;
       const unc = doseUncertainty({ doseGy, tia: fit.tia, tiaSd: fit.tiaSd, rcApplied: opts.recovery && rc !== 1, inputs: setup.uncertainty });
       const doseSdGy = unc?.sdGy;
-      const kidney = /kidney|niere/i.test(name);
-      const bed = kidney && fit.teffH ? bedMono(doseGy, fit.teffH, setup.bed.alphaBeta, setup.bed.repairHalfTimeH) : undefined;
+      // BED for every region with α/β and repair half-time (kidneys: the defaults below the table).
+      const { alphaBeta, repairH } = bedParams(name, opts);
+      const bed = alphaBeta && repairH && fit.teffH && Number.isFinite(doseGy) ? bedMono(doseGy, fit.teffH, alphaBeta, repairH) : undefined;
       out.push({ key, name, opts, t, a, massG, volumeMl, rc, fit, doseGy, doseSdGy, unc, bed });
     }
     return out;
@@ -1012,7 +1018,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
       </Card>
 
       <Card title={<>Kurven und Dosis</>} persistKey="dos-res" status={rows.length ? { text: `${rows.length} Regionen`, tone: "ok" } : null}
-        info="Je Region: Aktivität (MBq, ggf. durch den Recovery-Koeffizienten geteilt) über der Zeit, Fit und zeitintegrierte Aktivität (TIA). Automatisch: 1 Zeitpunkt → Hänscheid (bzw. Madsen mit T_eff), 2 → monoexponentiell, ≥ 3 → biexponentiell mit Aufnahmephase, wenn die Aktivität zwischen den ersten Zeitpunkten noch steigt, sonst monoexponentiell. Die Auswaschung ist nie langsamer als der physikalische Zerfall. Dosis = TIA × Elektronenenergie / Masse (lokale Energiedeposition; Masse aus CT-Dichte). Nieren: BED für monoexponentielle Auswaschung.">
+        info="Je Region: Aktivität (MBq, ggf. durch den Recovery-Koeffizienten geteilt) über der Zeit, Fit und zeitintegrierte Aktivität (TIA). Automatisch: 1 Zeitpunkt → Hänscheid (bzw. Madsen mit T_eff), 2 → monoexponentiell, ≥ 3 → biexponentiell mit Aufnahmephase, wenn die Aktivität zwischen den ersten Zeitpunkten noch steigt, sonst monoexponentiell. Die Auswaschung ist nie langsamer als der physikalische Zerfall. Dosis = TIA × Elektronenenergie / Masse (lokale Energiedeposition; Masse aus CT-Dichte). BED = D + D²·λ / ((μ + λ)·α/β) für jede Region mit α/β und Reparatur-Halbwertszeit (Region anklicken; Nieren: Vorgabe unten), mit der effektiven Halbwertszeit des Fits. D2/D50/D98 aus der Voxel-Dosiskarte.">
         {measurementStale && rows.length > 0 && (
           <InfoText warn details="Labelbilder haben sich seit der Messung geändert (z. B. Läsionen in „Segmentierung & MTV“ bestätigt oder abgewählt). Unter „Regionen“ erneut „Aktivitäten messen“.">
             Veraltet – Labelbilder geändert
@@ -1040,6 +1046,16 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                   <label className="field">
                     T_eff Population (h)
                     <input type="text" inputMode="decimal" placeholder="für Madsen" value={sel.opts.teffH ?? ""} onChange={(e) => setRegion(sel.key, { teffH: numOrUndef(e.target.value) })} />
+                  </label>
+                </div>
+                <div className="field-row">
+                  <label className="field">
+                    α/β (Gy) für BED
+                    <input type="text" inputMode="decimal" placeholder={bedParams(sel.name, { ...sel.opts, alphaBeta: undefined }).alphaBeta?.toString() ?? "–"} value={sel.opts.alphaBeta ?? ""} onChange={(e) => setRegion(sel.key, { alphaBeta: numOrUndef(e.target.value) })} />
+                  </label>
+                  <label className="field">
+                    Reparatur-T½ (h)
+                    <input type="text" inputMode="decimal" placeholder={bedParams(sel.name, { ...sel.opts, repairH: undefined }).repairH?.toString() ?? "–"} value={sel.opts.repairH ?? ""} onChange={(e) => setRegion(sel.key, { repairH: numOrUndef(e.target.value) })} />
                   </label>
                 </div>
                 {sel.fit.note && <p className="tool-hint">{sel.fit.note}</p>}
@@ -1092,8 +1108,12 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                           {fmt(r.doseGy)}
                           {pm(r.doseSdGy, r.doseGy)}
                         </td>
-                        <td>{fmt(r.bed)}</td>
-                        <td>{d ? `${fmt(d.d2)} / ${fmt(d.d50)} / ${fmt(d.d98)}` : "–"}</td>
+                        <td title={r.bed === undefined ? (r.fit.teffH ? "α/β und Reparatur-T½ für diese Region eintragen (Zeile anklicken)" : "BED nur mit effektiver Halbwertszeit") : undefined}>
+                          {r.bed !== undefined ? fmt(r.bed) : <span className="tool-hint">–</span>}
+                        </td>
+                        <td title={d ? undefined : doseEntry ? "Nur Labelbilder von T1 oder „alle Zeitpunkte“ (die Dosiskarte liegt im Raster von T1)" : "D2/D50/D98 kommen aus der Voxel-Dosiskarte – dort „Dosiskarte berechnen“"}>
+                          {d ? `${fmt(d.d2)} / ${fmt(d.d50)} / ${fmt(d.d98)}` : <span className="tool-hint">{doseEntry ? "nicht auf T1" : "nach Voxelkarte"}</span>}
+                        </td>
                       </tr>
                     );
                   })}
@@ -1116,7 +1136,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
               </InfoText>
             <div className="field-row">
               <label className="field">
-                Niere α/β (Gy)
+                Vorgabe Nieren α/β (Gy)
                 <input type="text" inputMode="decimal" value={setup.bed.alphaBeta} onChange={(e) => set((s) => ({ ...s, bed: { ...s.bed, alphaBeta: numOrUndef(e.target.value) ?? s.bed.alphaBeta } }))} />
               </label>
               <label className="field">
