@@ -32,9 +32,11 @@ import { LabelList } from "./ui/LabelList";
 import { filteredLabels, labelStats } from "./atlas/labelStats";
 import { TumorPanel, type TumorIndication, type TumorMode } from "./ui/TumorPanel";
 import { CtSegCard } from "./ui/CtSegCard";
+import { type SegBenchmarkResult, SegBenchmarkCard } from "./ui/SegBenchmarkCard";
+import { compareLabelMaps } from "./segmentation/metrics";
 import { canonicalName } from "./segmentation/labelMap";
 import type { SegmentProgress } from "./segmentation/infer";
-import { CT_MODELS, type CtSegRun, DEFAULT_CT_MODEL, loadModelMeta, runCtSegmentation } from "./segmentation/ctSegment";
+import { CT_MODELS, type CtModelInfo, type CtSegResult, type CtSegRun, DEFAULT_CT_MODEL, loadModelMeta, runCtSegmentation } from "./segmentation/ctSegment";
 import type { CtSegBackend } from "./workers/ctseg.worker";
 import { type Lesion, type ThresholdMethod, cleanupLesions, lesionStats } from "./tumor/segment";
 import { burdenCsv, splitBurden, tumorBurden } from "./tumor/metrics";
@@ -56,7 +58,7 @@ import { LabelAnalysis, type LabelAnalysisResult } from "./ui/LabelAnalysis";
 import { listZip } from "./core/unzip";
 import { runWarp } from "./normalization/warpRunner";
 import { runResample } from "./resample/runner";
-import { type Interpolation, resampleAtPoints } from "./resample/resample";
+import { type Interpolation, resampleAtPoints, resampleInto } from "./resample/resample";
 import { CoregSettingsForm, type CoregSettings } from "./ui/CoregPanel";
 import { AlignCard, type AlignTab } from "./ui/AlignCard";
 import { similarity } from "./registration/similarity";
@@ -284,6 +286,11 @@ function App() {
   const [ctSegProgress, setCtSegProgress] = useState<SegmentProgress | null>(null);
   const [ctSegStatus, setCtSegStatus] = useState<string | null>(null);
   const [ctSegError, setCtSegError] = useState<string | null>(null);
+  const [benchRunning, setBenchRunning] = useState(false);
+  const [benchProgress, setBenchProgress] = useState<string | null>(null);
+  const [benchResults, setBenchResults] = useState<SegBenchmarkResult[]>([]);
+  const [benchInfo, setBenchInfo] = useState<{ ct: string; reference: string | null } | null>(null);
+  const benchCancel = useRef(false);
   const ctSegRun = useRef<CtSegRun | null>(null);
   // WebGPU only counts with a real adapter (navigator.gpu alone exists in many browsers without one).
   const [webgpuAvailable, setWebgpuAvailable] = useState(false);
@@ -1627,6 +1634,62 @@ function App() {
   }
 
   // ── CT organ segmentation (browser, ONNX) ──
+  /** Adds a segmentation result as label dataset (atlas) of the CT, shown as overlay. */
+  function addCtSegResult(ct: NonNullable<ReturnType<typeof byId>>, r: CtSegResult, model: CtModelInfo) {
+    const g = r.grid.geometry;
+    const vol = new Volume3D(Float32Array.from(r.labels), r.grid.nz, r.grid.ny, r.grid.nx, [g.spacing[2], g.spacing[1], g.spacing[0]], { ...g, frameOfReferenceUid: ct.dataset.current.geometry.frameOfReferenceUid });
+    const labels = new Map(Object.entries(r.meta.labels).filter(([k]) => k !== "0").map(([k, v]) => [Number(k), v.replace(/_/g, " ")]));
+    const d = createDataset(vol, { kind: "reconstruction" }, `CT-Organe · ${ct.dataset.displayName}`);
+    const entry = addDataset({ ...d, atlas: { name: `CT-Organe (${model.short}) · ${ct.dataset.displayName}`, labels, attribution: model.attribution } });
+    updateEntry(entry.id, { matrix: ct.matrix });
+    addOverlay(entry.id);
+  }
+
+  /** Model comparison: every chosen model in turn on one CT; runtime and (with a reference label image) Dice. */
+  async function startSegBenchmark(ctId: string, refId: string | null, modelIds: string[], backend: CtSegBackend, keep: boolean) {
+    const ct = byId(ctId);
+    const ref = refId ? byId(refId) : null;
+    if (!ct || benchRunning || ctSegRunning) return;
+    benchCancel.current = false;
+    setBenchRunning(true);
+    setBenchResults([]);
+    setBenchInfo({ ct: entryLabel(ct), reference: ref ? entryLabel(ref) : null });
+    const results: SegBenchmarkResult[] = [];
+    try {
+      for (const id of modelIds) {
+        if (benchCancel.current) break;
+        const model = CT_MODELS.find((m) => m.id === id)!;
+        const t0 = performance.now();
+        const run = runCtSegmentation(ct.dataset.current, backend, (p) =>
+          setBenchProgress(`${model.label}: ${p.stage}${p.total > 0 && p.stage.startsWith("Inferenz") ? ` · Kachel ${Math.min(p.done + 1, p.total)}/${p.total}` : ""}`), id);
+        ctSegRun.current = run;
+        let res: SegBenchmarkResult;
+        try {
+          const r = await run.promise;
+          res = { modelId: id, seconds: (performance.now() - t0) / 1000, backend: r.backend === "webgpu" ? "WebGPU" : "CPU", structures: new Set(r.labels).size - 1 };
+          if (ref?.dataset.atlas) {
+            setBenchProgress(`${model.label}: Vergleich mit der Referenz …`);
+            await new Promise((ok) => setTimeout(ok, 0));
+            const rv = ref.dataset.current;
+            const pred = resampleInto({ ...r.grid, data: r.labels }, worldToVoxelTransform(r.grid.geometry), rv, "nearest");
+            const sc = compareLabelMaps(pred, r.meta.labels, rv.data, ref.dataset.atlas.labels);
+            res.dice = Object.fromEntries(sc.map((x) => [x.name, x.dice]));
+          }
+          if (keep) addCtSegResult(ct, r, model);
+        } catch (e) {
+          if (e instanceof DOMException && e.name === "AbortError") break;
+          res = { modelId: id, seconds: (performance.now() - t0) / 1000, backend: "", structures: 0, error: e instanceof Error ? e.message : String(e) };
+        }
+        results.push(res);
+        setBenchResults([...results]);
+      }
+    } finally {
+      ctSegRun.current = null;
+      setBenchRunning(false);
+      setBenchProgress(null);
+    }
+  }
+
   function startCtSegmentation(ctId: string, backend: CtSegBackend, modelId: string = DEFAULT_CT_MODEL) {
     const ct = byId(ctId);
     if (!ct || ctSegRunning) return;
@@ -1641,12 +1704,7 @@ function App() {
     run.promise
       .then((r) => {
         const g = r.grid.geometry;
-        const vol = new Volume3D(Float32Array.from(r.labels), r.grid.nz, r.grid.ny, r.grid.nx, [g.spacing[2], g.spacing[1], g.spacing[0]], { ...g, frameOfReferenceUid: ct.dataset.current.geometry.frameOfReferenceUid });
-        const labels = new Map(Object.entries(r.meta.labels).filter(([k]) => k !== "0").map(([k, v]) => [Number(k), v.replace(/_/g, " ")]));
-        const d = createDataset(vol, { kind: "reconstruction" }, `CT-Organe · ${ct.dataset.displayName}`);
-        const entry = addDataset({ ...d, atlas: { name: `CT-Organe (${model.short}) · ${ct.dataset.displayName}`, labels, attribution: model.attribution } });
-        updateEntry(entry.id, { matrix: ct.matrix });
-        addOverlay(entry.id);
+        addCtSegResult(ct, r, model);
         let n = 0;
         for (const v of r.labels) if (v) n++;
         setCtSegStatus(
@@ -3174,6 +3232,19 @@ function App() {
           webgpu={webgpuAvailable}
           onRun={startCtSegmentation}
           onCancel={() => ctSegRun.current?.cancel()}
+        />
+        <SegBenchmarkCard
+          cts={ctEntries.map((e) => ({ id: e.id, label: entryLabel(e) }))}
+          references={entries.filter((e) => e.dataset.atlas).map((e) => ({ id: e.id, label: entryLabel(e) }))}
+          running={benchRunning}
+          progress={benchProgress}
+          results={benchResults}
+          runInfo={benchInfo}
+          onRun={startSegBenchmark}
+          onCancel={() => {
+            benchCancel.current = true;
+            ctSegRun.current?.cancel();
+          }}
         />
         {organEntry?.dataset.atlas && (
           <Card title={<>Regionen · {entryLabel(organEntry)}</>} defaultOpen={false} persistKey="tumor-regions">

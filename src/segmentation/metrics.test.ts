@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { canonicalGroup, canonicalName, labelsByCanonical } from "./labelMap";
-import { compareLabelMaps, dice, surfaceMetrics } from "./metrics";
+import { compareLabelMaps, dice, distanceMap, surfaceMetrics } from "./metrics";
 import { normalizeForModel, transposePatch } from "./preprocess";
 
 const cube = (n: number, lo: number, hi: number) => {
@@ -33,6 +33,15 @@ describe("segmentation metrics", () => {
     expect(s.nsd).toBeGreaterThan(0.5);
     const same = surfaceMetrics(a, a, [20, 20, 20], [1, 1, 1]);
     expect(same).toEqual({ hd95: 0, nsd: 1 });
+  });
+
+  it("distance map is exact Euclidean with anisotropic spacing", () => {
+    const m = new Uint8Array(5 * 4 * 3);
+    m[0] = 1;
+    const d = distanceMap(m, [5, 4, 3], [1, 2, 3]);
+    expect(d[0]).toBe(0);
+    expect(d[4]).toBeCloseTo(4, 9);
+    expect(d[(2 * 4 + 3) * 5 + 4]).toBeCloseTo(Math.hypot(4, 6, 6), 9);
   });
 
   it("compares label maps by canonical names (heart parts vs heart)", () => {

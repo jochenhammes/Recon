@@ -19,6 +19,7 @@ const ALIASES: Record<string, string> = {
   right_adrenal_gland: "adrenal_gland_right",
   left_adrenal_gland: "adrenal_gland_left",
   bladder: "urinary_bladder",
+  arota: "aorta", // typo in the AMOS label table
   gall_bladder: "gallbladder",
   // MOOSE-style names
   kidneys: "kidney",
@@ -36,6 +37,8 @@ export function canonicalName(name: string): string {
 export function canonicalGroup(name: string): string {
   const c = canonicalName(name);
   if (/^lung_/.test(c)) return "lung";
+  if (/^thyroid_(left|right)$/.test(c)) return "thyroid_gland"; // MOOSE: lobes
+  if (/^kidney_cyst_/.test(c)) return c.replace("_cyst", "");
   return c;
 }
 
