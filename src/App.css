@@ -2796,3 +2796,12 @@ tr.focus-row td {
   border-bottom-right-radius: var(--radius);
   margin-left: -1px;
 }
+.dos-lesions {
+  margin: 8px 0;
+}
+.dos-lesions td {
+  white-space: nowrap;
+}
+.dos-lesions select.manual {
+  border-color: var(--accent);
+}

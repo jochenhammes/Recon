@@ -53,6 +53,11 @@ export interface DosimetrySetup {
   regions: Record<string, DosRegionOptions>;
   /** Measured per time point (SPECT id) and region name. */
   measurements: Record<string, Record<string, RegionMeasure & { name: string }>>;
+  /**
+   * Lesions across time points: maximum centroid distance (mm) and manual corrections per time point
+   * (SPECT id → reference lesion label → lesion label of that time point, or null = no partner).
+   */
+  lesionLinks?: { maxMm: number; manual: Record<string, Record<string, number | null>> };
   /** Kidney BED parameters. */
   bed: { alphaBeta: number; repairHalfTimeH: number };
   /** Voxel dose map: integration method and the resulting dataset. */

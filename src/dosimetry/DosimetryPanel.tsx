@@ -18,6 +18,7 @@ import { PhantomCalibration } from "./PhantomCalibration";
 import { TAC_MODEL_LABELS, type TacFit, type TacModel, akaikeWeights, fitTac } from "./tacFit";
 import { type DvhStats, dvh, parseKernel, regionDoses } from "./voxelDose";
 import { plain, runVoxelDose, type VoxelDoseRun } from "./runner";
+import { type Centroid, type LesionMatch, labelCentroids, matchLesions } from "./lesionMatch";
 import { type SessionItem, acquisitionMs, fmtDateTime, groupSessions, hoursPi, studyUidOf } from "./sessions";
 import { type TpCardView, type UnassignedItem, TimePointsCard } from "./TimePointsCard";
 
@@ -183,12 +184,15 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
   // ── Regions ──
   const labelNames = useMemo(() => {
     const names = new Map<string, string>();
+    // Lesion maps of later time points are measured under the names of the linked lesions of T1.
+    const linked = new Set(tps[0]?.lesionSetId ? tps.slice(1).map((t) => t.lesionSetId).filter((id) => id && id !== tps[0].lesionSetId) : []);
     for (const ls of setup.labelSets) {
+      if (linked.has(ls.id)) continue;
       const e = entries.find((x) => x.id === ls.id);
       for (const n of e?.dataset.atlas?.labels.values() ?? []) names.set(regionKey(n), n);
     }
     return names;
-  }, [setup.labelSets, entries]);
+  }, [setup.labelSets, entries, tps.map((t) => t.lesionSetId).join()]); // eslint-disable-line react-hooks/exhaustive-deps
   const regionOpts = (key: string): DosRegionOptions =>
     setup.regions[key] ?? { enabled: DEFAULT_ORGANS.includes(key) || key.startsWith("läsion"), model: "auto", recovery: key.startsWith("läsion") };
   const setRegion = (key: string, patch: Partial<DosRegionOptions>) => set((s) => ({ ...s, regions: { ...s.regions, [key]: { ...regionOpts(key), ...patch } } }));
@@ -217,6 +221,48 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
     }
     return out;
   }, [labelNames, setup, tpViews.map((t) => `${t.spectId}:${t.tH}`).join(), energy, nuclide, profile]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Lesions across time points (centroids in the registered world, optimal pairing) ──
+  const maxMm = setup.lesionLinks?.maxMm ?? 20;
+  const refLesionEntry = byId(tps[0]?.lesionSetId);
+  const lesionKey = [refLesionEntry?.id, ...tps.map((t) => `${t.spectId}:${t.lesionSetId}:${byId(t.lesionSetId)?.matrix.join(",")}`), byId(tps[0]?.lesionSetId)?.matrix.join(","), maxMm].join("|");
+  const autoLinks = useMemo(() => {
+    const out = new Map<string, { matches: LesionMatch[]; other: Map<number, Centroid> }>();
+    if (!refLesionEntry?.dataset.atlas || tps.length < 2) return out;
+    const ref = labelCentroids(place(refLesionEntry));
+    for (const tp of tps.slice(1)) {
+      const le = byId(tp.lesionSetId);
+      if (!le || le.id === refLesionEntry.id) continue;
+      const other = labelCentroids(place(le));
+      out.set(tp.spectId, { matches: matchLesions(ref, other, maxMm), other });
+    }
+    return out;
+  }, [lesionKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** Per later time point: its lesion label → name of the linked reference lesion (auto, manually corrected). */
+  const lesionLinks = useMemo(() => {
+    const byTp = new Map<string, Map<number, string>>();
+    const rows = new Map<string, Map<number, { otherId: number | null; distMm?: number; manual: boolean }>>();
+    const refAtlas = refLesionEntry?.dataset.atlas;
+    if (!refAtlas) return { byTp, rows };
+    for (const [spectId, { matches, other }] of autoLinks) {
+      const manual = setup.lesionLinks?.manual[spectId] ?? {};
+      const m = new Map<number, string>(), r = new Map<number, { otherId: number | null; distMm?: number; manual: boolean }>();
+      for (const x of matches) {
+        const isManual = String(x.refId) in manual;
+        const otherId = isManual ? manual[String(x.refId)] : x.otherId;
+        let distMm = x.distMm;
+        if (isManual && otherId !== null) {
+          const a = labelCentroids(place(refLesionEntry!), new Set([x.refId])).get(x.refId), b = other.get(otherId);
+          distMm = a && b ? Math.hypot(a.center[0] - b.center[0], a.center[1] - b.center[1], a.center[2] - b.center[2]) : undefined;
+        }
+        r.set(x.refId, { otherId, distMm, manual: isManual });
+        if (otherId !== null && !m.has(otherId)) m.set(otherId, refAtlas.labels.get(x.refId) ?? `Läsion ${x.refId}`);
+      }
+      byTp.set(spectId, m);
+      rows.set(spectId, r);
+    }
+    return { byTp, rows };
+  }, [autoLinks, setup.lesionLinks]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Actions ──
   type TpPatch = Partial<DosimetrySetup["timePoints"][number]>;
@@ -367,11 +413,17 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
           const le = byId(ls.id);
           const atlas = le?.dataset.atlas;
           if (!le || !atlas) continue;
-          const only = new Set([...atlas.labels].filter(([, name]) => enabledKeys.has(regionKey(name)) && !res[regionKey(name)]).map(([id]) => id));
+          // Lesion map of a later time point: names of the linked reference lesions (unlinked lesions are not measured).
+          const link = ls.id === tps.find((t) => t.spectId === tp.spectId)?.lesionSetId ? lesionLinks.byTp.get(tp.spectId) : undefined;
+          const nameOf = (id: number) => (link ? link.get(id) : (atlas.labels.get(id) ?? String(id)));
+          const only = new Set([...atlas.labels.keys()].filter((id) => {
+            const name = nameOf(id);
+            return !!name && enabledKeys.has(regionKey(name)) && !res[regionKey(name)];
+          }));
           if (!only.size) continue;
           const m = measureRegions(place(le), place(spect), tp.mbqPerCount, ct ? place(ct) : undefined, only);
           for (const [id, r] of m) {
-            const name = atlas.labels.get(id) ?? String(id);
+            const name = nameOf(id)!;
             res[regionKey(name)] = { ...r, name };
           }
         }
@@ -760,6 +812,69 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                 </label>
               );
             })}
+          </div>
+        )}
+        {lesionLinks.rows.size > 0 && refLesionEntry?.dataset.atlas && (
+          <div className="dos-lesions">
+            <div className="field-row">
+              <InfoText details={`Läsionsbilder je Zeitpunkt werden über die Schwerpunkte im registrierten Raum einander zugeordnet (optimale Paarung, höchstens ${maxMm} mm Abstand). Gemessen wird unter dem Namen der Läsion von T1; Läsionen ohne Partner zählen nicht. Zuordnung per Auswahl korrigierbar. Vorher „Zeitpunkte registrieren“.`}>
+                Läsionen über Zeitpunkte
+              </InfoText>
+              <label className="field">
+                max. Abstand (mm)
+                <input type="text" inputMode="decimal" value={maxMm} onChange={(e) => set((s) => ({ ...s, lesionLinks: { manual: s.lesionLinks?.manual ?? {}, maxMm: numOrUndef(e.target.value) ?? 20 } }))} />
+              </label>
+            </div>
+            {tps.slice(1).some((t) => !t.registered && t.lesionSetId) && <p className="tool-hint tool-warning">Nicht alle Zeitpunkte sind registriert – Abstände sind dann nicht aussagekräftig.</p>}
+            <table className="region-table">
+              <thead>
+                <tr>
+                  <th>T1</th>
+                  {[...lesionLinks.rows.keys()].map((id) => (
+                    <th key={id}>T{tps.findIndex((t) => t.spectId === id) + 1}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[...refLesionEntry.dataset.atlas.labels].map(([refId, refName]) => (
+                  <tr key={refId}>
+                    <td>{refName}</td>
+                    {[...lesionLinks.rows].map(([spectId, rows]) => {
+                      const r = rows.get(refId);
+                      const otherAtlas = byId(tps.find((t) => t.spectId === spectId)?.lesionSetId)?.dataset.atlas;
+                      return (
+                        <td key={spectId}>
+                          <select
+                            className={`inline-select${r?.manual ? " manual" : ""}`}
+                            value={r?.otherId ?? ""}
+                            title={r?.manual ? "manuell zugeordnet" : "automatisch"}
+                            onChange={(e) =>
+                              set((s) => {
+                                const links = s.lesionLinks ?? { maxMm, manual: {} };
+                                return { ...s, lesionLinks: { ...links, manual: { ...links.manual, [spectId]: { ...(links.manual[spectId] ?? {}), [String(refId)]: e.target.value ? Number(e.target.value) : null } } } };
+                              })
+                            }
+                          >
+                            <option value="">–</option>
+                            {[...(otherAtlas?.labels ?? [])].map(([id, name]) => (
+                              <option key={id} value={id}>
+                                {name}
+                              </option>
+                            ))}
+                          </select>
+                          {r?.distMm !== undefined && <small> {Math.round(r.distMm)} mm</small>}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {Object.keys(setup.lesionLinks?.manual ?? {}).length > 0 && (
+              <button className="link-btn" onClick={() => set((s) => ({ ...s, lesionLinks: { maxMm, manual: {} } }))}>
+                Manuelle Zuordnungen zurücksetzen
+              </button>
+            )}
           </div>
         )}
         <button className="primary-btn" disabled={!!busy || !tpViews.length || !setup.labelSets.length || !allCalibrated} onClick={() => void measure()}>
