@@ -30,7 +30,7 @@ export const CT_MODELS: CtModelInfo[] = [
     id: "totalseg-organs-1.5mm",
     dir: "totalseg-organs-1.5mm",
     label: "TotalSegmentator Organe (1,5 mm)",
-    info: "24 Organe, feines Raster · nnU-Net · langsam, WebGPU empfohlen",
+    info: "24 Organe, feines Raster · nnU-Net · für Rumpf-/Bauch-CT, langsam, WebGPU empfohlen",
     license: "Apache-2.0",
     sizeMb: 125,
     short: "TotalSegmentator 1,5 mm",
@@ -112,6 +112,26 @@ export interface CtSegRun {
   cancel: () => void;
 }
 
+/** Working memory of the segmentation per voxel of the model grid: CT (4 B) + top-k accumulator (4 × 5 B) + labels. */
+export const BYTES_PER_VOXEL = 25;
+/** Upper limit of the working memory; above it browsers abort with "Array buffer allocation failed". */
+export const MAX_SEGMENTATION_BYTES = 1.6e9;
+
+/** Whether the model grid of a CT fits into the browser's memory (with a message naming the alternative if not). */
+export function segmentationMemory(grid: { nx: number; ny: number; nz: number }, spacingMm: number): { ok: boolean; bytes: number; message: string } {
+  const bytes = grid.nx * grid.ny * grid.nz * BYTES_PER_VOXEL;
+  const ok = bytes <= MAX_SEGMENTATION_BYTES;
+  const lengthCm = Math.round((grid.nz * spacingMm) / 10);
+  return {
+    ok,
+    bytes,
+    message: ok
+      ? ""
+      : `CT zu groß für das ${String(spacingMm).replace(".", ",")}-mm-Modell (${lengthCm} cm Länge, ≈ ${(bytes / 1e9).toFixed(1)} GB Arbeitsspeicher). ` +
+        "Bitte das 3-mm-Modell verwenden oder das CT auf die Körperregion zuschneiden (Bearbeiten → VOI → Auf VOI zuschneiden).",
+  };
+}
+
 /** Watchdog limit for one WebGPU tile: the first includes shader compilation, later ones are ~uniform. */
 export function tileTimeLimitSec(done: number, elapsedSec: number): number {
   if (done === 0) return 15 * 60;
@@ -136,8 +156,11 @@ export function runCtSegmentation(ct: Volume3D, backend: CtSegBackend, onProgres
       const model = await loadModelBytes(meta, (l, t) => onProgress({ done: l, total: t, stage: `Modell laden (${(l / 1e6).toFixed(0)} / ${(t / 1e6).toFixed(0)} MB)` }), modelId);
       if (cancelled) return;
       const grid = rasGrid(ct, meta.spacing[0]);
-      onProgress({ done: 0, total: 1, stage: "CT auf 3 mm umrechnen" });
-      const data = await runResample(ct, worldToVoxelTransform(ct.geometry), grid, "linear", (f) => onProgress({ done: f, total: 1, stage: "CT auf 3 mm umrechnen" }));
+      const check = segmentationMemory(grid, meta.spacing[0]);
+      if (!check.ok) throw new Error(check.message);
+      const mm = meta.spacing[0].toString().replace(".", ",");
+      onProgress({ done: 0, total: 1, stage: `CT auf ${mm} mm umrechnen` });
+      const data = await runResample(ct, worldToVoxelTransform(ct.geometry), grid, "linear", (f) => onProgress({ done: f, total: 1, stage: `CT auf ${mm} mm umrechnen` }));
       const bodyThreshold = normalizeForModel(data, meta.normalization);
       if (cancelled) return;
 

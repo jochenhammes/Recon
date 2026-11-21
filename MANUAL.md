@@ -516,6 +516,8 @@ Zerfallsdaten).
    - **TotalSegmentator „total“ 3 mm** (Standard, ≈ 66 MB): 117 Strukturen – Organe, Knochen, Gefäße, Muskeln.
    - **TotalSegmentator Organe 1,5 mm** (≈ 125 MB): 24 Organe auf feinerem Raster, etwas genauer (v. a. Nebennieren,
      Pankreas), etwa dreifache Rechenzeit – mit WebGPU empfohlen.
+     Für Ganzkörper-CTs reicht der Browser-Speicher meist nicht (Meldung mit Arbeitsspeicher-Bedarf): dann das 3-mm-Modell
+     nehmen oder das CT vorher auf die Region zuschneiden (*Bearbeiten → VOI → Auf VOI zuschneiden*).
    - Beim ersten Mal wird das Modell geladen und im Browser gespeichert.
    - Mit WebGPU (Chrome/Edge) läuft es auf der Grafikkarte, sonst auf der CPU (Hinweis in Gelb).
    - Fortschritt: *Kachel i/N · vergangen · noch ca.*; die erste Kachel dauert länger. *Abbrechen* jederzeit.

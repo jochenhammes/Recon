@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { canonicalGroup, canonicalName, labelsByCanonical } from "./labelMap";
 import { compareLabelMaps, dice, distanceMap, surfaceMetrics } from "./metrics";
 import { normalizeForModel, transposePatch } from "./preprocess";
+import { segmentationMemory } from "./ctSegment";
 
 const cube = (n: number, lo: number, hi: number) => {
   const m = new Uint8Array(n * n * n);
@@ -82,5 +83,15 @@ describe("model input preparation", () => {
     // element (x=1, y=2, z=3) of channel 0: zyx index (3*3+2)*2+1 = 23, xyz index (1*3+2)*4+3 = 23 by coincidence; check another
     expect(xyz[(1 * 3 + 0) * 4 + 2]).toBe(src[(2 * 3 + 0) * 2 + 1]);
     expect(Array.from(transposePatch(xyz, dims, 2, false))).toEqual(Array.from(src));
+  });
+});
+
+describe("segmentation memory check", () => {
+  it("accepts a whole-body CT at 3 mm and an abdomen at 1.5 mm, rejects a whole-body CT at 1.5 mm", () => {
+    expect(segmentationMemory({ nx: 167, ny: 167, nz: 600 }, 3).ok).toBe(true);
+    expect(segmentationMemory({ nx: 300, ny: 300, nz: 300 }, 1.5).ok).toBe(true);
+    const wb = segmentationMemory({ nx: 333, ny: 333, nz: 1200 }, 1.5);
+    expect(wb.ok).toBe(false);
+    expect(wb.message).toMatch(/180 cm.*3-mm-Modell/);
   });
 });
