@@ -519,7 +519,8 @@ Zerfallsdaten).
      Für Ganzkörper-CTs reicht der Browser-Speicher meist nicht (Meldung mit Arbeitsspeicher-Bedarf): dann das 3-mm-Modell
      nehmen oder das CT vorher auf die Region zuschneiden (*Bearbeiten → VOI → Auf VOI zuschneiden*).
    - Beim ersten Mal wird das Modell geladen und im Browser gespeichert.
-   - Mit WebGPU (Chrome/Edge) läuft es auf der Grafikkarte, sonst auf der CPU (Hinweis in Gelb).
+   - Mit WebGPU (Chrome/Edge) läuft es auf der Grafikkarte, sonst auf der CPU (Hinweis in Gelb). Auf dem Mac
+     (Apple Silicon) ist die CPU mit allen Kernen schneller als WebGPU – *Automatisch* wählt dort die CPU.
    - Fortschritt: *Kachel i/N · vergangen · noch ca.*; die erste Kachel dauert länger. *Abbrechen* jederzeit.
 3. Ergebnis: ein Label-Datensatz *CT-Organe* mit bis zu 117 Strukturen (Organe, Knochen, Gefäße, Muskeln) als Overlay.
 

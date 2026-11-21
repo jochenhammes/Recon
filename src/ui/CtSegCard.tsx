@@ -26,6 +26,8 @@ const fmtTime = (sec: number) => {
 const BACKEND_KEY = "recon-studio-ctseg-backend";
 const MODEL_KEY = "recon-studio-ctseg-model";
 const firefox = typeof navigator !== "undefined" && /firefox/i.test(navigator.userAgent);
+/** On Macs (Apple silicon) the multi-threaded CPU is faster than WebGPU for these models (Safari and Chrome). */
+const mac = typeof navigator !== "undefined" && /Macintosh|Mac OS X/i.test(navigator.userAgent);
 
 
 /** Whole-body CT organ segmentation in the browser (selectable ONNX models, default TotalSegmentator "total" 3 mm). */
@@ -76,7 +78,7 @@ export function CtSegCard(props: CtSegCardProps) {
   const inference = p?.stage.startsWith("Inferenz") ? inferenceEstimate(p, now) : null;
   const pct = inference ? 100 * inference.fraction : p && p.total > 0 ? (100 * p.done) / p.total : 3;
   const slow = inference && p && inference.avg && inference.since > 3 * inference.avg;
-  const autoText = props.webgpu ? (firefox ? "Automatisch (Firefox: CPU)" : "Automatisch (WebGPU)") : "Automatisch (CPU)";
+  const autoText = props.webgpu ? (firefox ? "Automatisch (Firefox: CPU)" : mac ? "Automatisch (Mac: CPU)" : "Automatisch (WebGPU)") : "Automatisch (CPU)";
   return (
     <Card title={<>CT-Organsegmentierung</>} info={
           <>
@@ -89,7 +91,7 @@ export function CtSegCard(props: CtSegCardProps) {
               <b>TotalSegmentator Organe 1,5 mm</b> (24 Organe, etwas genauer, vor allem bei kleinen Organen; etwa 3× Rechenzeit, WebGPU
               empfohlen). Vergleich auf Expertendaten (AMOS): mittlerer Dice 0,86 statt 0,83.
             </p>
-            <p>WebGPU ist meist deutlich schneller. Hängt WebGPU oder meldet einen Fehler, wird automatisch auf der CPU weitergerechnet.</p>
+            <p>WebGPU ist auf PCs mit Grafikkarte meist deutlich schneller; auf dem Mac (Apple Silicon) ist die CPU mit allen Kernen schneller, „Automatisch“ nutzt dort die CPU. Hängt WebGPU oder meldet einen Fehler, wird automatisch auf der CPU weitergerechnet.</p>
             <p>
               Quellen: TotalSegmentator (Wasserthal et al., Radiology: AI 2023), Apache-2.0; nnU-Net (Isensee et al. 2021). Nicht für diagnostische Zwecke zertifiziert.
             </p>

@@ -55,6 +55,8 @@ self.onmessage = async (event: MessageEvent<CtSegJob | { type: "stop" }>) => {
         new Promise((r) => setTimeout(() => r(null), 10000)),
       ]));
     const firefox = /firefox/i.test(navigator.userAgent);
+    // Apple silicon: the multi-threaded CPU path beats ONNX Runtime's 3-D convolutions on WebGPU (Safari and Chrome).
+    const mac = /Macintosh|Mac OS X/i.test(navigator.userAgent);
     const [pz, py, px] = msg.patch;
     let note = msg.note ?? "";
 
@@ -133,7 +135,7 @@ self.onmessage = async (event: MessageEvent<CtSegJob | { type: "stop" }>) => {
     else if (!hasGpu) {
       backend = "wasm";
       if (msg.backend === "webgpu") note = "WebGPU in diesem Browser nicht verfügbar – CPU verwendet";
-    } else backend = msg.backend === "auto" && firefox ? "wasm" : "webgpu";
+    } else backend = msg.backend === "auto" && (firefox || mac) ? "wasm" : "webgpu";
 
     let labels: Uint8Array;
     try {
