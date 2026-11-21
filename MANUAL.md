@@ -512,8 +512,11 @@ Zerfallsdaten).
 ![Segmentierung läuft](docs/images/20-ct-segmentierung-laeuft.jpg)
 
 1. CT laden, Bereich **Segmentierung & MTV** öffnen.
-2. Karte **CT-Organsegmentierung**: CT wählen → **Organe segmentieren**.
-   - Beim ersten Mal wird das Modell (≈ 66 MB) geladen und im Browser gespeichert.
+2. Karte **CT-Organsegmentierung**: CT und **Modell** wählen → **Organe segmentieren**.
+   - **TotalSegmentator „total“ 3 mm** (Standard, ≈ 66 MB): 117 Strukturen – Organe, Knochen, Gefäße, Muskeln.
+   - **TotalSegmentator Organe 1,5 mm** (≈ 125 MB): 24 Organe auf feinerem Raster, etwas genauer (v. a. Nebennieren,
+     Pankreas), etwa dreifache Rechenzeit – mit WebGPU empfohlen.
+   - Beim ersten Mal wird das Modell geladen und im Browser gespeichert.
    - Mit WebGPU (Chrome/Edge) läuft es auf der Grafikkarte, sonst auf der CPU (Hinweis in Gelb).
    - Fortschritt: *Kachel i/N · vergangen · noch ca.*; die erste Kachel dauert länger. *Abbrechen* jederzeit.
 3. Ergebnis: ein Label-Datensatz *CT-Organe* mit bis zu 117 Strukturen (Organe, Knochen, Gefäße, Muskeln) als Overlay.
@@ -524,6 +527,21 @@ Zerfallsdaten).
    setzt das Fadenkreuz hinein; Volumen je Region in ml.
 5. Die Organe stehen danach in Segmentierung & MTV und Label-Analyse zur Verfügung und lassen sich als NIfTI exportieren
    (Regionsnamen bleiben beim Wiederladen erhalten).
+
+### Modellvergleich
+
+Karte **Modellvergleich** (aufklappen) im selben Bereich: CT wählen, optional ein **Referenz-Labelbild** (z. B. eine
+manuelle Segmentierung, als NIfTI mit Regionentabelle geladen), Modelle anhaken → **vergleichen**.
+
+- Die Modelle laufen nacheinander; die Tabelle zeigt Laufzeit (WebGPU/CPU) und Zahl der Strukturen.
+- Mit Referenz zusätzlich der **Dice** je Struktur und der Mittelwert über die Strukturen, die alle Modelle und die
+  Referenz enthalten. Strukturen werden über ihre Namen zugeordnet („right kidney“ → kidney_right, Herzteile → Herz usw.).
+- Die Referenz muss im Koordinatensystem des CTs liegen. *Ergebnisse als Label-Datensätze behalten* fügt die
+  Segmentierungen als Datensätze hinzu. ⤢ vergrößert die Tabelle, CSV-Export.
+
+Ergebnisse auf öffentlichen Expertendaten (AMOS 2022) und das Werkzeug zum Nachrechnen:
+`tools/ctseg-benchmark/RESULTS.md`. Geprüft, aber nicht aufgenommen: MONAI SegResNet (unzuverlässig: in 2 von 10 Fällen
+fast vollständiges Versagen) und MOOSE clin_ct_organs (vergleichbar mit TotalSegmentator 1,5 mm).
 
 ---
 

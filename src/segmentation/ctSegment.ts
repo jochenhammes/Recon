@@ -26,6 +26,16 @@ export interface CtModelInfo {
 
 export const CT_MODELS: CtModelInfo[] = [
   { id: "totalseg-3mm", dir: "totalseg-total-3mm", label: "TotalSegmentator total (3 mm)", info: "117 Strukturen · nnU-Net", license: "Apache-2.0", sizeMb: 66, short: "TotalSegmentator", attribution: "TotalSegmentator total 3 mm (Wasserthal et al. 2023), Apache-2.0" },
+  {
+    id: "totalseg-organs-1.5mm",
+    dir: "totalseg-organs-1.5mm",
+    label: "TotalSegmentator Organe (1,5 mm)",
+    info: "24 Organe, feines Raster · nnU-Net · langsam, WebGPU empfohlen",
+    license: "Apache-2.0",
+    sizeMb: 125,
+    short: "TotalSegmentator 1,5 mm",
+    attribution: "TotalSegmentator v2 organs 1.5 mm, Dataset291 (Wasserthal et al. 2023), Apache-2.0",
+  },
 ];
 export const DEFAULT_CT_MODEL = CT_MODELS[0].id;
 

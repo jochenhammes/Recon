@@ -1,0 +1,3 @@
+TotalSegmentator v2 "total" organ sub-model (Dataset291, 1.5 mm, fold 0) – Wasserthal et al., Radiology: AI 2023.
+Weights: https://github.com/wasserth/TotalSegmentator/releases/tag/v2.0.0-weights, Apache License 2.0.
+Converted to ONNX for Recon Studio (ConvTranspose3d as convolution + pixel shuffle; top-3 output head).

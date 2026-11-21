@@ -25,7 +25,7 @@ Alles läuft im Browser; es gibt keinen Server, **die Daten verlassen den Rechne
 | **Centiloid & SUVR: Atlas** | CerebrA (mitgeliefert), AAL3 (ZIP-Download) oder eigener Atlas; regionale Statistik, Referenzregion, SUVR-Tabelle und SUVR-Bild |
 | **Centiloid & SUVR: Centiloid** | Amyloid-PET mit GAAIN-Standard-VOIs (vom Nutzer geladen); MRT-Pipeline (affin) an den GAAIN-Referenzdaten kalibriert (Florbetaben und PiB, Kreuzvalidierung RMSE 4–6 CL), Standardgleichungen für extern normalisierte Daten, eigene Gleichung; PET-only (nicht validiert) |
 | **Kinetik (dynamisches PET)** | Dynamische DICOM-Serien und 4D-NIfTI (BIDS-JSON); Bewegungskorrektur der Frames; Übertragung in den MNI-Raum (über T1); Referenzregion aus Atlas; **Patlak (Ki_ref)** und **SRTM (BP_ND, R1)** regional und als Parameterkarten, Kurven, CSV – nach dem MATLAB-Paket der Arbeitsgruppe ([ghaefner/kinetic-modeling](https://github.com/ghaefner/kinetic-modeling)) |
-| **CT-Organsegmentierung** | TotalSegmentator „total“ (117 Strukturen, 3 mm) direkt im Browser (WebGPU oder CPU); Regionsliste mit Suche, Ein-/Ausblenden und Sprung zur Region |
+| **CT-Organsegmentierung** | TotalSegmentator „total“ (117 Strukturen, 3 mm) oder Organe 1,5 mm (24 Organe, genauer) direkt im Browser (WebGPU oder CPU); Regionsliste mit Suche, Ein-/Ausblenden und Sprung zur Region; Modellvergleich mit Laufzeit und Dice gegen ein Referenz-Labelbild |
 | **Dosimetrie** | Therapie-Dosimetrie aus 1–4 SPECT/CT-Zeitpunkten (Lu-177, Tb-161, I-131, Y-90): Kamera-Profile mit Kalibrierfaktor und Recovery-Koeffizienten, Zeiten aus dem DICOM-Header, Organe/Läsionen aus Labelbildern, Kurvenfit (mono-/biexponentiell, Trapez, Hänscheid/Madsen) mit Unsicherheit, Dosis (lokale Deposition), BED Nieren, Voxel-Dosiskarte mit DVH, optional Dosis-Voxel-Kernel; CSV; Forschungswerkzeug |
 | **Segmentierung & MTV** | CT-Organsegmentierung; Läsionen auf dem PET in SUV: SUV-Schwelle (z. B. 4,0 / 2,5 / PSMA 3), 41 % SUVmax, leberbasiert (PERCIST); TMTV/PSMA-TV, TLG/TL-PSMA, SUVmax/peak/mean, Dmax; automatischer Ausschluss physiologischer Anreicherung über CT-Organe; Knochen/Weichteil; Korrektur per Klick und Pinsel; CSV und Maske |
 | **Analyse** | Übersicht aller Datensätze (Min, Mittel, Median, Max, SD, Varianz); Histogramm; SUV aus dem DICOM-Header; VOI auf allen Datensätzen; **Label-Analyse** (Statistik und Histogramm je Region einer Segmentierung oder eines Atlas) mit CSV-Export von Tabellen und Histogrammen je Label; alle Ergebnistabellen groß über dem Viewer mit Suche, Sortierung und CSV |
@@ -69,6 +69,8 @@ die CT-Segmentierung läuft dort ggf. auf der CPU.
 - `public/atlases/`: CerebrA (Manera et al. 2020, Sci Data 7:237), CC0 1.0, auf das 2-mm-Raster der Vorlage übertragen.
 - `public/models/totalseg-total-3mm/`: TotalSegmentator „total“ 3 mm (Wasserthal et al., Radiology: AI 2023; nnU-Net),
   Apache 2.0, nach ONNX exportiert (`tools/totalseg-onnx/export.py`), siehe `NOTICE.txt`.
+- `public/models/totalseg-organs-1.5mm/`: TotalSegmentator-v2-Organmodell 1,5 mm (Dataset291), Apache 2.0, nach ONNX
+  exportiert (`tools/ctseg-onnx/export_nnunet.py`), siehe `NOTICE.txt`. Modellvergleich auf AMOS: `tools/ctseg-benchmark/`.
 - `public/coi-serviceworker.js`: coi-serviceworker 0.1.7 (G. Zuidhof), MIT (`LICENSE-coi-serviceworker.txt`), angepasst –
   aktiviert Cross-Origin-Isolation für mehrere CPU-Threads auf GitHub Pages.
 - Nicht mitgeliefert: GAAIN-Centiloid-VOIs und -Daten (nur persönliche, nicht-kommerzielle Nutzung), AAL3 (Download von

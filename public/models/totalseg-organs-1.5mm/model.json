@@ -1,0 +1,61 @@
+{
+ "name": "TotalSegmentator organs (1.5 mm, fold 0)",
+ "source": "https://github.com/wasserth/TotalSegmentator (Wasserthal et al., Radiology: AI 2023), weights v2.0.0 Dataset291",
+ "license": "Apache-2.0",
+ "parts": [
+  "model.onnx.part0",
+  "model.onnx.part1"
+ ],
+ "bytes": 124863603,
+ "sha256": "2c045c2e780feb943becd960af7c6a93df85a0be51ff029ee86ea1585d5fb9a9",
+ "patchSize": [
+  128,
+  128,
+  128
+ ],
+ "spacing": [
+  1.5,
+  1.5,
+  1.5
+ ],
+ "axes": "RAS (array z = superior, y = anterior, x = right)",
+ "normalization": {
+  "clip": [
+   -1024.0,
+   276.0
+  ],
+  "mean": -370.00039267657144,
+  "std": 436.5998675471528
+ },
+ "labels": {
+  "0": "background",
+  "1": "spleen",
+  "2": "kidney_right",
+  "3": "kidney_left",
+  "4": "gallbladder",
+  "5": "liver",
+  "6": "stomach",
+  "7": "pancreas",
+  "8": "adrenal_gland_right",
+  "9": "adrenal_gland_left",
+  "10": "lung_upper_lobe_left",
+  "11": "lung_lower_lobe_left",
+  "12": "lung_upper_lobe_right",
+  "13": "lung_middle_lobe_right",
+  "14": "lung_lower_lobe_right",
+  "15": "esophagus",
+  "16": "trachea",
+  "17": "thyroid_gland",
+  "18": "small_bowel",
+  "19": "duodenum",
+  "20": "colon",
+  "21": "urinary_bladder",
+  "22": "prostate",
+  "23": "kidney_cyst_left",
+  "24": "kidney_cyst_right"
+ },
+ "output": {
+  "kind": "topk",
+  "k": 3
+ }
+}
