@@ -1,12 +1,12 @@
 import { Layers } from "lucide-react";
 import { useShallowStable } from "./useShallowStable";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import type { Vec3 } from "../core/geometry";
+import { type Vec3, applyWorldToVoxel, invert3, worldToVoxelTransform } from "../core/geometry";
 import { formatValue } from "../components/format";
 import { compositeLayers } from "./composite";
 import { type GpuDraw, ImageCanvas } from "./ImageCanvas";
 import { GlRenderer } from "./gl/renderer";
-import { mipSource, orientedMip } from "./mip";
+import { mipPick, mipSource, orientedMip } from "./mip";
 import { type ColorLut, LUT_CHOICES, Volume3D, lutGradient, lutTable } from "./volume";
 import {
   type DisplayGrid,
@@ -31,6 +31,8 @@ export interface ViewerProps {
   mipLayerId?: string;
   /** MIP layer given directly (may be hidden in the slices; own color table). */
   mipLayer?: ViewerLayer;
+  /** MIP with its own window (independent of the dataset): right-drag in the MIP changes it here. */
+  onMipWindowChange?: (window: [number, number]) => void;
   cursor: Vec3 | null;
   onCursorChange: (p: Vec3) => void;
   onWindowChange: (layerId: string, window: [number, number]) => void;
@@ -272,8 +274,16 @@ export function Viewer(props: ViewerProps) {
         layer={mipLayer}
         transform={transforms.mip}
         onTransformChange={(t) => setTransform("mip", t)}
-        onWindowDrag={(dx, dy) => dragWindow(dx, dy, mipLayer)}
+        onWindowDrag={(dx, dy) => {
+          if (!props.onMipWindowChange || !mipLayer) return dragWindow(dx, dy, mipLayer);
+          const [lo, hi] = mipLayer.display.window;
+          const step = Math.max(hi - lo, 1e-6) / 200;
+          const width = Math.max(hi - lo + dx * step, 1e-6);
+          const level = (lo + hi) / 2 - dy * step;
+          props.onMipWindowChange([level - width / 2, level + width / 2]);
+        }}
         onDoubleClick={() => toggleMaximize("mip")}
+        onCursorChange={props.onCursorChange}
       />
     ) : (
       <PlaneView
@@ -568,13 +578,15 @@ function PlaneView(props: PlaneViewProps) {
 
 interface MipViewProps {
   layer: ViewerLayer | undefined;
+  /** Click: crosshair to the hottest voxel along the clicked ray (sets the axial slice of the click). */
+  onCursorChange: (p: Vec3) => void;
   transform: ViewTransform;
   onTransformChange: (t: ViewTransform) => void;
   onWindowDrag: (dx: number, dy: number) => void;
   onDoubleClick: () => void;
 }
 
-function MipView({ layer, transform, onTransformChange, onWindowDrag, onDoubleClick }: MipViewProps) {
+function MipView({ layer, transform, onTransformChange, onWindowDrag, onDoubleClick, onCursorChange }: MipViewProps) {
   const [azimuth, setAzimuth] = useState(0);
   const [rotating, setRotating] = useState(false);
 
@@ -666,6 +678,20 @@ function MipView({ layer, transform, onTransformChange, onWindowDrag, onDoubleCl
       }}
       onWindowDrag={onWindowDrag}
       onDoubleClick={onDoubleClick}
+      onPoint={(u, v) => {
+        if (!(volume instanceof Volume3D) || !layer) return;
+        setRotating(false);
+        const native = mipPick(volume, deg, u, v);
+        if (!native) return;
+        // Native patient coordinate → voxel of the layer volume → reference world (inverse of the layer placement).
+        const vox = applyWorldToVoxel(worldToVoxelTransform(volume.geometry), native);
+        const inv = invert3(layer.w2v.m);
+        onCursorChange([
+          inv[0] * vox[0] + inv[1] * vox[1] + inv[2] * vox[2] + layer.w2v.origin[0],
+          inv[3] * vox[0] + inv[4] * vox[1] + inv[5] * vox[2] + layer.w2v.origin[1],
+          inv[6] * vox[0] + inv[7] * vox[1] + inv[8] * vox[2] + layer.w2v.origin[2],
+        ]);
+      }}
     />
   );
 }

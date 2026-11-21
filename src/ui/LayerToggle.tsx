@@ -48,6 +48,14 @@ export interface MipSettings {
   lut: ColorLut | null;
   onChange: (id: string | null) => void;
   onLutChange: (lut: ColorLut | null) => void;
+  /** Own window of the MIP (null = like the dataset), its effective value and the value range for the sliders. */
+  window: [number, number] | null;
+  effectiveWindow: [number, number];
+  range: [number, number];
+  /** Display factor and unit of the values (e.g. SUV). */
+  scale: number;
+  unit: string;
+  onWindowChange: (w: [number, number] | null) => void;
 }
 
 /** Compact layer list for the viewer: show/hide layers from any tab. */
@@ -153,9 +161,42 @@ export function LayerToggle({
                 </option>
               ))}
             </select>
+            <MipWindow mip={mip} />
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/** Two sliders (minimum, maximum) for the MIP's own window; "wie Datensatz" returns to the dataset's window. */
+function MipWindow({ mip }: { mip: MipSettings }) {
+  const [r0, r1] = mip.range;
+  if (!(r1 > r0)) return null;
+  const [lo, hi] = mip.effectiveWindow;
+  const step = (r1 - r0) / 500;
+  const fmt = (v: number) => Number((v * mip.scale).toPrecision(3)).toLocaleString("de-DE");
+  const set = (a: number, b: number) => mip.onWindowChange([Math.min(a, b - step), Math.max(b, a + step)]);
+  return (
+    <div className="mip-window">
+      <label title="Untergrenze des MIP-Fensters">
+        <span>Min</span>
+        <input type="range" min={r0} max={r1} step={step} value={Math.max(r0, Math.min(r1, lo))} onChange={(e) => set(Number(e.target.value), hi)} aria-label="MIP-Fenster Minimum" />
+        <em>{fmt(lo)}</em>
+      </label>
+      <label title="Obergrenze des MIP-Fensters">
+        <span>Max</span>
+        <input type="range" min={r0} max={r1} step={step} value={Math.max(r0, Math.min(r1, hi))} onChange={(e) => set(lo, Number(e.target.value))} aria-label="MIP-Fenster Maximum" />
+        <em>{fmt(hi)}</em>
+      </label>
+      <div className="mip-window-foot">
+        <span>{mip.window ? "eigenes Fenster" : "Fenster wie Datensatz"}{mip.unit ? ` · ${mip.unit}` : ""}</span>
+        {mip.window && (
+          <button className="link-btn" onClick={() => mip.onWindowChange(null)}>
+            wie Datensatz
+          </button>
+        )}
+      </div>
     </div>
   );
 }

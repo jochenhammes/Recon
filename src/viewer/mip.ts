@@ -1,5 +1,5 @@
-import { add, scale } from "../core/geometry";
-import { Volume3D } from "./volume";
+import { type Vec3, add, scale, voxelToWorld } from "../core/geometry";
+import { Volume3D, bilinearSample } from "./volume";
 
 const MAX_IN_PLANE = 160;
 const MAX_SLICES = 400;
@@ -71,4 +71,45 @@ export function orientedMip(vol: Volume3D, azimuthDeg: number): { data: Float32A
   }
   const [sx, , sz] = src.geometry.spacing;
   return { data, width, height, pixelAspect: sz / sx };
+}
+
+/**
+ * Point behind a click in the rotating MIP: image column/row (pixel centres of the oriented image, as from
+ * `orientedMip` or the GPU path) → the voxel with the maximum along that ray. Returns the patient (native world)
+ * coordinate of that voxel, so the viewer can jump to its axial slice and position; null outside the image.
+ */
+export function mipPick(vol: Volume3D, azimuthDeg: number, u: number, v: number): Vec3 | null {
+  const src = mipSource(vol);
+  const width = Math.max(src.nx, src.ny), height = src.nz;
+  const col = Math.round(u), row = Math.round(v);
+  if (col < 0 || row < 0 || col >= width || row >= height) return null;
+  const flipV = src.geometry.axes[2][2] > 0;
+  const flipH = src.geometry.axes[0][0] < 0;
+  const z = flipV ? height - 1 - row : row;
+  const ui = flipH ? width - 1 - col : col;
+  // Same ray as Volume3D.rotatingMip.
+  const theta = (azimuthDeg * Math.PI) / 180;
+  const viewX = Math.sin(theta), viewY = Math.cos(theta), uX = Math.cos(theta), uY = -Math.sin(theta);
+  const cx = (src.nx - 1) / 2, cy = (src.ny - 1) / 2;
+  const radius = Math.sqrt(cx * cx + cy * cy) + 1;
+  const uu = ((ui - (width - 1) / 2) / Math.max(1, width - 1)) * (radius * 2);
+  const steps = Math.ceil(radius * 2);
+  const base = z * src.ny * src.nx;
+  let best = -Infinity, bx = cx + uu * uX, by = cy + uu * uY;
+  for (let s = 0; s <= steps; s++) {
+    const t = -radius + (2 * radius * s) / steps;
+    const x = cx + uu * uX + t * viewX, y = cy + uu * uY + t * viewY;
+    const val = bilinearSample(src.data, base, src.nx, src.ny, x, y);
+    if (val > best) {
+      best = val;
+      bx = x;
+      by = y;
+    }
+  }
+  // No activity along the ray: the middle of the ray (keeps the axial slice of the click without jumping to an edge).
+  if (!(best > 0)) {
+    bx = cx + uu * uX;
+    by = cy + uu * uY;
+  }
+  return voxelToWorld(src.geometry, bx, by, z);
 }

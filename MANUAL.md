@@ -184,8 +184,13 @@ dadurch nicht.
 
 **MIP** (unten in der Ebenen-Liste): Datensatz und Farbtabelle der MIP-Ansicht lassen sich getrennt wählen – auch ein
 Datensatz, der in den Schnittbildern ausgeblendet ist. *Automatisch* nimmt PET, sonst SPECT, sonst CT (eingeblendete
-zuerst), sonst die Basis; *LUT wie Datensatz* übernimmt dessen Farbtabelle. Das Fenster wird mit dem Datensatz geteilt
-(Ziehen in der MIP ändert es). Die Wahl wird in der Projektdatei gespeichert.
+zuerst), sonst die Basis; *LUT wie Datensatz* übernimmt dessen Farbtabelle. Das **Fenster der MIP** ist unabhängig:
+Regler *Min*/*Max* unter der Farbtabelle (oder Rechts-Ziehen in der MIP) ändern nur die MIP, *wie Datensatz* kehrt zum
+Fenster des Datensatzes zurück. Die Wahl wird in der Projektdatei gespeichert.
+
+**Klick in die MIP** setzt das Fadenkreuz auf den hellsten Punkt entlang des angeklickten Sehstrahls – die Schnittbilder
+springen auf diese axiale Schicht und Position (z. B. direkt in eine Läsion). Ohne Aktivität entlang des Strahls bleibt
+die axiale Schicht des Klicks, in der Mitte des Strahls. Die Rotation stoppt dabei.
 
 ![Ebenen-Schnellwahl im Viewer](docs/images/11b-ebenen-overlay.jpg)
 

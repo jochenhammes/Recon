@@ -241,7 +241,8 @@ function App() {
   /** The user chose the value display (SUV / raw) in the viewer: loading data no longer switches it. */
   const unitChosen = useRef<boolean>(readUnitPreference() !== null);
   const [cursor, setCursor] = useState<Vec3 | null>(null);
-  const [mipChoice, setMipChoice] = useState<{ id: string | null; lut: ColorLut | null }>({ id: null, lut: null });
+  /** MIP: dataset, color table and an own window (null = like the dataset), independent of the slice views. */
+  const [mipChoice, setMipChoice] = useState<{ id: string | null; lut: ColorLut | null; window?: [number, number] | null }>({ id: null, lut: null });
   const [landmarkMode, setLandmarkMode] = useState(false);
   const [landmarkView, setLandmarkView] = useState<LandmarkSide>("base");
   /** Open tab of the "Ausrichten" card and the last landmark step, per target dataset. */
@@ -3643,11 +3644,22 @@ function App() {
           title: entryLabel(mipEntry),
           volume: frameVolume(mipEntry),
           w2v: mipW2v,
-          display: { ...mipEntry.display, lut: mipChoice.lut ?? mipEntry.display.lut, visible: true, opacity: 1 },
+          display: { ...mipEntry.display, lut: mipChoice.lut ?? mipEntry.display.lut, window: mipChoice.window ?? mipEntry.display.window, visible: true, opacity: 1 },
           unit: layerUnits.get(mipEntry.id),
         }
       : undefined;
   const mipLayerId = mipLayer?.id;
+  const mipRange = useMemo<[number, number]>(() => {
+    const d = mipEntry?.dataset.current.data;
+    if (!d) return [0, 1];
+    let lo = Infinity, hi = -Infinity;
+    for (const v of d)
+      if (Number.isFinite(v)) {
+        if (v < lo) lo = v;
+        if (v > hi) hi = v;
+      }
+    return Number.isFinite(lo) && hi > lo ? [lo, hi] : [0, 1];
+  }, [mipEntry?.dataset.current]);
 
   // Landmark mode (registration): the viewer shows only the dataset whose landmarks are being set.
   const landmarkSideEntry = landmarkMode && activeTab === "registration" && alignTab === "landmarks" && moving && reference ? (landmarkView === "base" ? reference : moving) : null;
@@ -3738,6 +3750,7 @@ function App() {
           activeLayerId={active && displayedIds.includes(active.id) ? active.id : (reference?.id ?? "")}
           mipLayerId={mipLayerId}
           mipLayer={mipLayer}
+          onMipWindowChange={(w) => setMipChoice((m) => ({ ...m, window: w }))}
           paintMode={(brush.active && voiTool === "brush" && activeTab === "edit" && panelOpen) || (activeTab === "tumor" && panelOpen && !!tumor && (tumorMode === "add" || tumorMode === "erase"))}
           onPaint={activeTab === "tumor" ? tumorPaint : paint}
           cursor={cursor}
@@ -3774,8 +3787,14 @@ function App() {
                     return a ? entryShort(a) : "–";
                   })(),
                   lut: mipChoice.lut,
-                  onChange: (id) => setMipChoice((m) => ({ ...m, id })),
+                  onChange: (id) => setMipChoice((m) => ({ ...m, id, window: null })),
                   onLutChange: (lut) => setMipChoice((m) => ({ ...m, lut })),
+                  window: mipChoice.window ?? null,
+                  effectiveWindow: mipLayer?.display.window ?? [0, 1],
+                  range: mipRange,
+                  scale: mipEntry ? (layerUnits.get(mipEntry.id)?.scale ?? 1) : 1,
+                  unit: mipEntry ? (layerUnits.get(mipEntry.id)?.label ?? "") : "",
+                  onWindowChange: (w) => setMipChoice((m) => ({ ...m, window: w })),
                 }}
                 rows={[
                   ...[...overlays].reverse().map((e) => ({ id: e.id, label: entryShort(e), title: entryLabel(e), lut: e.display.lut, visible: e.display.visible, opacity: e.display.opacity, role: "overlay" as const, timeMs: entryTimes.get(e.id) })),

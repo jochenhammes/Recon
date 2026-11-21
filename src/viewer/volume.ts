@@ -95,7 +95,7 @@ export class Volume3D {
 
 }
 
-function bilinearSample(data: Float32Array, sliceBase: number, nx: number, ny: number, x: number, y: number): number {
+export function bilinearSample(data: Float32Array, sliceBase: number, nx: number, ny: number, x: number, y: number): number {
   if (x < 0 || y < 0 || x > nx - 1 || y > ny - 1) return 0;
   const x0 = Math.floor(x);
   const y0 = Math.floor(y);

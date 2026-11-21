@@ -2921,3 +2921,27 @@ select.dos-unit {
   font-variant-numeric: tabular-nums;
   list-style: none;
 }
+.mip-window {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+  font-size: 11px;
+}
+.mip-window label {
+  display: grid;
+  grid-template-columns: 28px 1fr 52px;
+  align-items: center;
+  gap: 6px;
+}
+.mip-window em {
+  font-style: normal;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-h);
+}
+.mip-window-foot {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-dim);
+}
