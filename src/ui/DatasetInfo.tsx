@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useState } from "react";
 import type { LoadedDataset } from "../dataset/types";
-import { MODALITIES, autoModality, modalityLabel, modalityName, seriesDescription, shortName } from "../dataset/describe";
+import { MODALITIES, acquisitionTime, autoModality, formatAcquisitionTime, modalityLabel, modalityName, seriesDescription, shortName } from "../dataset/describe";
 
 /** Details of a loaded dataset (modality, source, matrix, voxel size, geometry); shown when a list row is expanded. */
 export interface DatasetDetailsProps {
@@ -21,6 +21,7 @@ export function DatasetDetails({ dataset, onModalityChange, onNameChange, origin
   const v = dataset.current;
   const [sx, sy, sz] = v.geometry.spacing;
   const src = dataset.source;
+  const acq = acquisitionTime(dataset);
   const files = src.kind === "dicom" ? `${src.files.length} ${src.files.length === 1 ? "Datei" : "Dateien"}` : src.kind === "nifti" ? "NIfTI" : "Rekonstruktion";
   return (
     <div className="dataset-details">
@@ -58,6 +59,15 @@ export function DatasetDetails({ dataset, onModalityChange, onNameChange, origin
           <>
             <dt>Serie</dt>
             <dd>{seriesDescription(src)}</dd>
+          </>
+        )}
+        {acq && (
+          <>
+            <dt>Aufnahme</dt>
+            <dd className="wrap" title={acq.field === "Acquisition" ? "Aufnahmedatum/-zeit aus dem DICOM-Header" : `Kein Aufnahmezeitpunkt im Header – ${{ Series: "Seriendatum/-zeit", Content: "Erstellungsdatum/-zeit", Study: "Studiendatum/-zeit" }[acq.field]} angezeigt`}>
+              {formatAcquisitionTime(acq)}
+              {acq.field !== "Acquisition" && <span className="row-note"> ({{ Series: "Serie", Content: "Erstellung", Study: "Studie" }[acq.field]})</span>}
+            </dd>
           </>
         )}
         <dt>Umfang</dt>

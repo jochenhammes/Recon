@@ -72,7 +72,7 @@ import { LayerSettings, type WindowPreset } from "./ui/ViewSettingsPanel";
 import { type RegRow, type RegStatusKind, RegistrationSetup } from "./ui/RegistrationSetup";
 import { shortLabel } from "./core/shortLabel";
 import { RegistrationPanel } from "./ui/RegistrationPanel";
-import { CT_PRESETS, datasetModality, defaultDisplay, isAnatomical, middleEllipsis, modalityLabel, rawUnitLabel, shortName, suvForSource, unitSource } from "./dataset/describe";
+import { CT_PRESETS, acquisitionTime, datasetModality, formatAcquisitionTime, defaultDisplay, isAnatomical, middleEllipsis, modalityLabel, rawUnitLabel, shortName, suvForSource, unitSource } from "./dataset/describe";
 import { BUNDLED_MNI, BUNDLED_PET_TEMPLATES, SPM_TEMPLATE_ATTRIBUTION, SPM_TEMPLATE_LICENSE, type TemplateKind, loadBundledMni, loadBundledPetTemplate, loadPetTemplate } from "./normalization/templates";
 import { AnalysisPanel } from "./components/AnalysisPanel";
 import { type BrushState, FilterSection, type GeometryAction, GeometrySection, type GeometryTarget, HistorySection, ValueSection, VoiSection, type VoiTool } from "./components/EditTools";
@@ -2618,6 +2618,7 @@ function App() {
               isShown: e.id === reference?.id || (isOverlay && e.display.visible),
               isActive: e.id === active?.id,
               notes: [...(e.dataset.dynamic ? ["dyn."] : []), ...(e.dataset.edits.length ? ["bearb."] : [])],
+              date: ((a) => a && { short: formatAcquisitionTime(a, true), full: formatAcquisitionTime(a) })(acquisitionTime(e.dataset)),
             };
           })}
           details={(id) => {

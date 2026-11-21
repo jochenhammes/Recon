@@ -15,6 +15,8 @@ export interface DatasetRow {
   isActive: boolean;
   /** Short extra info, e.g. "bearbeitet", "dynamisch". */
   notes: string[];
+  /** Acquisition date/time (short), shown as a second line under the name; full text as tooltip. */
+  date?: { short: string; full: string };
 }
 
 const MOD_CLASS: Record<string, string> = { PT: "mod-pt", NM: "mod-nm", CT: "mod-ct", MR: "mod-mr", Labels: "mod-labels" };
@@ -63,9 +65,16 @@ export function DatasetList({
                 >
                   {!single && <ChevronRight size={14} className="chevron" />}
                   <span className={`mod-badge ${MOD_CLASS[r.modality] ?? "mod-other"}`}>{r.modality}</span>
-                  <span className="dataset-row-name">
-                    {r.tag && <strong>{r.tag}</strong>}
-                    <span>{r.name}</span>
+                  <span className="dataset-row-text">
+                    <span className="dataset-row-name">
+                      {r.tag && <strong>{r.tag}</strong>}
+                      <span>{r.name}</span>
+                    </span>
+                    {r.date && (
+                      <span className="dataset-row-date" title={`Aufnahme: ${r.date.full}`}>
+                        {r.date.short}
+                      </span>
+                    )}
                   </span>
                   {r.isBase && !single && <span className="role-badge reference">Basis</span>}
                   {r.notes.map((n) => (

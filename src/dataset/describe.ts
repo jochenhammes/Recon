@@ -116,6 +116,57 @@ export function seriesDescription(source: VolumeSource): string | undefined {
   return source.files[0].dataSet.string("x0008103e")?.trim() || undefined;
 }
 
+/** Acquisition date/time from the DICOM header (local time as written, no time zone). */
+export interface AcquisitionTime {
+  /** "YYYYMMDD" */
+  date: string;
+  /** "HHMMSS[.ffffff]", if present. */
+  time?: string;
+  /** Which header field it comes from. */
+  field: "Acquisition" | "Series" | "Content" | "Study";
+}
+
+/**
+ * Acquisition date and time of a dataset, if the header has them: AcquisitionDateTime or AcquisitionDate/-Time
+ * (earliest over the files of a series, e.g. per CT slice), else SeriesDate/-Time, ContentDate/-Time, StudyDate/-Time.
+ * Derived datasets (e.g. resampled into a standard space) use their source. NIfTI has no date.
+ */
+export function acquisitionTime(d: Pick<LoadedDataset, "source" | "derivedFrom">): AcquisitionTime | undefined {
+  const src = d.derivedFrom?.source ?? d.source;
+  if (src.kind !== "dicom") return undefined;
+  const str = (ds: { string: (t: string) => string | undefined }, tag: string) => ds.string(tag)?.trim() || undefined;
+  let best: { date: string; time?: string } | undefined;
+  for (const f of src.files) {
+    const dt = str(f.dataSet, "x0008002a");
+    const date = dt?.slice(0, 8) ?? str(f.dataSet, "x00080022");
+    const time = dt && dt.length > 8 ? dt.slice(8).replace(/[+-]\d{4}$/, "") : str(f.dataSet, "x00080032");
+    if (!date || !/^\d{8}$/.test(date)) continue;
+    const key = date + (time ?? "");
+    if (!best || key < best.date + (best.time ?? "")) best = { date, time };
+  }
+  if (best) return { ...best, field: "Acquisition" };
+  const ds = src.files[0].dataSet;
+  for (const [field, dTag, tTag] of [
+    ["Series", "x00080021", "x00080031"],
+    ["Content", "x00080023", "x00080033"],
+    ["Study", "x00080020", "x00080030"],
+  ] as const) {
+    const date = str(ds, dTag);
+    if (date && /^\d{8}$/.test(date)) return { date, time: str(ds, tTag), field };
+  }
+  return undefined;
+}
+
+/** "21.11.2026, 14:32:05" (or "21.11.26 14:32" with `short`); seconds only when present. */
+export function formatAcquisitionTime(a: AcquisitionTime, short = false): string {
+  const d = `${a.date.slice(6, 8)}.${a.date.slice(4, 6)}.${short ? a.date.slice(2, 4) : a.date.slice(0, 4)}`;
+  const t = a.time?.replace(/:/g, "");
+  if (!t || t.length < 4) return d;
+  const hm = `${t.slice(0, 2)}:${t.slice(2, 4)}`;
+  if (short) return `${d} ${hm}`;
+  return `${d}, ${hm}${t.length >= 6 ? `:${t.slice(4, 6)}` : ""} Uhr`;
+}
+
 /** CT window presets (center/width in HU) as [min, max]. */
 export const CT_PRESETS: { label: string; window: [number, number] }[] = [
   { label: "Weichteil", window: [-160, 240] },

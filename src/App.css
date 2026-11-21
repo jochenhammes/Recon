@@ -1922,6 +1922,23 @@ tr.excluded-row td {
 .dataset-list li.expanded .chevron {
   transform: rotate(90deg);
 }
+.dataset-row-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+.dataset-row-date {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.summary-list dd.wrap {
+  white-space: normal;
+  overflow: visible;
+}
 .dataset-row-name {
   flex: 1;
   min-width: 0;

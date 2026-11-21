@@ -91,7 +91,10 @@ Alles wird lokal im Browser berechnet; Daten werden nirgendwohin hochgeladen.
    (`P0815_…nii`, `P0815_…csv`, auch in ZIP-Archiven solcher Dateien) sowie der Projektdatei (`P0815_Recon-Projekt_….recon`); DICOM-Exporte bleiben unverändert. Die ID wird im
    Projekt mitgespeichert.
 4. **Datensatzliste**: eine Zeile je Datensatz mit Modalität (farbig), Schlagwort, Name und *Basis*-Markierung.
-   - Klick auf die Zeile: Details (Bezeichnung, Modalität, Matrix, Voxelgröße, Koordinaten, Dynamik) und Schlagwort.
+   - Klick auf die Zeile: Details (Bezeichnung, Modalität, Aufnahme, Matrix, Voxelgröße, Koordinaten, Dynamik) und Schlagwort.
+   - **Aufnahmedatum und -uhrzeit** stehen klein unter dem Namen und in den Details – aus dem DICOM-Header
+     (Aufnahmezeitpunkt, bei Serien der früheste; fehlt er, Serien-, Erstellungs- oder Studiendatum mit Hinweis).
+     NIfTI-Dateien enthalten kein Datum.
    - 👁 ein-/ausblenden · ✎ **aktiv** setzen – darauf beziehen sich Analyse, Bearbeiten, Header und Export.
    - ⋯: *Als Basis der Ansicht*, *Datensatz entfernen*.
    - **Bezeichnung** ändern (Details): Der Name wird Teil der Exportdateinamen; leer = Originalname (bleibt darunter
