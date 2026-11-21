@@ -36,6 +36,16 @@ export const CT_MODELS: CtModelInfo[] = [
     short: "TotalSegmentator 1,5 mm",
     attribution: "TotalSegmentator v2 organs 1.5 mm, Dataset291 (Wasserthal et al. 2023), Apache-2.0",
   },
+  {
+    id: "moose-organs-1.5mm",
+    dir: "moose-organs-1.5mm",
+    label: "MOOSE Organe (1,5 mm)",
+    info: "19 Organe inkl. Gehirn/Schilddrüse · auf PET/CT-CTs trainiert · für Rumpf-/Bauch-CT, langsam",
+    license: "CC BY 4.0",
+    sizeMb: 122,
+    short: "MOOSE",
+    attribution: "MOOSE 3 clin_ct_organs (Shiyam Sundar et al., J Nucl Med 2022; ENHANCE-PET), CC BY 4.0",
+  },
 ];
 export const DEFAULT_CT_MODEL = CT_MODELS[0].id;
 

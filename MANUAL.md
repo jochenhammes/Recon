@@ -518,6 +518,8 @@ Zerfallsdaten).
      Pankreas), etwa dreifache Rechenzeit – mit WebGPU empfohlen.
      Für Ganzkörper-CTs reicht der Browser-Speicher meist nicht (Meldung mit Arbeitsspeicher-Bedarf): dann das 3-mm-Modell
      nehmen oder das CT vorher auf die Region zuschneiden (*Bearbeiten → VOI → Auf VOI zuschneiden*).
+   - **MOOSE Organe 1,5 mm** (≈ 122 MB, CC BY 4.0): 19 Organe inkl. Gehirn und Schilddrüsenlappen, auf Low-Dose-CTs aus
+     PET/CT trainiert (ENHANCE-PET); auf AMOS gleichauf mit TotalSegmentator 1,5 mm. Gleiche Speichergrenze.
    - Beim ersten Mal wird das Modell geladen und im Browser gespeichert.
    - Mit WebGPU (Chrome/Edge) läuft es auf der Grafikkarte, sonst auf der CPU (Hinweis in Gelb). Auf dem Mac
      (Apple Silicon) ist die CPU mit allen Kernen schneller als WebGPU – *Automatisch* wählt dort die CPU.
@@ -544,7 +546,7 @@ manuelle Segmentierung, als NIfTI mit Regionentabelle geladen), Modelle anhaken 
 
 Ergebnisse auf öffentlichen Expertendaten (AMOS 2022) und das Werkzeug zum Nachrechnen:
 `tools/ctseg-benchmark/RESULTS.md`. Geprüft, aber nicht aufgenommen: MONAI SegResNet (unzuverlässig: in 2 von 10 Fällen
-fast vollständiges Versagen) und MOOSE clin_ct_organs (vergleichbar mit TotalSegmentator 1,5 mm).
+fast vollständiges Versagen).
 
 ---
 

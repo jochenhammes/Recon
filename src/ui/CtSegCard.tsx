@@ -87,13 +87,16 @@ export function CtSegCard(props: CtSegCardProps) {
               ersten Mal geladen und im Browser gespeichert. Ergebnis: Label-Datensatz (Atlas) zum CT.
             </p>
             <p>
-              Modelle: <b>TotalSegmentator „total“ 3 mm</b> (Standard; 117 Strukturen inkl. Knochen, Gefäße, Muskeln) oder{" "}
-              <b>TotalSegmentator Organe 1,5 mm</b> (24 Organe, etwas genauer, vor allem bei kleinen Organen; etwa 3× Rechenzeit, WebGPU
-              empfohlen). Vergleich auf Expertendaten (AMOS): mittlerer Dice 0,86 statt 0,83.
+              Modelle: <b>TotalSegmentator „total“ 3 mm</b> (Standard; 117 Strukturen inkl. Knochen, Gefäße, Muskeln),{" "}
+              <b>TotalSegmentator Organe 1,5 mm</b> (24 Organe, etwas genauer, vor allem bei kleinen Organen) und <b>MOOSE Organe 1,5 mm</b>{" "}
+              (19 Organe inkl. Gehirn und Schilddrüsenlappen; auf Low-Dose-CTs aus PET/CT trainiert, CC BY 4.0). Die 1,5-mm-Modelle brauchen
+              etwa 3× Rechenzeit und passen nur für Rumpf-/Bauch-CTs in den Speicher. Vergleich auf Expertendaten (AMOS, 3 Fälle): mittlerer
+              Dice 0,86 bzw. 0,85 statt 0,83.
             </p>
             <p>WebGPU ist auf PCs mit Grafikkarte meist deutlich schneller; auf dem Mac (Apple Silicon) ist die CPU mit allen Kernen schneller, „Automatisch“ nutzt dort die CPU. Hängt WebGPU oder meldet einen Fehler, wird automatisch auf der CPU weitergerechnet.</p>
             <p>
-              Quellen: TotalSegmentator (Wasserthal et al., Radiology: AI 2023), Apache-2.0; nnU-Net (Isensee et al. 2021). Nicht für diagnostische Zwecke zertifiziert.
+              Quellen: TotalSegmentator (Wasserthal et al., Radiology: AI 2023), Apache-2.0; MOOSE (Shiyam Sundar et al., J Nucl Med 2022), CC BY 4.0;
+              nnU-Net (Isensee et al. 2021). Nicht für diagnostische Zwecke zertifiziert.
             </p>
           </>
         } status={props.running ? { text: "läuft", tone: "run" } : null}>

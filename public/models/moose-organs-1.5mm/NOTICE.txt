@@ -1,0 +1,4 @@
+MOOSE 3 clin_ct_organs (nnU-Net, 1.5 mm, fold "all") – ENHANCE-PET / QIMP, Medical University of Vienna;
+Shiyam Sundar et al., J Nucl Med 2022. https://github.com/ENHANCE-PET/MOOSE
+Model weights: Creative Commons Attribution 4.0 (CC BY 4.0); code Apache 2.0.
+Converted to ONNX for Recon Studio (ConvTranspose3d as convolution + pixel shuffle; top-3 output head).

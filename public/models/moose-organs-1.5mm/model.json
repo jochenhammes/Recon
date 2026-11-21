@@ -1,0 +1,56 @@
+{
+ "name": "MOOSE 3 clin_ct_organs (1.5 mm)",
+ "source": "https://github.com/ENHANCE-PET/MOOSE (Shiyam Sundar et al., J Nucl Med 2022), moosez v3.1.3 clin_ct_organs_ras_07052025",
+ "license": "CC-BY-4.0",
+ "parts": [
+  "model.onnx.part0",
+  "model.onnx.part1"
+ ],
+ "bytes": 122388913,
+ "sha256": "61de2bd1751787104965f27f82318741135ffa0096835d2205d048bb286801e3",
+ "patchSize": [
+  224,
+  96,
+  96
+ ],
+ "spacing": [
+  1.5,
+  1.5,
+  1.5
+ ],
+ "axes": "RAS (array z = superior, y = anterior, x = right)",
+ "normalization": {
+  "clip": [
+   -959.2193603515625,
+   195.26037063598665
+  ],
+  "mean": -300.0020751953125,
+  "std": 406.9311828613281
+ },
+ "labels": {
+  "0": "background",
+  "1": "adrenal_gland_left",
+  "2": "adrenal_gland_right",
+  "3": "bladder",
+  "4": "brain",
+  "5": "gallbladder",
+  "6": "kidney_left",
+  "7": "kidney_right",
+  "8": "liver",
+  "9": "lung_lower_lobe_left",
+  "10": "lung_lower_lobe_right",
+  "11": "lung_middle_lobe_right",
+  "12": "lung_upper_lobe_left",
+  "13": "lung_upper_lobe_right",
+  "14": "pancreas",
+  "15": "spleen",
+  "16": "stomach",
+  "17": "thyroid_left",
+  "18": "thyroid_right",
+  "19": "trachea"
+ },
+ "output": {
+  "kind": "topk",
+  "k": 3
+ }
+}

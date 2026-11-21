@@ -22,6 +22,9 @@ auf das Raster der Referenz übertragen. Dice, NSD (Toleranz 2 mm), HD95 je Orga
 - **1,5-mm-Modelle** sind etwas genauer als TotalSegmentator 3 mm, vor allem bei kleinen Organen (Nebennieren
   +0,08 Dice, Pankreas +0,03); bei Leber, Nieren, Milz +0,01–0,02. Dafür etwa 3× Rechenzeit und weniger Strukturen
   (keine Gefäße, Knochen, Muskeln).
+- **Aufgenommen:** TotalSegmentator 3 mm (Standard), TotalSegmentator Organe 1,5 mm und MOOSE 1,5 mm. MOOSE wurde auf
+  Low-Dose-CTs aus PET/CT trainiert – dem typischen Material von Recon Studio, das AMOS (diagnostische Bauch-CTs) nicht
+  abbildet; mit 3 Fällen ist der Unterschied zu TotalSegmentator 1,5 mm nicht belastbar.
 - **CADS** (167 Strukturen) nicht exportiert: 9 große ResEnc-L-Teilmodelle, Gewichte unter eigener Lizenz mit
   teils nicht-kommerziellen Anteilen.
 
