@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatValue } from "../components/format";
-import { umlaut, withPatientId } from "../core/exportName";
+import { getExportPatientId, umlaut, withPatientId } from "../core/exportName";
 import { csvText, csvWithInfo } from "../core/csv";
 import type { Mat4 } from "../core/transform";
 import type { LoadedDataset } from "../dataset/types";
@@ -18,6 +18,8 @@ import { PhantomCalibration } from "./PhantomCalibration";
 import { TAC_MODEL_LABELS, type TacFit, type TacModel, akaikeWeights, fitTac } from "./tacFit";
 import { type DvhStats, dvh, parseKernel, regionDoses } from "./voxelDose";
 import { plain, runVoxelDose, type VoxelDoseRun } from "./runner";
+import { type DoseUncertainty, doseUncertainty } from "./uncertainty";
+import { buildReport } from "./report";
 import { type Centroid, type LesionMatch, labelCentroids, matchLesions } from "./lesionMatch";
 import { type SessionItem, acquisitionMs, fmtDateTime, groupSessions, hoursPi, studyUidOf } from "./sessions";
 import { type TpCardView, type UnassignedItem, TimePointsCard } from "./TimePointsCard";
@@ -78,6 +80,8 @@ interface RegionRow {
   fit: TacFit;
   doseGy: number;
   doseSdGy?: number;
+  /** Combined uncertainty (fit, calibration, RC, volume). */
+  unc?: DoseUncertainty;
   bed?: number;
 }
 
@@ -214,10 +218,11 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
       const a = pts.map((p) => p.m.activityMBq / rc);
       const fit = fitTac(t, a, opts.model, { physHalfLifeH: halfLifeH, teffH: opts.teffH });
       const doseGy = fit.ok || fit.tia === 0 ? localDepositionDose(fit.tia, energy, massG / 1000) : NaN;
-      const doseSdGy = fit.tiaSd !== undefined ? (doseGy * fit.tiaSd) / fit.tia : undefined;
+      const unc = doseUncertainty({ doseGy, tia: fit.tia, tiaSd: fit.tiaSd, rcApplied: opts.recovery && rc !== 1, inputs: setup.uncertainty });
+      const doseSdGy = unc?.sdGy;
       const kidney = /kidney|niere/i.test(name);
       const bed = kidney && fit.teffH ? bedMono(doseGy, fit.teffH, setup.bed.alphaBeta, setup.bed.repairHalfTimeH) : undefined;
-      out.push({ key, name, opts, t, a, massG, volumeMl, rc, fit, doseGy, doseSdGy, bed });
+      out.push({ key, name, opts, t, a, massG, volumeMl, rc, fit, doseGy, doseSdGy, unc, bed });
     }
     return out;
   }, [labelNames, setup, tpViews.map((t) => `${t.spectId}:${t.tH}`).join(), energy, nuclide, profile]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -570,11 +575,11 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
     const f = (v: number | undefined, d = 4) => (v === undefined || !Number.isFinite(v) ? "" : v.toFixed(d).replace(".", ","));
     const sep = ";";
     const maxTp = Math.max(0, ...rows.map((r) => r.t.length));
-    const head = ["Region", "Volumen_ml", "Masse_g", "RC", ...Array.from({ length: maxTp }, (_, i) => [`t${i + 1}_h`, `A${i + 1}_MBq`]).flat(), "Modell", "Teff_h", "TIA_MBq_h", "TIA_SD", "Dosis_Gy", "Dosis_SD_Gy", "BED_Gy", "Dmean_Voxel_Gy", "D2_Gy", "D50_Gy", "D98_Gy"];
+    const head = ["Region", "Volumen_ml", "Masse_g", "RC", ...Array.from({ length: maxTp }, (_, i) => [`t${i + 1}_h`, `A${i + 1}_MBq`]).flat(), "Modell", "Teff_h", "TIA_MBq_h", "TIA_SD", "Dosis_Gy", "Dosis_SD_Gy", "Unsicherheit_rel_%", "Unsicherheit_Anteile", "BED_Gy", "Dmean_Voxel_Gy", "D2_Gy", "D50_Gy", "D98_Gy"];
     const lines = rows.map((r) => {
       const d = dvhs.get(r.key);
       const pts = Array.from({ length: maxTp }, (_, i) => [f(r.t[i], 2), f(r.a[i])]).flat();
-      return [csvText(r.name), f(r.volumeMl, 2), f(r.massG, 2), f(r.rc, 3), ...pts, csvText(TAC_MODEL_LABELS[r.fit.model]), f(r.fit.teffH, 2), f(r.fit.tia, 2), f(r.fit.tiaSd, 2), f(r.doseGy), f(r.doseSdGy), f(r.bed), f(d?.mean), f(d?.d2), f(d?.d50), f(d?.d98)].join(sep);
+      return [csvText(r.name), f(r.volumeMl, 2), f(r.massG, 2), f(r.rc, 3), ...pts, csvText(TAC_MODEL_LABELS[r.fit.model]), f(r.fit.teffH, 2), f(r.fit.tia, 2), f(r.fit.tiaSd, 2), f(r.doseGy), f(r.doseSdGy), f(r.unc ? r.unc.rel * 100 : undefined, 1), csvText(r.unc ? r.unc.parts.map((p) => `${p.label} ${(p.rel * 100).toFixed(1)} %`).join(", ") : ""), f(r.bed), f(d?.mean), f(d?.d2), f(d?.d50), f(d?.d98)].join(sep);
     });
     const csv = csvWithInfo([head.join(sep), ...lines], [
       ["Nuklid", nuclideId],
@@ -593,6 +598,97 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
     URL.revokeObjectURL(url);
   }
 
+  /** Self-contained HTML report with all intermediate results. */
+  function reportHtml(): string {
+    const views = cardViewsFor();
+    return buildReport({
+      patientId: getExportPatientId() || undefined,
+      created: new Date(),
+      nuclide: nuclideId,
+      halfLife: nuclide?.halfLifeText ?? "",
+      electronKeV: energy,
+      energySource: setup.energyOverride[nuclideId] !== undefined ? "eigener Wert" : (DEFAULT_ENERGIES[nuclideId]?.source ?? ""),
+      calibration: tpViews.every((t) => t.unit === "Bq/ml")
+        ? "quantitative Bilder (Bq/ml), kein Kalibrierfaktor"
+        : profile
+          ? `${profile.name}: ${profile.cpsPerMBq} cps/MBq${profile.collimator ? `, Kollimator ${profile.collimator}` : ""}${profile.window ? `, Fenster ${profile.window}` : ""}${profile.recovery?.length ? `; RC ${profile.recovery.map((r) => `${r.volumeMl} ml → ${r.rc}`).join(", ")}` : ""}${profile.note ? ` (${profile.note})` : ""}`
+          : "fehlt",
+      injection: `${injectionMs ? new Date(injectionMs).toLocaleString("de-DE") : "Zeit fehlt"} · ${injectedMBq !== undefined ? `${injectedMBq} MBq` : "Aktivität fehlt"}`,
+      timePoints: views.map((v, n) => ({
+        label: `T${n + 1}: ${v.label}`,
+        acqText: fmtDateTime(v.acqMs),
+        tH: v.tH,
+        durationSec: v.durationSec,
+        unit: v.unit,
+        calibration: Number.isFinite(tpViews[n].mbqPerCount) ? tpViews[n].mbqPerCount.toExponential(4) : "–",
+        ct: byId(v.ctId)?.label,
+        organs: byId(v.organSetId)?.label,
+        lesions: byId(v.lesionSetId)?.label,
+        registered: n === 0 ? "Referenz" : v.registered ? "ja" : "nein",
+        fovMBq: v.fovMBq,
+        pctInjected: v.pctInjected,
+      })),
+      regions: rows.map((r) => {
+        const aw = akaikeWeights(r.t, r.a, { physHalfLifeH: halfLifeH });
+        return {
+          name: r.name,
+          volumeMl: r.volumeMl,
+          massG: r.massG,
+          rc: r.rc,
+          t: r.t,
+          a: r.a,
+          model: TAC_MODEL_LABELS[r.fit.model],
+          teffH: r.fit.teffH,
+          tia: r.fit.tia,
+          tiaSd: r.fit.tiaSd,
+          akaike: aw.weights.length ? `${aw.weights.map((w) => `${TAC_MODEL_LABELS[w.model]} ${Math.round(w.weight * 100)} %`).join(", ")}; gewichtete TIA ${fmt(aw.averagedTia)} MBq·h` : undefined,
+          doseGy: r.doseGy,
+          doseSdGy: r.doseSdGy,
+          uncertainty: r.unc ? `± ${fmt(r.unc.rel * 100, 2)} % (${r.unc.parts.map((p) => `${p.label} ${fmt(p.rel * 100, 2)} %`).join(", ")})` : undefined,
+          bed: r.bed,
+          dvh: dvhs.get(r.key),
+          methodCmp: methodCmp?.get(r.key),
+          curve: r.fit.curve,
+          note: r.fit.note,
+        };
+      }),
+      methods: [
+        ["Organ-/Läsionsdosis", "TIA × Elektronenenergie / Masse (lokale Energiedeposition); Masse aus der CT-Dichte (ρ = 1 + HU/1000, oberhalb von Wasser 1 + 0,6·HU/1000)"],
+        ["Kurvenmodelle", "automatisch: 1 Zeitpunkt Hänscheid (Madsen mit T_eff), 2 monoexponentiell, ≥ 3 biexponentiell mit Aufnahme wenn ansteigend; Auswaschung nicht langsamer als der physikalische Zerfall"],
+        ["Voxelkarte", doseEntry ? `${setup.voxel.method === "mono" ? "monoexponentiell (log-linear)" : "Trapez + Ausläufer"} je Voxel; ${setup.voxel.kernel ? `Faltung mit Kernel ${setup.voxel.kernel.name} (${setup.voxel.kernel.voxelMm} mm), Dichte-Skalierung ρ_Wasser/ρ` : "lokale Deposition"}` : "nicht berechnet"],
+        ["Läsionen über Zeitpunkte", refLesionEntry ? `Schwerpunkt-Zuordnung, max. ${maxMm} mm${Object.keys(setup.lesionLinks?.manual ?? {}).length ? ", manuell korrigiert" : ""}` : "–"],
+        ["Unsicherheit", "EANM-Leitfaden (Gear et al., EJNMMI Physics 2018): Fit-Kovarianz und eingegebene relative Unsicherheiten quadratisch addiert, k = 1"],
+        ["Quellen", "MIRD-Pamphlete 23/26; EANM-Empfehlungen Lu-177 (2022); ICRP Publication 107; Hänscheid et al.; Madsen et al."],
+      ],
+      uncertaintyInputs: [
+        ["Kalibrierung", setup.uncertainty?.calibrationPct],
+        ["Recovery", setup.uncertainty?.rcPct],
+        ["Volumen", setup.uncertainty?.volumePct],
+      ]
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => `${k} ${v} %`)
+        .join(", ") || "keine (nur Fit)",
+    });
+  }
+
+  function downloadReport() {
+    const url = URL.createObjectURL(new Blob([reportHtml()], { type: "text/html;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = withPatientId(`Dosimetrie-Bericht_${nuclideId}.html`);
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function printReport() {
+    const w = window.open("", "_blank");
+    if (!w) return setError("Das Druckfenster wurde vom Browser blockiert – „Bericht (HTML)“ herunterladen und dort drucken.");
+    w.document.write(reportHtml());
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 300);
+  }
+
   const sel = rows.find((r) => r.key === selected) ?? rows[0];
   const chart: ChartSeries[] = sel
     ? (() => {
@@ -609,7 +705,9 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
   const allCalibrated = tpViews.length > 0 && tpViews.every((t) => Number.isFinite(t.mbqPerCount));
   const opt = (e: DosEntry) => ({ id: e.id, label: shortName(e.dataset.displayName), acqMs: acquisitionMs(e.dataset) });
   const usedTpIds = new Set(tps.map((t) => t.spectId));
-  const cardViews: TpCardView[] = tpViews.map((v) => {
+  const cardViews = cardViewsFor();
+  function cardViewsFor(): TpCardView[] {
+    return tpViews.map((v) => {
     const tp = tps.find((t) => t.spectId === v.spectId)!;
     const e = byId(v.spectId)!;
     const acqMs = acquisitionMs(e.dataset);
@@ -640,7 +738,8 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
       notes: v.headerNote,
       warnings,
     };
-  });
+    });
+  }
   const spare = grouping.sessions
     .filter((g) => g.functional.length && !g.functional.some((id) => usedTpIds.has(id)))
     .map((g) => ({ key: g.key, label: byId(g.functional[0])?.label ?? "", acqMs: g.acqMs, h: hoursPi(g.acqMs, injectionMs) }));
@@ -919,6 +1018,11 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                     </p>
                   );
                 })()}
+                {sel.unc && (
+                  <p className="tool-hint">
+                    Unsicherheit der Dosis (k = 1): ± {fmt(sel.unc.rel * 100, 2)} % – {sel.unc.parts.map((p) => `${p.label} ${fmt(p.rel * 100, 2)} %`).join(" · ")}
+                  </p>
+                )}
                 {selDvh && <Chart series={[{ label: "DVH", x: selDvh.curve.dose, y: selDvh.curve.volumePct, style: "line", color: "#2f9e44" }]} xLabel="Dosis (Gy)" yLabel={`${sel.name}: Volumen (%)`} />}
               </>
             )}
@@ -962,6 +1066,17 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                 </tbody>
               </table>
             </BigTable>
+            <div className="button-row">
+              <button className="secondary-btn" onClick={downloadReport}>
+                Bericht (HTML)
+              </button>
+              <button className="secondary-btn" onClick={printReport}>
+                Drucken / PDF
+              </button>
+              <InfoText details="Bericht mit allen Zwischenergebnissen: Zeitpunkte (Datum, t p.i., Dauer, Kalibrierung), Aktivitäten je Region, Modell und Parameter, Akaike-Gewichte, TIA und Dosis mit Unsicherheit, BED, DVH-Kennwerte, Methodenvergleich lokal/Kernel, Methodik und Quellen. „Drucken / PDF“ öffnet ihn zum Drucken oder Speichern als PDF.">
+                Bericht
+              </InfoText>
+            </div>
             <div className="field-row">
               <label className="field">
                 Niere α/β (Gy)
@@ -972,6 +1087,29 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                 <input type="text" inputMode="decimal" value={setup.bed.repairHalfTimeH} onChange={(e) => set((s) => ({ ...s, bed: { ...s.bed, repairHalfTimeH: numOrUndef(e.target.value) ?? s.bed.repairHalfTimeH } }))} />
               </label>
             </div>
+            <div className="field-row three">
+              {(
+                [
+                  ["calibrationPct", "u Kalibrierung (%)"],
+                  ["rcPct", "u Recovery (%)"],
+                  ["volumePct", "u Volumen (%)"],
+                ] as const
+              ).map(([k, label]) => (
+                <label key={k} className="field">
+                  {label}
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="–"
+                    value={setup.uncertainty?.[k] ?? ""}
+                    onChange={(e) => set((s) => ({ ...s, uncertainty: { ...s.uncertainty, [k]: numOrUndef(e.target.value) } }))}
+                  />
+                </label>
+              ))}
+            </div>
+            <InfoText details="Relative Standardunsicherheiten (k = 1) nach dem EANM-Leitfaden (Gear et al., EJNMMI Physics 2018), quadratisch addiert mit der Unsicherheit des Kurvenfits: Kalibrierfaktor (z. B. Streuung wiederholter Phantommessungen), Recovery-Koeffizient (nur Regionen mit RC) und segmentiertes Volumen (Masse ∝ Volumen). Keine Vorgabewerte – aus eigenen Messungen bestimmen. Ohne Eingabe zählt nur der Fit.">
+              Unsicherheit nach EANM 2018
+            </InfoText>
           </>
         )}
       </Card>

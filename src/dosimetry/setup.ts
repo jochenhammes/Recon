@@ -1,6 +1,7 @@
 import type { CameraProfile } from "./calibration";
 import type { RegionMeasure } from "./dose";
 import type { TacModel } from "./tacFit";
+import type { UncertaintyInputs } from "./uncertainty";
 
 /** One SPECT time point of the dosimetry. */
 export interface DosTimePoint {
@@ -58,6 +59,8 @@ export interface DosimetrySetup {
    * (SPECT id → reference lesion label → lesion label of that time point, or null = no partner).
    */
   lesionLinks?: { maxMm: number; manual: Record<string, Record<string, number | null>> };
+  /** Relative uncertainties of calibration, recovery and volume (EANM 2018), entered by the user. */
+  uncertainty?: UncertaintyInputs;
   /** Kidney BED parameters. */
   bed: { alphaBeta: number; repairHalfTimeH: number };
   /** Voxel dose map: integration method and the resulting dataset. */
