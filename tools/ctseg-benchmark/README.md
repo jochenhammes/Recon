@@ -19,7 +19,7 @@ python -I tools/ctseg-benchmark/fetch_amos.py /pfad/amos 10        # 10 CT-Fäll
 
 ```bash
 DATA=/pfad/amos/amos22 N=10 OUT=/pfad/ergebnis \
-MODELS=totalseg-total-3mm,monai-segresnet-3mm \
+MODELS=totalseg-total-3mm,totalseg-organs-1.5mm \
 npx vitest run --config tools/ctseg-benchmark/vitest.config.ts
 ```
 

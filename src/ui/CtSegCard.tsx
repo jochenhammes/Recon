@@ -84,15 +84,9 @@ export function CtSegCard(props: CtSegCardProps) {
               Organe, Knochen, Gefäße und Muskeln direkt im Browser segmentieren – die Daten verlassen den Rechner nicht. Das gewählte Modell wird beim
               ersten Mal geladen und im Browser gespeichert. Ergebnis: Label-Datensatz (Atlas) zum CT.
             </p>
-            <p>
-              Modelle: <b>TotalSegmentator „total“ 3 mm</b> (117 Strukturen, Standard) und <b>MONAI SegResNet 3 mm</b> (104 Strukturen der
-              TotalSegmentator-v1-Liste; Herz in 5 Teilen, für Ausschluss/Dosimetrie als „Herz“ zusammengefasst). Beide auf dem TotalSegmentator-Datensatz
-              trainiert.
-            </p>
             <p>WebGPU ist meist deutlich schneller. Hängt WebGPU oder meldet einen Fehler, wird automatisch auf der CPU weitergerechnet.</p>
             <p>
-              Quellen: TotalSegmentator (Wasserthal et al., Radiology: AI 2023), Apache-2.0; nnU-Net (Isensee et al. 2021); MONAI Model Zoo
-              wholeBody_ct_segmentation, Apache-2.0. Nicht für diagnostische Zwecke zertifiziert.
+              Quellen: TotalSegmentator (Wasserthal et al., Radiology: AI 2023), Apache-2.0; nnU-Net (Isensee et al. 2021). Nicht für diagnostische Zwecke zertifiziert.
             </p>
           </>
         } status={props.running ? { text: "läuft", tone: "run" } : null}>

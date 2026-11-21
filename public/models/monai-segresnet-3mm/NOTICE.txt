@@ -1,4 +1,0 @@
-MONAI wholeBody_ct_segmentation (SegResNet, 3 mm) – Copyright (c) MONAI Consortium, Apache License 2.0.
-Source: https://huggingface.co/MONAI/wholeBody_ct_segmentation
-Trained on the TotalSegmentator dataset (Wasserthal et al., Radiology: AI 2023; data CC BY 4.0).
-Converted to ONNX for Recon Studio (trilinear upsampling as explicit interpolation; top-3 output head).

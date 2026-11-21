@@ -3,7 +3,7 @@
  * Uses exactly the app's pipeline (RAS resampling, normalization, sliding window, top-k head) with
  * onnxruntime-web (CPU/WASM) in Node; predictions are resampled (nearest neighbour) onto the reference grid.
  *
- *   DATA=<dir with imagesVa/ labelsVa/ dataset.json>  MODELS=totalseg-total-3mm,monai-segresnet-3mm  N=10  OUT=<dir>
+ *   DATA=<dir with imagesVa/ labelsVa/ dataset.json>  MODELS=totalseg-total-3mm,…  N=10  OUT=<dir>
  *   npx vitest run --config tools/ctseg-benchmark/vitest.config.ts
  *
  * Optional ORT_NODE=<path to an onnxruntime-node installation> runs the same ONNX graph with native CPU kernels
@@ -28,7 +28,7 @@ import { parseNifti1 } from "../../src/viewer/volumeLoader";
 
 const DATA = process.env.DATA ?? "";
 const OUT = process.env.OUT ?? "ctseg-benchmark-out";
-const MODELS = (process.env.MODELS ?? "totalseg-total-3mm,monai-segresnet-3mm").split(",");
+const MODELS = (process.env.MODELS ?? "totalseg-total-3mm").split(",");
 const N = Number(process.env.N ?? 10);
 const ROOT = new URL("../../", import.meta.url).pathname;
 // Inference runtime: onnxruntime-web (WASM, as in the browser's CPU mode) or onnxruntime-node (native CPU).

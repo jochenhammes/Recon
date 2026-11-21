@@ -2,6 +2,10 @@
 Exports the MONAI "wholeBody_ct_segmentation" bundle (SegResNet, 104 TotalSegmentator-v1 structures, Apache-2.0)
 in its 3 mm variant (models/model_lowres.pt) to ONNX for Recon Studio.
 
+Not shipped with the app: on 10 AMOS cases it reached a mean Dice of 0.53 (TotalSegmentator 3 mm: 0.80) and
+failed almost completely on 2 cases – also with the original MONAI pipeline (tools/ctseg-benchmark/monai_reference.py).
+Kept for reproducibility.
+
 Usage:
   pip install torch --index-url https://download.pytorch.org/whl/cpu
   pip install monai onnx onnxruntime numpy

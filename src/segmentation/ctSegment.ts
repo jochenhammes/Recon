@@ -26,7 +26,6 @@ export interface CtModelInfo {
 
 export const CT_MODELS: CtModelInfo[] = [
   { id: "totalseg-3mm", dir: "totalseg-total-3mm", label: "TotalSegmentator total (3 mm)", info: "117 Strukturen · nnU-Net", license: "Apache-2.0", sizeMb: 66, short: "TotalSegmentator", attribution: "TotalSegmentator total 3 mm (Wasserthal et al. 2023), Apache-2.0" },
-  { id: "monai-segresnet-3mm", dir: "monai-segresnet-3mm", label: "MONAI SegResNet (3 mm)", info: "104 Strukturen (TotalSeg v1) · SegResNet", license: "Apache-2.0", sizeMb: 75, short: "MONAI SegResNet", attribution: "MONAI wholeBody_ct_segmentation SegResNet 3 mm (MONAI Consortium; trained on TotalSegmentator data, Wasserthal et al. 2023), Apache-2.0" },
 ];
 export const DEFAULT_CT_MODEL = CT_MODELS[0].id;
 
