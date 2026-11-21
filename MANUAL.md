@@ -611,6 +611,15 @@ bestimmbar (Schritt 6). Optional Recovery-Koeffizienten (RC) aus einem Kugelphan
    zerfallskorrigierte Bilder (ADMIN) werden auf die Aufnahmezeit zurückgerechnet.
 
 **Schritt 7 – Regionen und Messung** (Karte *Regionen*)
+0. **Quelle der Labelbilder** (ab 2 Zeitpunkten, oben in der Karte):
+   - **Von T1 für alle:** Organkarte und Läsionen von T1 gelten über die Registrierung für alle Zeitpunkte (eigene
+     Labelbilder der anderen Zeitpunkte bleiben unbenutzt). Braucht registrierte Zeitpunkte (Warnung sonst) – einmal
+     segmentieren, Läsionen inklusive.
+   - **Organkarte je Zeitpunkt:** jeder Zeitpunkt wird mit der Organkarte seines CTs gemessen (keine Registrierung
+     nötig, robust gegen Lage- und Füllungsunterschiede). *Fehlende Organkarten segmentieren (n CTs)* segmentiert alle
+     CTs ohne Organkarte nacheinander. Läsionen werden nur ausgewertet, wenn jeder Zeitpunkt ein eigenes Läsionsbild
+     hat (sonst Hinweis).
+   - Ein Wechsel der Quelle zeigt *Labelbilder geändert – neu messen*.
 1. Labelbilder der Zeitpunkte sind automatisch angehakt; weitere anhaken bzw. abwählen. Je Labelbild den
    **Zeitpunkt** oder **alle Zeitpunkte** wählen (*alle* = auf die anderen Zeitpunkte über die Registrierung
    übertragen).
@@ -713,7 +722,7 @@ bestimmbar (Schritt 6). Optional Recovery-Koeffizienten (RC) aus einem Kugelphan
 | Falsches CT bei einem Zeitpunkt (⚠ „CT … h entfernt“) | mehrere CTs am selben Tag oder unterschiedliche FrameOfReference | in der Zeitpunkt-Karte bei *CT* das richtige wählen |
 | *Kalibrierung* bleibt gelb (Karte *Nuklid und Kalibrierung*: „Faktor fehlt“) | Bild in Counts, aber quantitatives Profil gewählt, oder Aufnahmedauer fehlt | Profil mit cps/MBq wählen bzw. aus Phantom bestimmen; ist das Bild in Wahrheit quantitativ, die Einheit in der Zeitpunkt-Karte auf Bq/ml stellen; Dauer in der aufgeklappten Karte eintragen |
 | Status *registriert* bleibt gelb | Zeitpunkte noch nicht registriert | Schritt 5 (Weg A oder B) |
-| Region hat zu einem Zeitpunkt keine Messwerte | dieser Zeitpunkt hat keine eigene Organkarte bzw. kein Läsionsbild | dort segmentieren oder das Labelbild unter *Regionen* auf „alle Zeitpunkte“ stellen |
+| Kurve mit nur einem Punkt (Hänscheid), Tabelle zeigt z. B. „(1/4)“ | nur T1 hat eine Organkarte bzw. ein Läsionsbild | unter *Regionen* „Von T1 für alle“ wählen (nach Registrierung) oder „Organkarte je Zeitpunkt“ + *Fehlende Organkarten segmentieren*; dann neu messen |
 | D2/D50/D98 zeigen *nach Voxelkarte* | DVH stammt aus der Voxelkarte | *Dosiskarte berechnen* |
 | BED zeigt „–“ | keine α/β und Reparatur-Halbwertszeit für diese Region (oder keine T_eff) | Zeile anklicken und Werte eintragen |
 | Kernel wird abgelehnt | Voxelgröße des Kernels ≠ Voxelgröße des SPECT | Kernel in der passenden Voxelgröße verwenden |

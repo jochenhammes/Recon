@@ -1768,9 +1768,10 @@ function App() {
     }
   }
 
-  function startCtSegmentation(ctId: string, backend: CtSegBackend, modelId: string = DEFAULT_CT_MODEL) {
+  /** Starts the CT organ segmentation; resolves true when the organ map was added (false on error/cancel). */
+  function startCtSegmentation(ctId: string, backend: CtSegBackend, modelId: string = DEFAULT_CT_MODEL): Promise<boolean> {
     const ct = byId(ctId);
-    if (!ct || ctSegRunning) return;
+    if (!ct || ctSegRunning) return Promise.resolve(false);
     setCtSegRunning(true);
     setCtSegError(null);
     setCtSegStatus(null);
@@ -1779,7 +1780,7 @@ function App() {
     const model = CT_MODELS.find((m) => m.id === modelId) ?? CT_MODELS[0];
     const run = runCtSegmentation(ct.dataset.current, backend, setCtSegProgress, model.id);
     ctSegRun.current = run;
-    run.promise
+    return run.promise
       .then((r) => {
         const g = r.grid.geometry;
         addCtSegResult(ct, r, model);
@@ -1788,9 +1789,11 @@ function App() {
         setCtSegStatus(
           `${model.short}: fertig in ${((performance.now() - t0) / 1000).toFixed(0)} s (${r.backend === "webgpu" ? "WebGPU" : "CPU"}): ${new Set(r.labels).size - 1} Strukturen, ${((n * g.spacing[0] * g.spacing[1] * g.spacing[2]) / 1e6).toFixed(1).replace(".", ",")} l segmentiert.${r.note ? ` ${r.note}.` : ""}`,
         );
+        return true;
       })
       .catch((e) => {
         if (!(e instanceof DOMException && e.name === "AbortError")) setCtSegError(`CT-Segmentierung fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
+        return false;
       })
       .finally(() => {
         setCtSegRunning(false);
@@ -2233,7 +2236,14 @@ function App() {
     entries: entries.map((e) => ({ id: e.id, label: entryLabel(e), dataset: e.dataset, matrix: e.matrix, modality: ctEntries.includes(e) ? "CT" : datasetModality(e.dataset) })),
     setup: dosimetry,
     onSetup: setDosimetry,
-    segmentCt: (ctId, modelId) => startCtSegmentation(ctId, "auto", modelId),
+    segmentCt: (ctId, modelId) => void startCtSegmentation(ctId, "auto", modelId),
+    segmentCts: async (ctIds, modelId, status) => {
+      for (const [n, id] of ctIds.entries()) {
+        status(`Organsegmentierung ${n + 1}/${ctIds.length}: ${entryLabel(byId(id)!)}`);
+        if (!(await startCtSegmentation(id, "auto", modelId))) return false;
+      }
+      return true;
+    },
     showTimePoint: (baseId, overlayIds) => {
       changeBase(baseId);
       for (const id of overlayIds) makeOverlay(id);

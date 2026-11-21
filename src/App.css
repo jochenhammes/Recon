@@ -2945,3 +2945,6 @@ select.dos-unit {
   justify-content: space-between;
   color: var(--text-dim);
 }
+.dos-labelsource {
+  margin: 0 0 10px;
+}

@@ -39,6 +39,8 @@ export interface DosimetryApi {
   onSetup: (update: (s: DosimetrySetup) => DosimetrySetup) => void;
   /** Starts the CT organ segmentation with a model (result appears as a label dataset). */
   segmentCt: (ctId: string, modelId?: string) => void;
+  /** Segments several CTs one after another; resolves false when one failed or was cancelled. */
+  segmentCts: (ctIds: string[], modelId: string | undefined, status: (s: string) => void) => Promise<boolean>;
   /** Shows a time point in the viewer: base dataset plus overlays (others leave the overlay stack). */
   showTimePoint: (baseId: string, overlayIds: string[]) => void;
   segRunning: boolean;
@@ -254,6 +256,28 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
     return out;
   }, [labelNames, setup, tpViews.map((t) => `${t.spectId}:${t.tH}`).join(), energy, nuclide, profile]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Label maps per time point (source: T1 for all, or each time point its own) ──
+  const labelSource = setup.labelSource ?? "perTp";
+  const isLesionSet = (id: string) => tps.some((t) => t.lesionSetId === id) || (!!byId(id) && isLesionMap(byId(id)!));
+  const allHaveLesions = tps.length > 1 && tps.every((t) => !!t.lesionSetId && !!byId(t.lesionSetId));
+  /** Label sets measured for a time point (first set wins per region). */
+  function setsFor(spectId: string): DosimetrySetup["labelSets"] {
+    const common = setup.labelSets.filter((l) => l.tp === "all");
+    const t1 = tps[0];
+    let sets: DosimetrySetup["labelSets"];
+    if (labelSource === "t1" && t1) {
+      // T1's organ map, lesion map and other label maps, transferred through the registration.
+      const ids = [organIdOf(t1), t1.lesionSetId, ...setup.labelSets.filter((l) => l.tp === t1.spectId).map((l) => l.id)].filter((x): x is string => !!x && !!byId(x));
+      sets = [...new Set(ids)].map((id) => ({ id, tp: "all" }));
+    } else {
+      sets = setup.labelSets.filter((l) => l.tp === spectId);
+      // Lesions only when every time point has its own lesion map (otherwise single-point curves).
+      if (tps.length > 1 && !allHaveLesions) sets = sets.filter((l) => !isLesionSet(l.id));
+    }
+    const commonUsed = labelSource === "perTp" && tps.length > 1 && !allHaveLesions ? common.filter((l) => !isLesionSet(l.id)) : common;
+    return [...sets, ...commonUsed.filter((c) => !sets.some((x) => x.id === c.id))];
+  }
+
   /**
    * A time point counts as registered when its CT was placed relative to the CT of T1 – by „Zeitpunkte registrieren“
    * here or by the registration in „Koregistrierung“ (the functional image follows its CT there as well) – or when
@@ -271,10 +295,10 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
   // ── Lesions across time points (centroids in the registered world, optimal pairing) ──
   const maxMm = setup.lesionLinks?.maxMm ?? 20;
   const refLesionEntry = byId(tps[0]?.lesionSetId);
-  const lesionKey = [refLesionEntry?.id, ...tps.map((t) => `${t.spectId}:${t.lesionSetId}:${byId(t.lesionSetId)?.matrix.join(",")}`), byId(tps[0]?.lesionSetId)?.matrix.join(","), maxMm].join("|");
+  const lesionKey = [labelSource, refLesionEntry?.id, ...tps.map((t) => `${t.spectId}:${t.lesionSetId}:${byId(t.lesionSetId)?.matrix.join(",")}`), byId(tps[0]?.lesionSetId)?.matrix.join(","), maxMm].join("|");
   const autoLinks = useMemo(() => {
     const out = new Map<string, { matches: LesionMatch[]; other: Map<number, Centroid> }>();
-    if (!refLesionEntry?.dataset.atlas || tps.length < 2) return out;
+    if (!refLesionEntry?.dataset.atlas || tps.length < 2 || labelSource === "t1") return out;
     const ref = labelCentroids(place(refLesionEntry));
     for (const tp of tps.slice(1)) {
       const le = byId(tp.lesionSetId);
@@ -317,6 +341,8 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
       return `${l.id}@${l.tp}:${e ? labelHash(e.dataset.current.data) : "-"}:${[...(e?.dataset.atlas?.labels.values() ?? [])].join("/")}`;
     }),
     JSON.stringify(setup.lesionLinks ?? {}),
+    labelSource,
+    tps.map((t) => `${t.spectId}:${t.ctId ?? ""}:${t.organSetId ?? ""}:${t.lesionSetId ?? ""}`).join(","),
   ].join("|");
   const measurementStale = Object.keys(setup.measurements).length > 0 && setup.measuredSig !== undefined && setup.measuredSig !== labelSig;
 
@@ -464,7 +490,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
         if (!Number.isFinite(tp.mbqPerCount)) throw new Error(`${tp.label}: Kalibrierung unvollständig (Kamera-Profil, Aufnahmedauer).`);
         const spect = byId(tp.spectId)!;
         const ct = byId(tp.ctId);
-        const sets = setup.labelSets.filter((l) => l.tp === tp.spectId || l.tp === "all").sort((a) => (a.tp === "all" ? 1 : -1));
+        const sets = setsFor(tp.spectId);
         const res: Record<string, ReturnType<typeof measureRegions> extends Map<number, infer R> ? R & { name: string } : never> = {};
         for (const ls of sets) {
           const le = byId(ls.id);
@@ -494,6 +520,17 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
     } finally {
       setBusy(null);
       api.onActivity(null);
+    }
+  }
+
+  async function segmentMissing(ctIds: string[]) {
+    setBusy("Organsegmentierung");
+    setError(null);
+    try {
+      const ok = await api.segmentCts(ctIds, undefined, setStatus);
+      setStatus(ok ? `${ctIds.length} CT(s) segmentiert – jetzt „Aktivitäten messen“.` : "Organsegmentierung abgebrochen oder fehlgeschlagen (Details in der Karte CT-Organsegmentierung).");
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -583,7 +620,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
   /** Label ids per enabled region (first label set wins) of the label sets valid for a time point. */
   function regionLabelIds(spectId: string): Map<string, { le: DosEntry; ids: Set<number> }> {
     const out = new Map<string, { le: DosEntry; ids: Set<number> }>();
-    for (const ls of setup.labelSets.filter((l) => l.tp === "all" || l.tp === spectId)) {
+    for (const ls of setsFor(spectId)) {
       const le = entries.find((e) => e.id === ls.id);
       const atlas = le?.dataset.atlas;
       if (!le || !atlas) continue;
@@ -928,6 +965,51 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
 
       <Card title={<>Regionen</>} persistKey="dos-reg" status={labelNames.size ? { text: `${[...labelNames.keys()].filter((k) => regionOpts(k).enabled).length} aktiv`, tone: "info" } : null}
         info="Labelbilder (CT-Organsegmentierung, Läsionen, eigene Segmentierungen). Ein Labelbild gilt für seinen Zeitpunkt oder – nach der Registrierung – für alle Zeitpunkte. Regionen gleichen Namens werden über die Zeitpunkte verbunden. Speichel- und Tränendrüsen sind nicht im CT-Modell: als eigene Segmentierung oder VOI laden.">
+        {tps.length > 1 && (
+          <div className="dos-labelsource">
+            <div className="segmented-control" role="group" aria-label="Labelbilder der Zeitpunkte">
+              <button className={labelSource === "t1" ? "active" : ""} onClick={() => set((s) => ({ ...s, labelSource: "t1" }))}>
+                Von T1 für alle
+              </button>
+              <button className={labelSource === "perTp" ? "active" : ""} onClick={() => set((s) => ({ ...s, labelSource: "perTp" }))}>
+                Organkarte je Zeitpunkt
+              </button>
+            </div>
+            {labelSource === "t1" ? (
+              <>
+                <p className="tool-hint">
+                  Organkarte{tps[0].lesionSetId ? " und Läsionen" : ""} von T1 ({byId(organIdOf(tps[0]))?.label ?? "keine Organkarte"}) gelten über die Registrierung für alle Zeitpunkte; eigene Labelbilder der anderen
+                  Zeitpunkte werden nicht verwendet.
+                </p>
+                {tps.slice(1).some((t) => !isRegistered(t)) && (
+                  <InfoText warn details="Die Labelbilder von T1 werden über die Registrierung auf die anderen Zeitpunkte übertragen. Ohne Registrierung liegen sie dort an der falschen Stelle. „Zeitpunkte registrieren“ (Karte Zeitpunkte) oder im Bereich Koregistrierung.">
+                    Nicht alle Zeitpunkte registriert
+                  </InfoText>
+                )}
+              </>
+            ) : (
+              <>
+                {(() => {
+                  const missing = tps.filter((t) => t.ctId && !organIdOf(t)).map((t) => t.ctId!);
+                  return missing.length ? (
+                    <div className="button-row">
+                      <button className="secondary-btn" disabled={api.segRunning || !!busy} onClick={() => void segmentMissing(missing)}>
+                        {api.segRunning ? "Segmentierung läuft …" : `Fehlende Organkarten segmentieren (${missing.length} CT${missing.length > 1 ? "s" : ""})`}
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="tool-hint">Jeder Zeitpunkt hat eine eigene Organkarte – gemessen wird in der Anatomie des jeweiligen CTs (keine Registrierung nötig).</p>
+                  );
+                })()}
+                {!allHaveLesions && tps.some((t) => t.lesionSetId) && (
+                  <InfoText warn details="Für die Läsionen braucht jeder Zeitpunkt ein eigenes Läsionsbild (in „Segmentierung & MTV“ je SPECT segmentieren); sonst ergäben sich Kurven mit nur einem Punkt. Alternative: „Von T1 für alle“.">
+                    Läsionen werden in diesem Modus nicht ausgewertet
+                  </InfoText>
+                )}
+              </>
+            )}
+          </div>
+        )}
         {labelCandidates.length === 0 && (
           <InfoText details="Organe auf dem CT segmentieren (Karte Zeitpunkte) oder Läsionen im Bereich „Segmentierung & MTV“ erzeugen; eigene Segmentierungen als NIfTI laden.">Noch keine Labelbilder</InfoText>
         )}
@@ -1085,6 +1167,11 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                     <input type="text" inputMode="decimal" placeholder={bedParams(sel.name, { ...sel.opts, repairH: undefined }).repairH?.toString() ?? "–"} value={sel.opts.repairH ?? ""} onChange={(e) => setRegion(sel.key, { repairH: numOrUndef(e.target.value) })} />
                   </label>
                 </div>
+                {sel.t.length < tpViews.length && (
+                  <p className="tool-hint tool-warning">
+                    {sel.name}: nur an {sel.t.length} von {tpViews.length} Zeitpunkten gemessen – unter „Regionen“ die Labelbilder von T1 für alle Zeitpunkte nehmen oder die fehlenden Organkarten segmentieren, dann neu messen.
+                  </p>
+                )}
                 {sel.fit.note && <p className="tool-hint">{sel.fit.note}</p>}
                 {(() => {
                   const aw = akaikeWeights(sel.t, sel.a, { physHalfLifeH: halfLifeH });
@@ -1123,7 +1210,15 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                     const d = dvhs.get(r.key);
                     return (
                       <tr key={r.key} className={r.key === sel?.key ? "reference-row clickable" : "clickable"} onClick={() => setSelected(r.key)}>
-                        <td>{r.name}</td>
+                        <td>
+                          {r.name}
+                          {r.t.length < tpViews.length && (
+                            <span className="tool-warning" title={`Nur an ${r.t.length} von ${tpViews.length} Zeitpunkten gemessen – für die übrigen fehlt ein Labelbild mit dieser Region (Quelle der Labelbilder oben unter „Regionen“).`}>
+                              {" "}
+                              ({r.t.length}/{tpViews.length})
+                            </span>
+                          )}
+                        </td>
                         <td>{fmt(r.massG)}</td>
                         <td>{TAC_MODEL_LABELS[r.fit.model]}</td>
                         <td>{fmt(r.fit.teffH)}</td>
