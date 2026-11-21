@@ -246,6 +246,20 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
     return out;
   }, [labelNames, setup, tpViews.map((t) => `${t.spectId}:${t.tH}`).join(), energy, nuclide, profile]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /**
+   * A time point counts as registered when its CT was placed relative to the CT of T1 – by „Zeitpunkte registrieren“
+   * here or by the registration in „Koregistrierung“ (the functional image follows its CT there as well) – or when
+   * both CTs share a frame of reference.
+   */
+  const isRegistered = (tp: (typeof tps)[number]) => {
+    if (tp.registered) return true;
+    const ct = byId(tp.ctId), ref = byId(tps[0]?.ctId);
+    if (!ct || !ref || ct.id === ref.id) return false;
+    const fo = ct.dataset.current.geometry.frameOfReferenceUid;
+    if (fo && fo === ref.dataset.current.geometry.frameOfReferenceUid) return true;
+    return ct.matrix.some((v, i) => Math.abs(v - ref.matrix[i]) > 1e-6);
+  };
+
   // ── Lesions across time points (centroids in the registered world, optimal pairing) ──
   const maxMm = setup.lesionLinks?.maxMm ?? 20;
   const refLesionEntry = byId(tps[0]?.lesionSetId);
@@ -762,7 +776,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
       decayCorrected: v.decayCorrected,
       unit: v.unit,
       calibrated: Number.isFinite(v.mbqPerCount),
-      registered: !!tp.registered,
+      registered: isRegistered(tp),
       fovMBq: v.fovMBq,
       pctInjected: v.pctInjected,
       notes: v.headerNote,
@@ -954,7 +968,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                 <input type="text" inputMode="decimal" value={maxMm} onChange={(e) => set((s) => ({ ...s, lesionLinks: { manual: s.lesionLinks?.manual ?? {}, maxMm: numOrUndef(e.target.value) ?? 20 } }))} />
               </label>
             </div>
-            {tps.slice(1).some((t) => !t.registered && t.lesionSetId) && <p className="tool-hint tool-warning">Nicht alle Zeitpunkte sind registriert – Abstände sind dann nicht aussagekräftig.</p>}
+            {tps.slice(1).some((t) => !isRegistered(t) && t.lesionSetId) && <p className="tool-hint tool-warning">Nicht alle Zeitpunkte sind registriert – Abstände sind dann nicht aussagekräftig.</p>}
             <table className="region-table">
               <thead>
                 <tr>

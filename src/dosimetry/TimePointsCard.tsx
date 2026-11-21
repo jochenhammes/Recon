@@ -329,7 +329,7 @@ export function TimePointsCard(p: TimePointsCardProps) {
           <button className="secondary-btn" disabled={p.busy || !p.views[0].ctId || usable < 2} onClick={p.onRegister}>
             Zeitpunkte registrieren (CT → CT von T1)
           </button>
-          <InfoText details="Rigide CT-CT-Registrierung aller Zeitpunkte auf T1; Funktionsbild und Labelbilder eines Zeitpunkts werden mitbewegt. Nötig für die Voxel-Dosiskarte, für Labelbilder, die für alle Zeitpunkte gelten, und für die Zuordnung der Läsionen.">
+          <InfoText details="Rigide CT-CT-Registrierung aller Zeitpunkte auf T1; Funktionsbild und Labelbilder eines Zeitpunkts werden mitbewegt. Gleichwertig: im Bereich „Koregistrierung“ mit dem CT von T1 als Basis die CTs der übrigen Zeitpunkte starr registrieren (SPECT, Organkarte und Läsionsbild derselben Aufnahme folgen) – der Status „registriert“ wird hier erkannt. Nötig für die Voxel-Dosiskarte, für Labelbilder, die für alle Zeitpunkte gelten, und für die Zuordnung der Läsionen.">
             Für Voxelkarte und Läsionen nötig
           </InfoText>
         </>
