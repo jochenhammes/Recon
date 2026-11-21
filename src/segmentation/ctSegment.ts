@@ -27,26 +27,6 @@ export interface CtModelInfo {
 export const CT_MODELS: CtModelInfo[] = [
   { id: "totalseg-3mm", dir: "totalseg-total-3mm", label: "TotalSegmentator total (3 mm)", info: "117 Strukturen · nnU-Net", license: "Apache-2.0", sizeMb: 66, short: "TotalSegmentator", attribution: "TotalSegmentator total 3 mm (Wasserthal et al. 2023), Apache-2.0" },
   { id: "monai-segresnet-3mm", dir: "monai-segresnet-3mm", label: "MONAI SegResNet (3 mm)", info: "104 Strukturen (TotalSeg v1) · SegResNet", license: "Apache-2.0", sizeMb: 75, short: "MONAI SegResNet", attribution: "MONAI wholeBody_ct_segmentation SegResNet 3 mm (MONAI Consortium; trained on TotalSegmentator data, Wasserthal et al. 2023), Apache-2.0" },
-  {
-    id: "totalseg-organs-1.5mm",
-    dir: "totalseg-organs-1.5mm",
-    label: "TotalSegmentator Organe (1,5 mm)",
-    info: "24 Organe, feines Raster · nnU-Net · langsam, WebGPU empfohlen",
-    license: "Apache-2.0",
-    sizeMb: 125,
-    short: "TotalSegmentator 1,5 mm",
-    attribution: "TotalSegmentator v2 organs 1.5 mm, Dataset291 (Wasserthal et al. 2023), Apache-2.0",
-  },
-  {
-    id: "moose-organs-1.5mm",
-    dir: "moose-organs-1.5mm",
-    label: "MOOSE Organe (1,5 mm)",
-    info: "19 Organe inkl. Gehirn/Schilddrüse · nnU-Net · langsam, WebGPU empfohlen",
-    license: "CC BY 4.0",
-    sizeMb: 122,
-    short: "MOOSE",
-    attribution: "MOOSE 3 clin_ct_organs (Shiyam Sundar et al., J Nucl Med 2022; ENHANCE-PET), CC BY 4.0",
-  },
 ];
 export const DEFAULT_CT_MODEL = CT_MODELS[0].id;
 
