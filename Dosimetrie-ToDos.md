@@ -9,7 +9,7 @@ Forschungswerkzeug, kein zertifiziertes Medizinprodukt.
 
 ### Funktionen
 
-- [ ] **Läsionen über Zeitpunkte zuordnen (Schwerpunkt-Matching)**
+- [x] **Läsionen über Zeitpunkte zuordnen (Schwerpunkt-Matching)** – *umgesetzt (11/2026): ungarische Methode, max. 20 mm (einstellbar), Tabelle mit Abständen, manuell korrigierbar; `src/dosimetry/lesionMatch.ts`*
   - **Heute:** Regionen werden nur über den Namen verbunden. Läsionsbilder je Zeitpunkt („Läsion 3“ …) passen deshalb nicht zusammen.
   - **Umgehung:** Läsionen einmal segmentieren und für alle registrierten Zeitpunkte verwenden („alle Zeitpunkte“).
   - **Vorschlag:**
@@ -28,7 +28,7 @@ Forschungswerkzeug, kein zertifiziertes Medizinprodukt.
 - [ ] **Totzeitkorrektur**
   - Optionaler Parameter im Kamera-Profil, z. B. paralysierbare Totzeit τ oder Korrekturkurve über der Zählrate.
   - Relevant bei I-131 und frühen Lu-177-Aufnahmen.
-- [ ] **Rechnung im Web Worker**
+- [x] **Rechnung im Web Worker** – *umgesetzt für die Voxel-Dosiskarte (Zeitintegral, Dichte, Faltung; abbrechbar; `src/workers/dosimetry.worker.ts`). Die Regionsmessung bleibt im Hauptthread (schnell genug).*
   - Messung, Voxel-TIA und Kernel-Faltung laufen derzeit im Hauptthread mit kurzen Pausen.
   - Bei großen Datensätzen kann die Oberfläche stocken. Umzug nach `src/workers/` analog zu Koregistrierung und Kinetik.
 - [ ] **Deformierbare Registrierung der Zeitpunkte**
@@ -39,11 +39,11 @@ Forschungswerkzeug, kein zertifiziertes Medizinprodukt.
 - [ ] **Speichel- und Tränendrüsen**
   - Nicht im CT-Modell (TotalSegmentator total 3 mm).
   - Heute: eigene Segmentierung als NIfTI laden. Optional: VOI-Werkzeug direkt im Dosimetrie-Bereich.
-- [ ] **FrameOfReference bei DICOM ohne Positionsangaben**
+- [x] **FrameOfReference bei DICOM ohne Positionsangaben** – *umgesetzt: Ersatz-Geometrie behält die FoR*
   - Fehlen Image Position/Orientation, geht beim Laden auch die FrameOfReference verloren (`buildDicomVolume` in `src/viewer/volumeLoader.ts`).
   - Das CT wird dann nicht automatisch dem Zeitpunkt zugeordnet.
   - **Vorschlag:** FrameOfReference auch in die Ersatz-Geometrie übernehmen.
-- [ ] **Bericht**: Zusammenfassung pro Patient (Tabelle, Kurven, DVH, Parameter, Quellen) als PDF/HTML zusätzlich zur CSV.
+- [x] **Bericht** – *umgesetzt als HTML (Drucken/PDF über den Browser), `src/dosimetry/report.ts`*: Zusammenfassung pro Patient (Tabelle, Kurven, DVH, Parameter, Quellen) als PDF/HTML zusätzlich zur CSV.
   - **Ergänzung (OpenDose3D-Abgleich):** OpenDose3D hat seit v1.0 ein eigenes Berichtsmodul. Priorität daher anheben. Der Bericht soll alle Zwischenergebnisse nennen: Kalibrierfaktor, RC, Zeitpunkte, Modell und Fitparameter, TIA ± Unsicherheit, Methode (LED/Kernel), Kernelquelle und Dichtekorrektur. So bleiben Ergebnisse mit anderer Software vergleichbar.
 
 #### Neu aus dem Abgleich mit OpenDose3D (Details im [Abschnitt unten](#abgleich-mit-opendose3d-recherche-21112026))
@@ -55,21 +55,21 @@ Forschungswerkzeug, kein zertifiziertes Medizinprodukt.
     - Kernel passender Voxelgröße wählen. Bei abweichender oder anisotroper SPECT-Voxelgröße den Kernel auf das SPECT-Raster umrechnen (Integral erhalten) statt abzulehnen.
     - 99 × 99 × 99 Voxel sind für die FFT unkritisch; Kernel optional auf einen Radius kürzen (Energie außerhalb anzeigen).
     - **Weitergabe:** Apache 2.0 erlaubt das Mitliefern einzelner Kernel mit Lizenztext und NOTICE/Quellenangabe. Vorerst nur Laden aus einer lokalen Datei, kein Nachladen zur Laufzeit von fremden Servern.
-- [ ] **LED und Kernel nebeneinander rechnen** – Priorität mittel, Aufwand S
+- [x] **LED und Kernel nebeneinander rechnen** – *umgesetzt: Methodenvergleich je Region in der Karte Voxel-Dosiskarte und im Bericht* – Priorität mittel, Aufwand S
   - Beide Dosiskarten (lokale Deposition und Faltung) erzeugen und je Region die relative Abweichung zeigen.
   - OpenDose3D gibt Zwischenergebnisse gezielt für solche Methodenvergleiche aus. Bei uns ist es eine billige Plausibilitätsprüfung, vor allem für I-131 und Y-90.
-- [ ] **Kalibrierfaktor aus einer Phantomaufnahme bestimmen** – Priorität mittel, Aufwand S–M
+- [x] **Kalibrierfaktor aus einer Phantomaufnahme bestimmen** – *umgesetzt (Gesamtzählung im Sichtfeld); RC-Kurve aus NEMA-Kugeln bleibt offen* – Priorität mittel, Aufwand S–M
   - Heute wird cps/MBq von Hand eingetragen; OpenDose3D hat ein eigenes Kalibriermodul.
   - **Vorschlag:** Phantom-SPECT laden, bekannte Aktivität und Messzeitpunkt eintragen, Faktor aus der Gesamtzählrate (zerfallskorrigiert) berechnen und ins Kamera-Profil übernehmen.
   - **Später:** RC-Kurve aus NEMA-Kugeln (Kugel-VOIs aus bekannten Durchmessern).
-- [ ] **Quantitative Eingangsbilder in Bq/ml (PET, quantitative SPECT)** – Priorität mittel, Aufwand S
+- [x] **Quantitative Eingangsbilder in Bq/ml (PET, quantitative SPECT)** – *umgesetzt; ADMIN-zerfallskorrigierte Bilder werden auf die Aufnahmezeit zurückgerechnet* – Priorität mittel, Aufwand S
   - OpenDose3D nimmt neben SPECT/CT auch PET/CT (z. B. Y-90-PET, I-124, Cu-64).
   - Bei uns geht nur „CNTS“; andere Einheiten erzeugen nur einen Hinweis.
   - **Vorschlag:** Bei Einheit BQML (0054,1001) Kalibrierung überspringen, Zerfallskorrektur aus dem Header beachten.
-- [ ] **Unsicherheit nach EANM 2018 vollständig fortpflanzen** – Priorität mittel, Aufwand M
+- [x] **Unsicherheit nach EANM 2018 vollständig fortpflanzen** – *umgesetzt (Fit, Kalibrierung, RC, Volumen; Eingabewerte ohne Vorgaben), `src/dosimetry/uncertainty.ts`* – Priorität mittel, Aufwand M
   - Heute nur die Fit-Kovarianz.
   - **Vorschlag:** Relative Unsicherheiten für Kalibrierfaktor, RC und Volumen/Masse (editierbar, Vorgaben mit Quelle) bis zur Dosis fortpflanzen und getrennt ausweisen.
-- [ ] **Akaike-Gewichte anzeigen** – Priorität niedrig, Aufwand S
+- [x] **Akaike-Gewichte anzeigen** – *umgesetzt (mit gewichteter TIA, nur Information)* – Priorität niedrig, Aufwand S
   - OpenDose3D wählt das Modell über Akaike-Gewichte. Wir haben AICc bereits; die Gewichte (und ggf. ein gewichtetes Mittel der TIA) sind wenige Zeilen.
   - **Keine** Übernahme aller elf NUKFIT-Funktionen: Mit 3–4 Zeitpunkten sind tri-exponentielle Modelle nicht bestimmbar.
 - [ ] **Weitere Therapienuklide** – Priorität niedrig, Aufwand S je Nuklid
@@ -116,6 +116,14 @@ Forschungswerkzeug, kein zertifiziertes Medizinprodukt.
   Die Halbwertszeiten gelten auch für den Nuklid-Editor im DICOM-Header.
 
 ### Funktionen in der App (Bereich „Dosimetrie“ in der linken Seitenleiste)
+
+0. **Zeitpunkt-Übersicht (11/2026)**
+   - Automatische Gruppierung der Datensätze zu Aufnahmen über FrameOfReference, Studie und Aufnahmezeit aus dem
+     DICOM-Header (`src/dosimetry/sessions.ts`); beim ersten Öffnen ein Zeitpunkt je Aufnahme mit Funktionsbild.
+   - Zeitachse (Stunden p.i.) und je Zeitpunkt eine Karte mit Datum, SPECT/PET (Counts/Bq/ml), CT, Organkarte,
+     Läsionsbild, Status (t p.i., Dauer, Kalibrierung, registriert) und Plausibilitätswarnungen;
+     „Nicht zugeordnet“ für Datensätze ohne Datum; „Im Viewer zeigen“.
+   - Viewer: globaler Umschalter SUV | Counts/Bq/ml (die Dosimetrie rechnet immer mit Counts bzw. Bq/ml).
 
 1. **Zeitpunkte**
    - SPECT-Datensätze auswählen, CT je Zeitpunkt; Vorschlag über die FrameOfReference.
@@ -179,7 +187,12 @@ Forschungswerkzeug, kein zertifiziertes Medizinprodukt.
   - Regionsmessung über verschiedene Raster;
   - Voxel-TIA, Kernel-Faltung (Delta- und versetzter Kernel), DVH, BED;
   - ICRP-107-Werte.
-- **Browser:** Synthetisches Phantom mit 2 Zeitpunkten (24 h / 96 h, T_eff 40 h).
+- **Browser (11/2026):** Synthetisches DICOM-Phantom mit 3 Aufnahmen (24/48/96 h, je CT + SPECT mit Datum und
+  Injektion im Header; Niere T_eff 40 h, Leber 60 h; zwei Läsionen mit Verschiebung und vertauschter Nummerierung):
+  automatische Gruppierung, Registrierung, Läsionszuordnung (4 mm / 0 mm), Niere 4,78 Gy (Handrechnung 4,79 Gy),
+  Leber-TIA 5190 MBq·h (5194), Voxelkarte und DVH konsistent, Bericht vollständig. Phantom-Kalibrierung:
+  10,0 cps/MBq wie vorgegeben.
+- **Browser (früher):** Synthetisches Phantom mit 2 Zeitpunkten (24 h / 96 h, T_eff 40 h).
   - Niere: TIA 308 MBq·h, 3,72 Gy – stimmt mit der Handrechnung und der Voxelkarte überein.
   - Organkarte nach der CT-Segmentierung wird automatisch übernommen.
 

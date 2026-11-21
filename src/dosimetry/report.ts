@@ -56,6 +56,8 @@ export interface ReportData {
 }
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+/** " ± sd", omitted when below 0.05 % of the value (exact fits). */
+const pm = (sd: number | undefined, v: number) => (sd === undefined || !Number.isFinite(sd) || !(sd >= 5e-4 * Math.abs(v)) ? "" : ` ± ${num(sd, 2)}`);
 const num = (v: number | undefined, d = 3) => (v === undefined || !Number.isFinite(v) ? "–" : Number(v.toPrecision(d)).toLocaleString("de-DE"));
 
 /** Small SVG chart: measured activities and the fitted curve over time p.i. */
@@ -89,8 +91,8 @@ export function buildReport(d: ReportData): string {
         r.rc,
         r.model,
         r.teffH,
-        `${num(r.tia)}${r.tiaSd !== undefined ? ` ± ${num(r.tiaSd, 2)}` : ""}`,
-        `${num(r.doseGy)}${r.doseSdGy !== undefined ? ` ± ${num(r.doseSdGy, 2)}` : ""}`,
+        `${num(r.tia)}${pm(r.tiaSd, r.tia)}`,
+        `${num(r.doseGy)}${pm(r.doseSdGy, r.doseGy)}`,
         r.bed,
         r.dvh ? `${num(r.dvh.d2)} / ${num(r.dvh.d50)} / ${num(r.dvh.d98)}` : undefined,
       ]),
@@ -104,8 +106,8 @@ ${kv(
   [
     ["Modell", r.model],
     ["T_eff", r.teffH !== undefined ? `${num(r.teffH)} h` : "–"],
-    ["TIA", `${num(r.tia)}${r.tiaSd !== undefined ? ` ± ${num(r.tiaSd, 2)}` : ""} MBq·h`],
-    ["Dosis", `${num(r.doseGy)}${r.doseSdGy !== undefined ? ` ± ${num(r.doseSdGy, 2)}` : ""} Gy`],
+    ["TIA", `${num(r.tia)}${pm(r.tiaSd, r.tia)} MBq·h`],
+    ["Dosis", `${num(r.doseGy)}${pm(r.doseSdGy, r.doseGy)} Gy`],
     ...(r.uncertainty ? ([["Unsicherheit (k = 1)", r.uncertainty]] as [string, string][]) : []),
     ...(r.akaike ? ([["Akaike-Gewichte", r.akaike]] as [string, string][]) : []),
     ...(r.dvh ? ([["Voxelkarte", `Mittel ${num(r.dvh.mean)} Gy · D2 ${num(r.dvh.d2)} · D50 ${num(r.dvh.d50)} · D98 ${num(r.dvh.d98)} Gy`]] as [string, string][]) : []),

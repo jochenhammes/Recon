@@ -50,6 +50,10 @@ export interface DosimetryApi {
 }
 
 const HOUR = 3.6e6;
+/** " ± sd" with two significant digits; omitted when below 0.05 % of the value (exact fits, synthetic data). */
+const pm = (sd: number | undefined, v: number) => (sd === undefined || !Number.isFinite(sd) || !(sd >= 5e-4 * Math.abs(v)) ? "" : ` ± ${formatValue(Number(sd.toPrecision(2)))}`);
+/** Percent with one decimal ("< 0,1 %" for tiny values). */
+const pct = (rel: number) => (rel * 100 < 0.1 ? "< 0,1 %" : `${(rel * 100).toFixed(1).replace(".", ",")} %`);
 const fmt = (v: number | undefined, digits = 3) => (v === undefined || !Number.isFinite(v) ? "–" : formatValue(Number(v.toPrecision(digits))));
 
 interface TpView {
@@ -150,7 +154,13 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
   const sig = (l: { spectId: string; ctId?: string; organSetId?: string; lesionSetId?: string }[]) => l.map((t) => [t.spectId, t.ctId ?? "", t.organSetId ?? "", t.lesionSetId ?? ""].join(",")).sort().join("|");
   // Organ map shown for a time point: explicit choice, else the organ map of its CT.
   const organIdOf = (tp: { ctId?: string; organSetId?: string }) => (tp.organSetId && byId(tp.organSetId) ? tp.organSetId : tp.ctId ? organSetOf(tp.ctId)?.id : undefined);
-  const suggestionDiffers = suggested.length > 0 && sig(suggested) !== sig(tpsRaw.map((t) => ({ ...t, organSetId: organIdOf(t) })));
+  // Only roles the grouping can propose count (maps assigned by hand without a session do not make it differ).
+  const suggestionDiffers =
+    suggested.length > 0 &&
+    sig(suggested.map((g) => {
+      const cur = tpsRaw.find((t) => t.spectId === g.spectId);
+      return { ...g, organSetId: g.organSetId ?? (cur ? organIdOf(cur) : undefined), lesionSetId: g.lesionSetId ?? cur?.lesionSetId };
+    })) !== sig(tpsRaw.map((t) => ({ ...t, organSetId: organIdOf(t) })));
   // Time points in chronological order (the first is the reference of the registration and the voxel map).
   const tpTime = (tp: (typeof tpsRaw)[number]) => tp.tHoursManual ?? hoursPi(acquisitionMs(byId(tp.spectId)!.dataset), setup.injection.timeMs ?? headerInfo?.injectionMs) ?? acquisitionMs(byId(tp.spectId)!.dataset) ?? Infinity;
   const tps = [...tpsRaw].sort((a, b) => tpTime(a) - tpTime(b));
@@ -310,7 +320,8 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
       let next: DosimetrySetup = { ...s, timePointsAuto: true, timePoints: [], labelSets: s.labelSets.filter((l) => l.tp === "all") };
       for (const g of suggested) {
         const old = s.timePoints.find((t) => t.spectId === g.spectId);
-        const tp = { ...old, ...g, registered: old?.registered && old.ctId === g.ctId };
+        // Keep organ/lesion maps chosen by hand when the grouping has none (e.g. NIfTI without date).
+        const tp = { ...old, ...g, organSetId: g.organSetId ?? old?.organSetId, lesionSetId: g.lesionSetId ?? old?.lesionSetId, registered: old?.registered && old.ctId === g.ctId };
         next = withTpLabels({ ...next, timePoints: [...next.timePoints, tp] }, tp);
       }
       return next;
@@ -644,7 +655,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
           akaike: aw.weights.length ? `${aw.weights.map((w) => `${TAC_MODEL_LABELS[w.model]} ${Math.round(w.weight * 100)} %`).join(", ")}; gewichtete TIA ${fmt(aw.averagedTia)} MBq·h` : undefined,
           doseGy: r.doseGy,
           doseSdGy: r.doseSdGy,
-          uncertainty: r.unc ? `± ${fmt(r.unc.rel * 100, 2)} % (${r.unc.parts.map((p) => `${p.label} ${fmt(p.rel * 100, 2)} %`).join(", ")})` : undefined,
+          uncertainty: r.unc ? `± ${pct(r.unc.rel)} (${r.unc.parts.map((p) => `${p.label} ${pct(p.rel)}`).join(", ")})` : undefined,
           bed: r.bed,
           dvh: dvhs.get(r.key),
           methodCmp: methodCmp?.get(r.key),
@@ -1020,7 +1031,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                 })()}
                 {sel.unc && (
                   <p className="tool-hint">
-                    Unsicherheit der Dosis (k = 1): ± {fmt(sel.unc.rel * 100, 2)} % – {sel.unc.parts.map((p) => `${p.label} ${fmt(p.rel * 100, 2)} %`).join(" · ")}
+                    Unsicherheit der Dosis (k = 1): ± {pct(sel.unc.rel)} – {sel.unc.parts.map((p) => `${p.label} ${pct(p.rel)}`).join(" · ")}
                   </p>
                 )}
                 {selDvh && <Chart series={[{ label: "DVH", x: selDvh.curve.dose, y: selDvh.curve.volumePct, style: "line", color: "#2f9e44" }]} xLabel="Dosis (Gy)" yLabel={`${sel.name}: Volumen (%)`} />}
@@ -1052,11 +1063,11 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                         <td>{fmt(r.fit.teffH)}</td>
                         <td>
                           {fmt(r.fit.tia)}
-                          {r.fit.tiaSd !== undefined ? ` ± ${fmt(r.fit.tiaSd, 2)}` : ""}
+                          {pm(r.fit.tiaSd, r.fit.tia)}
                         </td>
                         <td>
                           {fmt(r.doseGy)}
-                          {r.doseSdGy !== undefined ? ` ± ${fmt(r.doseSdGy, 2)}` : ""}
+                          {pm(r.doseSdGy, r.doseGy)}
                         </td>
                         <td>{fmt(r.bed)}</td>
                         <td>{d ? `${fmt(d.d2)} / ${fmt(d.d50)} / ${fmt(d.d98)}` : "–"}</td>
@@ -1073,10 +1084,10 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
               <button className="secondary-btn" onClick={printReport}>
                 Drucken / PDF
               </button>
-              <InfoText details="Bericht mit allen Zwischenergebnissen: Zeitpunkte (Datum, t p.i., Dauer, Kalibrierung), Aktivitäten je Region, Modell und Parameter, Akaike-Gewichte, TIA und Dosis mit Unsicherheit, BED, DVH-Kennwerte, Methodenvergleich lokal/Kernel, Methodik und Quellen. „Drucken / PDF“ öffnet ihn zum Drucken oder Speichern als PDF.">
-                Bericht
-              </InfoText>
             </div>
+            <InfoText details="Bericht mit allen Zwischenergebnissen: Zeitpunkte (Datum, t p.i., Dauer, Kalibrierung), Aktivitäten je Region, Modell und Parameter, Akaike-Gewichte, TIA und Dosis mit Unsicherheit, BED, DVH-Kennwerte, Methodenvergleich lokal/Kernel, Methodik und Quellen. „Drucken / PDF“ öffnet ihn zum Drucken oder Speichern als PDF.">
+                Bericht mit allen Zwischenergebnissen
+              </InfoText>
             <div className="field-row">
               <label className="field">
                 Niere α/β (Gy)
@@ -1090,9 +1101,9 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
             <div className="field-row three">
               {(
                 [
-                  ["calibrationPct", "u Kalibrierung (%)"],
-                  ["rcPct", "u Recovery (%)"],
-                  ["volumePct", "u Volumen (%)"],
+                  ["calibrationPct", "u Kalibr. %"],
+                  ["rcPct", "u RC %"],
+                  ["volumePct", "u Volumen %"],
                 ] as const
               ).map(([k, label]) => (
                 <label key={k} className="field">
