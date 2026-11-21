@@ -52,6 +52,8 @@ export interface DosimetrySetup {
   labelSetsDismissed?: string[];
   /** Per region name (lower case). */
   regions: Record<string, DosRegionOptions>;
+  /** Fingerprint of the label maps and their assignment at the last measurement (to detect later changes). */
+  measuredSig?: string;
   /** Measured per time point (SPECT id) and region name. */
   measurements: Record<string, Record<string, RegionMeasure & { name: string }>>;
   /**

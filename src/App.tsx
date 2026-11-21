@@ -1343,6 +1343,12 @@ function App() {
   const tumorEntry = byId(tumorTargetId) && tumorTargets.some((e) => e.id === tumorTargetId) ? byId(tumorTargetId) : (tumorTargets.find((e) => e.id === active?.id) ?? tumorTargets.find((e) => datasetModality(e.dataset) === "PT") ?? tumorTargets[0]);
   const tumorSuv = tumorEntry ? suvById.get(tumorEntry.id) : undefined;
   const tumorFactor = tumorSuv?.ok ? tumorSuv.info.factor : 1;
+  const tumorRawUnit = tumorEntry ? (tumorEntry.dataset.valueUnit ?? rawUnitLabel(unitSource(tumorEntry.dataset))) : "";
+  const tumorRawMax = useMemo(() => {
+    let m = 0;
+    for (const v of tumorEntry?.dataset.current.data ?? []) if (v > m) m = v;
+    return m;
+  }, [tumorEntry?.dataset.current]);
 
   const organEntries = entries.filter((e) => e.dataset.atlas && e.id !== tumor?.datasetId);
   // The included lesions as a regular label dataset ("Läsionen · PET"): shown, analysed, exported and saved like
@@ -3289,8 +3295,14 @@ function App() {
           targets={tumorTargets.map((e) => ({ id: e.id, label: entryLabel(e) }))}
           targetId={tumorEntry?.id ?? null}
           onTargetChange={setTumorTargetId}
-          unitInfo={tumorSuv?.ok ? "Schwellen in SUV (Körpergewicht) aus dem DICOM-Header." : `Kein SUV verfügbar${tumorSuv && !tumorSuv.ok ? ` (${tumorSuv.reason})` : ""} – die Werte werden direkt als SUV interpretiert.`}
+          unitInfo={
+            tumorSuv?.ok
+              ? "Schwellen in SUV (Körpergewicht) aus dem DICOM-Header."
+              : `Kein SUV verfügbar${tumorSuv && !tumorSuv.ok ? ` (${tumorSuv.reason})` : ""} – z. B. Therapie-SPECT in Counts. Schwellen gelten in der Einheit des Bildes (${tumorRawUnit || "Originalwerte"}) oder relativ zum Maximum; feste SUV-Schwellen (2,5 / 3 / 4) sind dann nicht anwendbar. TLG/TL-PSMA ist das Produkt aus Volumen und mittlerem Wert in dieser Einheit.`
+          }
           suvAvailable={!!tumorSuv?.ok}
+          rawUnit={tumorRawUnit}
+          rawMax={tumorRawMax}
           liver={liverRef && liverRef.entryId === tumorEntry?.id ? liverRef : null}
           voiAvailable={!!overviewVoi}
           onLiverFromVoi={liverFromVoi}

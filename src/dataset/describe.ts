@@ -107,7 +107,7 @@ export function rawUnitLabel(source: VolumeSource): string {
   if (m === "CT") return "HU";
   if (source.kind !== "dicom") return "";
   const units = source.files[0].dataSet.string("x00541001")?.trim();
-  return units === "BQML" ? "Bq/ml" : (units ?? "");
+  return units === "BQML" ? "Bq/ml" : units === "CNTS" ? "Counts" : (units ?? "");
 }
 
 /** Series description (if any) for display. */

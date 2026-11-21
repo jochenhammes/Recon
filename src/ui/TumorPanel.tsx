@@ -11,7 +11,7 @@ import type { Option } from "./NormalizationPanel";
 export type TumorMode = "none" | "pick" | "add" | "erase";
 export type TumorIndication = "lymphoma" | "psma";
 
-type PresetId = "suv4" | "suv25" | "pct41" | "liver" | "psma3" | "custom";
+type PresetId = "suv4" | "suv25" | "pct41" | "liver" | "psma3" | "custom" | "imgPct";
 
 const PRESETS: Record<TumorIndication, { id: PresetId; label: string }[]> = {
   lymphoma: [
@@ -29,6 +29,14 @@ const PRESETS: Record<TumorIndication, { id: PresetId; label: string }[]> = {
   ],
 };
 
+/** Without SUV (e.g. therapy SPECT in counts): thresholds in the image's own unit or relative to its maximum. */
+const RAW_PRESETS: { id: PresetId; label: string }[] = [
+  { id: "pct41", label: "41 % des Läsionsmaximums" },
+  { id: "imgPct", label: "Anteil des Bildmaximums" },
+  { id: "liver", label: "Leber-basiert (a × Mittel + b × SD)" },
+  { id: "custom", label: "Eigene Schwelle" },
+];
+
 export interface TumorPanelProps {
   targets: Option[];
   targetId: string | null;
@@ -36,6 +44,10 @@ export interface TumorPanelProps {
   /** e.g. "SUV (Körpergewicht)" or a warning when no SUV is available. */
   unitInfo: string;
   suvAvailable: boolean;
+  /** Unit of the image values when there is no SUV (Counts, Bq/ml). */
+  rawUnit: string;
+  /** Maximum of the image (raw units), for thresholds relative to it. */
+  rawMax: number;
   liver: { mean: number; sd: number; ml: number } | null;
   voiAvailable: boolean;
   onLiverFromVoi: () => void;
@@ -83,7 +95,17 @@ export function TumorPanel(props: TumorPanelProps) {
   const [liverA, setLiverA] = useState("1.5");
   const [liverB, setLiverB] = useState("2");
   const [minMl, setMinMl] = useState("0.5");
-  const presets = PRESETS[indication];
+  const [imgPct, setImgPct] = useState("30");
+  const [detectPct, setDetectPct] = useState("20");
+  const suv = props.suvAvailable;
+  const unit = suv ? "SUV" : props.rawUnit || "Originalwert";
+  const lbl = {
+    max: suv ? "SUVmax" : "Max",
+    mean: suv ? "SUVmean" : "Mittel",
+    peak: suv ? "SUVpeak" : "Peak",
+    tlg: suv ? "ml·SUV" : `ml·${unit}`,
+  };
+  const presets = suv ? PRESETS[indication] : RAW_PRESETS;
   const active = presets.some((p) => p.id === preset) ? preset : presets[0].id;
   const num = (s: string) => parseFloat(s.replace(",", "."));
   const tlgLabel = indication === "psma" ? "TL-PSMA" : "TLG";
@@ -97,7 +119,10 @@ export function TumorPanel(props: TumorPanelProps) {
       case "psma3":
         return { kind: "absolute", suv: 3 };
       case "pct41":
-        return { kind: "percentMax", percent: 0.41, detectSuv: indication === "psma" ? 3 : 2.5 };
+        // Without SUV the detection threshold is a share of the image maximum.
+        return { kind: "percentMax", percent: 0.41, detectSuv: suv ? (indication === "psma" ? 3 : 2.5) : (num(detectPct) / 100) * props.rawMax };
+      case "imgPct":
+        return Number.isFinite(num(imgPct)) && props.rawMax > 0 ? { kind: "absolute", suv: (num(imgPct) / 100) * props.rawMax } : null;
       case "custom":
         return Number.isFinite(num(customSuv)) ? { kind: "absolute", suv: num(customSuv) } : null;
       case "liver":
@@ -119,7 +144,7 @@ export function TumorPanel(props: TumorPanelProps) {
           </button>
         </div>
         <label className="field">
-          PET
+          PET / SPECT
           <select value={props.targetId ?? ""} disabled={props.busy} onChange={(e) => props.onTargetChange(e.target.value)}>
             {props.targets.map((t) => (
               <option key={t.id} value={t.id}>
@@ -129,7 +154,7 @@ export function TumorPanel(props: TumorPanelProps) {
           </select>
         </label>
         <InfoText warn={!props.suvAvailable} details={props.unitInfo}>
-          {props.suvAvailable ? "Schwellen in SUV" : "Kein SUV – Werte als SUV gewertet"}
+          {suv ? "Schwellen in SUV" : `Kein SUV – Schwellen in ${unit}`}
         </InfoText>
         <label className="field">
           Methode
@@ -141,9 +166,28 @@ export function TumorPanel(props: TumorPanelProps) {
             ))}
           </select>
         </label>
+        {!suv && active === "imgPct" && (
+          <label className="field">
+            Schwelle (% des Bildmaximums)
+            <input value={imgPct} onChange={(e) => setImgPct(e.target.value)} />
+          </label>
+        )}
+        {!suv && active === "pct41" && (
+          <label className="field">
+            Läsionen erkennen ab (% des Bildmaximums)
+            <input value={detectPct} onChange={(e) => setDetectPct(e.target.value)} />
+          </label>
+        )}
+        {!suv && (active === "imgPct" || active === "pct41") && props.rawMax > 0 && (
+          <p className="tool-hint">
+            Bildmaximum {formatValue(Number(props.rawMax.toPrecision(4)))} {unit} → Schwelle{" "}
+            {formatValue(Number((((active === "imgPct" ? num(imgPct) : num(detectPct)) / 100) * props.rawMax).toPrecision(4)))} {unit}
+            {active === "pct41" ? " zur Erkennung, dann 41 % des Maximums je Läsion" : ""}
+          </p>
+        )}
         {active === "custom" && (
           <label className="field">
-            SUV-Schwelle
+            Schwelle ({unit})
             <input value={customSuv} onChange={(e) => setCustomSuv(e.target.value)} />
           </label>
         )}
@@ -162,7 +206,7 @@ export function TumorPanel(props: TumorPanelProps) {
             </div>
             {props.liver ? (
               <p className="tool-hint">
-                Leber SUV {f(props.liver.mean)} ± {f(props.liver.sd)} ({f(props.liver.ml, 1)} ml) → Schwelle SUV {f(num(liverA) * props.liver.mean + num(liverB) * props.liver.sd)}
+                Leber {f(props.liver.mean)} ± {f(props.liver.sd)} {unit} ({f(props.liver.ml, 1)} ml) → Schwelle {f(num(liverA) * props.liver.mean + num(liverB) * props.liver.sd)} {unit}
               </p>
             ) : (
               <InfoText warn details="Leber-Referenz (PERCIST): 3-cm-Kugel-VOI (Radius 15 mm) im rechten Leberlappen – automatisch aus der CT-Lebermaske oder im Bereich „Bearbeiten“ setzen und hier übernehmen.">
@@ -223,10 +267,12 @@ export function TumorPanel(props: TumorPanelProps) {
             <dt>{indication === "psma" ? "PSMA-TV" : "TMTV"}</dt>
             <dd>{f(b.tmtv, 1)} ml</dd>
             <dt>{tlgLabel}</dt>
-            <dd>{f(b.tlg, 1)} ml·SUV</dd>
-            <dt>SUVmax</dt>
+            <dd>
+              {f(b.tlg, 1)} {lbl.tlg}
+            </dd>
+            <dt>{lbl.max}</dt>
             <dd>{f(b.suvMax)}</dd>
-            <dt>SUVmean</dt>
+            <dt>{lbl.mean}</dt>
             <dd>{f(b.suvMean)}</dd>
             {indication === "psma" && props.split && (
               <>
@@ -298,8 +344,8 @@ export function TumorPanel(props: TumorPanelProps) {
                   <th title="Prüfstatus: ✓ bestätigt, ✗ verworfen, · offen">Geprüft</th>
                   <th>Nr</th>
                   <th>ml</th>
-                  <th>SUVmax</th>
-                  <th>SUVpeak</th>
+                  <th>{lbl.max}</th>
+                  <th>{lbl.peak}</th>
                   <th>{tlgLabel}</th>
                   {props.organId && <th>Ort</th>}
                 </tr>
@@ -401,7 +447,7 @@ function ReviewBox({
       </div>
       {cur ? (
         <p className="tool-hint">
-          Läsion {cur.id} ({idx + 1}/{sorted.length}) · {formatValue(cur.volumeMl)} ml · SUVmax {formatValue(cur.suvMax)}
+          Läsion {cur.id} ({idx + 1}/{sorted.length}) · {formatValue(cur.volumeMl)} ml · max. {formatValue(cur.suvMax)}
           {cur.bone ? " · Knochen" : cur.organ ? ` · ${cur.organ.replace(/_/g, " ")}` : ""} ·{" "}
           {cur.reviewed ? (cur.included ? "bestätigt" : "verworfen") : cur.included ? "offen" : "offen (ausgeschlossen)"}
         </p>
@@ -429,7 +475,7 @@ function ReviewBox({
         </button>
       )}
       {cur && <p className="tool-hint review-keys">Tastatur: Enter = bestätigen · Entf = verwerfen · ←/→ = blättern</p>}
-      <button className="secondary-btn" disabled={!excluded} title="Ausgeschlossene Läsionen endgültig entfernen, übrige nach SUVmax neu nummerieren" onClick={onCleanup}>
+      <button className="secondary-btn" disabled={!excluded} title="Ausgeschlossene Läsionen endgültig entfernen, übrige nach dem Maximum neu nummerieren" onClick={onCleanup}>
         Bereinigen{excluded ? ` (${excluded} ausgeschlossene entfernen)` : ""}
       </button>
     </div>

@@ -279,6 +279,16 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
     return { byTp, rows };
   }, [autoLinks, setup.lesionLinks]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** Fingerprint of what a measurement depends on: label maps (content, region names), their time points, lesion links. */
+  const labelSig = [
+    ...setup.labelSets.map((l) => {
+      const e = byId(l.id);
+      return `${l.id}@${l.tp}:${e ? labelHash(e.dataset.current.data) : "-"}:${[...(e?.dataset.atlas?.labels.values() ?? [])].join("/")}`;
+    }),
+    JSON.stringify(setup.lesionLinks ?? {}),
+  ].join("|");
+  const measurementStale = Object.keys(setup.measurements).length > 0 && setup.measuredSig !== undefined && setup.measuredSig !== labelSig;
+
   // ── Actions ──
   type TpPatch = Partial<DosimetrySetup["timePoints"][number]>;
 
@@ -445,7 +455,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
         }
         measurements[tp.spectId] = res;
       }
-      set((s) => ({ ...s, measurements }));
+      set((s) => ({ ...s, measurements, measuredSig: labelSig }));
       setStatus(`Gemessen: ${Object.values(measurements).reduce((s, m) => s + Object.keys(m).length, 0)} Regionen über ${tpViews.length} Zeitpunkt(e).`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -987,6 +997,11 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
             )}
           </div>
         )}
+        {measurementStale && (
+          <InfoText warn details="Seit der letzten Messung haben sich Labelbilder geändert – z. B. Läsionen in „Segmentierung & MTV“ bestätigt oder abgewählt, eine Organkarte neu segmentiert oder die Läsionszuordnung korrigiert. Die Ergebnisse unten beruhen noch auf dem alten Stand.">
+            Labelbilder geändert – neu messen
+          </InfoText>
+        )}
         <button className="primary-btn" disabled={!!busy || !tpViews.length || !setup.labelSets.length || !allCalibrated} onClick={() => void measure()}>
           Aktivitäten messen
         </button>
@@ -995,6 +1010,11 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
 
       <Card title={<>Kurven und Dosis</>} persistKey="dos-res" status={rows.length ? { text: `${rows.length} Regionen`, tone: "ok" } : null}
         info="Je Region: Aktivität (MBq, ggf. durch den Recovery-Koeffizienten geteilt) über der Zeit, Fit und zeitintegrierte Aktivität (TIA). Automatisch: 1 Zeitpunkt → Hänscheid (bzw. Madsen mit T_eff), 2 → monoexponentiell, ≥ 3 → biexponentiell mit Aufnahmephase, wenn die Aktivität zwischen den ersten Zeitpunkten noch steigt, sonst monoexponentiell. Die Auswaschung ist nie langsamer als der physikalische Zerfall. Dosis = TIA × Elektronenenergie / Masse (lokale Energiedeposition; Masse aus CT-Dichte). Nieren: BED für monoexponentielle Auswaschung.">
+        {measurementStale && rows.length > 0 && (
+          <InfoText warn details="Labelbilder haben sich seit der Messung geändert (z. B. Läsionen in „Segmentierung & MTV“ bestätigt oder abgewählt). Unter „Regionen“ erneut „Aktivitäten messen“.">
+            Veraltet – Labelbilder geändert
+          </InfoText>
+        )}
         {rows.length === 0 ? (
           <InfoText details="Zeitpunkte, Kalibrierung und Regionen festlegen, dann „Aktivitäten messen“.">Noch keine Messwerte</InfoText>
         ) : (
@@ -1223,6 +1243,18 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
 
 function profileNote(p: CameraProfile | undefined) {
   return p?.note ? <p className="tool-hint">Kalibrierung: {p.note}</p> : null;
+}
+
+const labelHashes = new WeakMap<Float32Array, number>();
+/** Content hash of a label image (cached per array: label maps change by replacing the array). */
+function labelHash(data: Float32Array): number {
+  let h = labelHashes.get(data);
+  if (h === undefined) {
+    h = 0;
+    for (let i = 0; i < data.length; i++) if (data[i]) h = (h * 31 + data[i] * ((i % 65521) + 1)) % 2147483647;
+    labelHashes.set(data, h);
+  }
+  return h;
 }
 
 /** Quantitative activity-concentration image (DICOM Units BQML, or a value unit Bq/ml set in the app). */

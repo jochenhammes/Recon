@@ -500,7 +500,10 @@ Counts bzw. Bq/ml, unabhängig vom Umschalter SUV im Viewer.
    **Läsionen über Zeitpunkte:** Haben mehrere Zeitpunkte ein eigenes Läsionsbild, werden die Läsionen nach der
    Registrierung über ihre Schwerpunkte einander zugeordnet (optimale Paarung, höchstens 20 mm Abstand, einstellbar).
    Die Tabelle zeigt je Läsion von T1 den Partner und den Abstand; per Auswahl korrigierbar. Gemessen wird unter dem
-   Namen der T1-Läsion, Läsionen ohne Partner zählen nicht. *Aktivitäten messen* integriert die Aktivitätskonzentration über jede Region;
+   Namen der T1-Läsion, Läsionen ohne Partner zählen nicht.
+   Läsionen kommen aus **Segmentierung & MTV** (nur die dort bestätigten). Ändern sich Labelbilder nach der Messung –
+   Läsion bestätigt/abgewählt, Organkarte neu segmentiert, Zuordnung korrigiert –, erscheint *Labelbilder geändert –
+   neu messen*. *Aktivitäten messen* integriert die Aktivitätskonzentration über jede Region;
    die Masse kommt aus der CT-Dichte (1 + HU/1000, oberhalb von Wasser 1 + 0,6·HU/1000).
 4. **Kurven und Dosis:** Je Region Diagramm, Fit, zeitintegrierte Aktivität (TIA ± Unsicherheit aus der
    Fit-Kovarianz), Dosis und für die Nieren die BED.
@@ -596,8 +599,11 @@ fast vollständiges Versagen).
 
 1. PET (und optional CT mit Organsegmentierung) laden; Bereich **Segmentierung & MTV**.
 2. Indikation wählen: **Lymphom (FDG)** oder **PSMA** – setzt passende Methoden und Ausschlussorgane.
-3. **PET** wählen. Bei DICOM mit Dosis/Gewicht wird in SUV gerechnet; sonst erscheint ein Hinweis
-   (Werte werden direkt als SUV interpretiert).
+3. **PET / SPECT** wählen. Bei DICOM mit Dosis/Gewicht wird in SUV gerechnet. Ohne SUV (z. B. Therapie-SPECT in
+   Counts) gelten die Schwellen in der Einheit des Bildes: *41 % des Läsionsmaximums* (Erkennung ab einem Anteil des
+   Bildmaximums), *Anteil des Bildmaximums*, *Leber-basiert* oder eine *eigene Schwelle* in Counts bzw. Bq/ml; die
+   Kennwerte heißen dann Max/Mittel/Peak statt SUV. Die bestätigten Läsionen stehen als Labelbild
+   „Läsionen · <Datensatz>“ auch der **Dosimetrie** zur Verfügung (je SPECT eines Zeitpunkts einmal segmentieren).
 4. **Methode**:
    - feste SUV-Schwelle (Lymphom 4,0 oder 2,5; PSMA 3),
    - **41 % SUVmax** je Läsion,
