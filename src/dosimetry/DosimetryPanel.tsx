@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatValue } from "../components/format";
 import { umlaut, withPatientId } from "../core/exportName";
 import { csvText, csvWithInfo } from "../core/csv";
@@ -15,8 +15,9 @@ import { type Placed, measureRegions } from "./dose";
 import { DEFAULT_ENERGIES, THERAPY_NUCLIDES, localDepositionDose, nuclideById } from "./nuclideData";
 import { DEFAULT_ORGANS, type DosRegionOptions, type DosimetrySetup, bedMono, regionKey } from "./setup";
 import { PhantomCalibration } from "./PhantomCalibration";
-import { TAC_MODEL_LABELS, type TacFit, type TacModel, fitTac } from "./tacFit";
-import { type DvhStats, densityMap, doseFromTia, dvh, parseKernel, regionDoses, voxelTia } from "./voxelDose";
+import { TAC_MODEL_LABELS, type TacFit, type TacModel, akaikeWeights, fitTac } from "./tacFit";
+import { type DvhStats, dvh, parseKernel, regionDoses } from "./voxelDose";
+import { plain, runVoxelDose, type VoxelDoseRun } from "./runner";
 import { type SessionItem, acquisitionMs, fmtDateTime, groupSessions, hoursPi, studyUidOf } from "./sessions";
 import { type TpCardView, type UnassignedItem, TimePointsCard } from "./TimePointsCard";
 
@@ -88,6 +89,8 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [kernelVoxel, setKernelVoxel] = useState("");
+  const voxelRun = useRef<VoxelDoseRun | null>(null);
+  const [methodCmp, setMethodCmp] = useState<Map<string, { led: number; kernel: number }> | null>(null);
   const [kernelUnit, setKernelUnit] = useState<"mGy/MBq·s" | "Gy/MBq·s" | "Gy/Bq·s">("mGy/MBq·s");
 
   const byId = (id: string | undefined) => entries.find((e) => e.id === id);
@@ -423,12 +426,32 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
       const kernel = setup.voxel.kernel;
       if (kernel && Math.abs(kernel.voxelMm - refPlaced.volume.geometry.spacing[0]) / kernel.voxelMm > 0.05)
         throw new Error(`Kernel-Voxelgröße ${kernel.voxelMm} mm passt nicht zur SPECT-Voxelgröße ${refPlaced.volume.geometry.spacing[0].toFixed(2)} mm.`);
-      const tia = await voxelTia(refPlaced, vtps, { physHalfLifeH: halfLifeH, electronKeV: energy, method: setup.voxel.method, onProgress: (f) => setStatus(`Zeitintegral ${Math.round(f * 100)} %`) });
-      setStatus(kernel ? "Kernel-Faltung …" : "Dosis …");
-      await new Promise((r) => setTimeout(r, 10));
       const refCt = byId(ref.ctId);
-      const rho = densityMap(refPlaced, refCt ? place(refCt) : undefined);
-      const dose = doseFromTia(tia, rho, refPlaced.volume, { electronKeV: energy, kernel });
+      const run = runVoxelDose(
+        {
+          ref: plain(refPlaced),
+          timePoints: vtps.map((t) => ({ spect: plain(t.spect), mbqPerCount: t.mbqPerCount, tH: t.tH })),
+          ct: refCt ? plain(place(refCt)) : undefined,
+          physHalfLifeH: halfLifeH,
+          electronKeV: energy,
+          method: setup.voxel.method,
+          kernel,
+        },
+        (stage, f) => setStatus(`${stage}${f > 0 ? ` ${Math.round(f * 100)} %` : " …"}`),
+      );
+      voxelRun.current = run;
+      const { dose, led } = await run.promise;
+      // Method comparison: mean dose per region, local deposition vs. kernel.
+      if (led) {
+        const ledPlaced: Placed = { volume: refPlaced.volume.withData(led), matrix: refPlaced.matrix };
+        const kerPlaced: Placed = { volume: refPlaced.volume.withData(dose), matrix: refPlaced.matrix };
+        const cmp = new Map<string, { led: number; kernel: number }>();
+        for (const [key, { le, ids }] of regionLabelIds(ref.spectId)) {
+          const mean = (v: Float32Array) => (v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN);
+          cmp.set(key, { led: mean(regionDoses(place(le), ledPlaced, ids)), kernel: mean(regionDoses(place(le), kerPlaced, ids)) });
+        }
+        setMethodCmp(cmp);
+      } else setMethodCmp(null);
       const name = `Dosis (Gy) · ${nuclideId} · ${kernel ? "Kernel" : "lokal"}`;
       const id = api.putDoseMap(ref.spectId, dose, name, setup.voxel.doseId && byId(setup.voxel.doseId) ? setup.voxel.doseId : undefined);
       set((s) => ({ ...s, voxel: { ...s.voxel, doseId: id } }));
@@ -436,12 +459,34 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
       for (const v of dose) if (v > max) max = v;
       setStatus(`Dosiskarte erstellt (Maximum ${fmt(max)} Gy).`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setStatus(null);
+      if (e instanceof DOMException && e.name === "AbortError") setStatus("Dosiskarte abgebrochen.");
+      else {
+        setError(e instanceof Error ? e.message : String(e));
+        setStatus(null);
+      }
     } finally {
       setBusy(null);
       api.onActivity(null);
+      voxelRun.current = null;
     }
+  }
+
+  /** Label ids per enabled region (first label set wins) of the label sets valid for a time point. */
+  function regionLabelIds(spectId: string): Map<string, { le: DosEntry; ids: Set<number> }> {
+    const out = new Map<string, { le: DosEntry; ids: Set<number> }>();
+    for (const ls of setup.labelSets.filter((l) => l.tp === "all" || l.tp === spectId)) {
+      const le = entries.find((e) => e.id === ls.id);
+      const atlas = le?.dataset.atlas;
+      if (!le || !atlas) continue;
+      const local = new Map<string, Set<number>>();
+      for (const [id, name] of atlas.labels) {
+        const key = regionKey(name);
+        if (!regionOpts(key).enabled || out.has(key)) continue;
+        local.set(key, new Set([...(local.get(key) ?? []), id]));
+      }
+      for (const [key, ids] of local) out.set(key, { le, ids });
+    }
+    return out;
   }
 
   async function loadKernel(file: File) {
@@ -460,22 +505,11 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
   const doseEntry = byId(setup.voxel.doseId);
   const dvhs = useMemo(() => {
     const out = new Map<string, DvhStats>();
-    if (!doseEntry) return out;
     const refTp = tpViews[0]?.spectId;
-    for (const ls of setup.labelSets.filter((l) => l.tp === "all" || l.tp === refTp)) {
-      const le = entries.find((e) => e.id === ls.id);
-      const atlas = le?.dataset.atlas;
-      if (!le || !atlas) continue;
-      const byKey = new Map<string, Set<number>>();
-      for (const [id, name] of atlas.labels) {
-        const key = regionKey(name);
-        if (!regionOpts(key).enabled || out.has(key)) continue;
-        byKey.set(key, new Set([...(byKey.get(key) ?? []), id]));
-      }
-      for (const [key, ids] of byKey) {
-        const s = dvh(regionDoses(place(le), place(doseEntry), ids));
-        if (s) out.set(key, s);
-      }
+    if (!doseEntry || !refTp) return out;
+    for (const [key, { le, ids }] of regionLabelIds(refTp)) {
+      const st = dvh(regionDoses(place(le), place(doseEntry), ids));
+      if (st) out.set(key, st);
     }
     return out;
   }, [doseEntry?.dataset.current, setup.labelSets, setup.regions]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -761,6 +795,15 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                   </label>
                 </div>
                 {sel.fit.note && <p className="tool-hint">{sel.fit.note}</p>}
+                {(() => {
+                  const aw = akaikeWeights(sel.t, sel.a, { physHalfLifeH: halfLifeH });
+                  if (!aw.weights.length) return sel.t.length > 1 ? <p className="tool-hint">Akaike-Gewichte ab 4 Zeitpunkten (Vergleich mono/biexponentiell ab 5).</p> : null;
+                  return (
+                    <p className="tool-hint" title="Akaike-Gewichte (AICc) der vergleichbaren Modelle und die damit gewichtete TIA (OpenDose3D-Ansatz); das Ergebnis oben nutzt weiterhin das gewählte bzw. automatisch bestimmte Modell.">
+                      Akaike-Gewichte: {aw.weights.map((w) => `${TAC_MODEL_LABELS[w.model]} ${Math.round(w.weight * 100)} %`).join(" · ")} · gewichtete TIA {fmt(aw.averagedTia)} MBq·h
+                    </p>
+                  );
+                })()}
                 {selDvh && <Chart series={[{ label: "DVH", x: selDvh.curve.dose, y: selDvh.curve.volumePct, style: "line", color: "#2f9e44" }]} xLabel="Dosis (Gy)" yLabel={`${sel.name}: Volumen (%)`} />}
               </>
             )}
@@ -868,6 +911,38 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
           <button className="secondary-btn" onClick={() => api.showDataset(doseEntry.id)}>
             Dosiskarte anzeigen
           </button>
+        )}
+        {busy === "Dosiskarte" && (
+          <button className="secondary-btn" onClick={() => voxelRun.current?.cancel()}>
+            Abbrechen
+          </button>
+        )}
+        {methodCmp && methodCmp.size > 0 && (
+          <>
+            <InfoText details="Mittlere Dosis je Region aus der Voxelkarte: lokale Energiedeposition der Elektronen (mit CT-Dichte) gegenüber der Kernel-Faltung (Elektronen und Photonen, Dichte-Skalierung ρ_Wasser/ρ). Große Abweichungen bei kleinen Regionen (Kreuzbestrahlung, β-Reichweite) und bei Photonenstrahlern (I-131) sind zu erwarten; in Lunge und Knochen ist auch die Faltung nur eine Näherung.">
+              Methodenvergleich lokal / Kernel
+            </InfoText>
+            <table className="region-table">
+              <thead>
+                <tr>
+                  <th>Region</th>
+                  <th>lokal (Gy)</th>
+                  <th>Kernel (Gy)</th>
+                  <th>Δ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...methodCmp].map(([key, v]) => (
+                  <tr key={key}>
+                    <td>{labelNames.get(key) ?? key}</td>
+                    <td>{fmt(v.led)}</td>
+                    <td>{fmt(v.kernel)}</td>
+                    <td>{Number.isFinite(v.led) && v.led > 0 ? `${((100 * (v.kernel - v.led)) / v.led).toFixed(1).replace(".", ",")} %` : "–"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
         )}
       </Card>
 

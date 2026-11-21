@@ -279,3 +279,28 @@ export function fitTac(t: number[], y: number[], model: TacModel | "auto", o: Ta
   if (n >= 5 && mono.aicc !== undefined && bi.aicc !== undefined) return bi.aicc < mono.aicc ? bi : mono;
   return ys[1] > ys[0] ? bi : mono;
 }
+
+export interface ModelWeight {
+  model: TacModel;
+  aicc: number;
+  /** Akaike weight wᵢ = exp(−Δᵢ/2) / Σ exp(−Δⱼ/2), Δᵢ = AICcᵢ − min AICc. */
+  weight: number;
+  tia: number;
+}
+
+/**
+ * Akaike weights of the fit models that can be compared (AICc needs n > k + 1: mono from 4, bi-exponential from
+ * 5 time points), with the model-averaged TIA. Empty when fewer than two models qualify.
+ */
+export function akaikeWeights(t: number[], y: number[], o: TacOptions): { weights: ModelWeight[]; averagedTia?: number } {
+  if (t.length < 4 || y.some((v) => !(v > 0))) return { weights: [] };
+  const order = t.map((_, i) => i).sort((a, b) => t[a] - t[b]);
+  const ts = order.map((i) => t[i]), ys = order.map((i) => y[i]);
+  const fits = [fitMono(ts, ys, o), fitBiUptake(ts, ys, o)].filter((f) => f.ok && f.aicc !== undefined && Number.isFinite(f.aicc));
+  if (fits.length < 2) return { weights: [] };
+  const min = Math.min(...fits.map((f) => f.aicc!));
+  const raw = fits.map((f) => Math.exp(-(f.aicc! - min) / 2));
+  const sum = raw.reduce((s, v) => s + v, 0);
+  const weights = fits.map((f, i) => ({ model: f.model, aicc: f.aicc!, weight: raw[i] / sum, tia: f.tia }));
+  return { weights, averagedTia: weights.reduce((s, w) => s + w.weight * w.tia, 0) };
+}

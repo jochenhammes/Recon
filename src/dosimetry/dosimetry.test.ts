@@ -148,3 +148,19 @@ describe("calibration from a phantom", () => {
     expect(calibrationFromPhantom({ counts: 0, durationSec: T, activityMBq: a0, activityTimeMs: refMs, acquisitionMs: acqMs, halfLifeSec: half })).toBeNaN();
   });
 });
+
+describe("Akaike weights", () => {
+  it("sum to 1 and favour the true model; none with too few points", async () => {
+    const { akaikeWeights } = await import("./tacFit");
+    const o = { physHalfLifeH: 159.5 };
+    const t = [4, 24, 48, 96, 168, 240];
+    // bi-exponential with uptake: A(t) = 100 (e^{-ln2 t/50} − e^{-ln2 t/3})
+    const y = t.map((x) => 100 * (Math.exp((-Math.LN2 * x) / 50) - Math.exp((-Math.LN2 * x) / 3)) * (1 + 0.01 * Math.sin(x)));
+    const r = akaikeWeights(t, y, o);
+    expect(r.weights).toHaveLength(2);
+    expect(r.weights.reduce((s, w) => s + w.weight, 0)).toBeCloseTo(1, 12);
+    expect(r.weights.find((w) => w.model === "biUptake")!.weight).toBeGreaterThan(0.9);
+    expect(r.averagedTia).toBeGreaterThan(0);
+    expect(akaikeWeights([24, 48, 96], [10, 8, 5], o).weights).toEqual([]);
+  });
+});
