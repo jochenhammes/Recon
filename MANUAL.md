@@ -41,7 +41,7 @@ Beispieldaten (keine Patientendaten).
 - **Kopfzeile**: die **Aktivitätsanzeige** – laufende Berechnungen (Laden, Koregistrierung, Normalisierung,
   CT-Segmentierung, Kinetik, Centiloid, Export …) mit Fortschritt, kurz *fertig* nach Abschluss, Fehler mit ⚠.
   Ein Klick öffnet den zuständigen Bereich (dort lässt sich abbrechen). Ohne laufende Aufgabe steht dort die Zahl der
-  geladenen Datensätze. Rechts oben: helles/dunkles Design.
+  geladenen Datensätze. Rechts oben: **Projekt speichern** (ganze Sitzung als `.recon`-Datei, siehe [Projekt](#projekt-speichern-und-öffnen)) und **?** (dieses Handbuch groß über dem Viewer; Links im Inhaltsverzeichnis springen zum Abschnitt, Esc schließt).
 - **Viewer** (rechts): Layout 2×2, 1+3 oder Einzelbild, *Zoom zurücksetzen*, *Screenshot* (PNG).
   Rechts in der Viewer-Leiste: **SUV | Counts/Bq/ml**, **Skala** (Farbskala ein/aus), **Ebenen** (siehe
   [Abschnitt 4](#4-ansicht-ebenen-und-fusion)) und **?** (Maus- und Tastenbedienung).

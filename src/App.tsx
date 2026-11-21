@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { sanitizePatientId, setExportPatientId, umlaut, withPatientId } from "./core/exportName";
 import { Card } from "./ui/Card";
-import { Activity, BarChart3, Brain, Calculator, Crosshair, Download, Eye, FileCode2, FolderOpen, Gauge, Radiation, Target, Wand2 } from "lucide-react";
+import { Activity, BarChart3, Brain, Calculator, Crosshair, Download, Eye, FileCode2, FolderOpen, Gauge, Radiation, Save, Target, Wand2 } from "lucide-react";
+import { ManualOverlay } from "./ui/ManualOverlay";
 import { type DosimetryApi, DosimetryPanel } from "./dosimetry/DosimetryPanel";
 import { type DosimetrySetup, emptySetup } from "./dosimetry/setup";
 import { KineticsPanel, type KineticsApi } from "./kinetics/KineticsPanel";
@@ -336,22 +337,9 @@ function App() {
   const [kineticsActivity, setKineticsActivity] = useState<{ label: string; fraction: number | null } | null>(null);
   const [dosimetry, setDosimetry] = useState<DosimetrySetup>(() => emptySetup());
   const [dosimetryActivity, setDosimetryActivity] = useState<string | null>(null);
-  const [theme, setTheme] = useState<"dark" | "light">(() => {
-    try {
-      return localStorage.getItem("recon-studio-theme") === "light" ? "light" : "dark";
-    } catch {
-      return "dark";
-    }
-  });
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    try {
-      localStorage.setItem("recon-studio-theme", theme);
-    } catch {
-      /* storage unavailable: theme is not remembered */
-    }
-  }, [theme]);
+  /** Manual shown over the viewer ("?" in the header). */
+  const [manualOpen, setManualOpen] = useState(false);
+  const closeManual = useMemo(() => () => setManualOpen(false), []);
 
   const sino = useMemo(() => (projectionSet ? buildSinogram(projectionSet) : null), [projectionSet]);
 
@@ -3692,8 +3680,21 @@ function App() {
       onTabChange={setActiveTab}
       panelOpen={panelOpen}
       onPanelOpenChange={setPanelOpen}
-      theme={theme}
-      onThemeChange={setTheme}
+      headerActions={
+        <>
+          <button
+            className="secondary-btn"
+            disabled={!entries.length || !!projectBusy}
+            title={entries.length ? "Ganzes Projekt als .recon-Datei speichern (Datensätze, Registrierung, Labelbilder, Einstellungen)" : "Erst Daten laden"}
+            onClick={() => void saveProjectFile()}
+          >
+            <Save size={14} /> {projectBusy === "save" ? "Wird gespeichert …" : "Projekt speichern"}
+          </button>
+          <button className={`icon-btn${manualOpen ? " active" : ""}`} title="Handbuch" aria-label="Handbuch öffnen" aria-pressed={manualOpen} onClick={() => setManualOpen((o) => !o)}>
+            ?
+          </button>
+        </>
+      }
       headerInfo={
         <ActivityBar
           activities={activities}
@@ -3828,6 +3829,7 @@ function App() {
           </button>
         </div>
       )}
+      {manualOpen && <ManualOverlay onClose={closeManual} />}
     </AppShell>
   );
 }

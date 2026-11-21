@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Moon, PanelLeftClose, PanelLeftOpen, Sun } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 export interface ShellTab {
@@ -26,13 +26,13 @@ export interface AppShellProps {
   onPanelOpenChange: (open: boolean) => void;
   /** Content in the middle of the header (activity indicator). */
   headerInfo?: ReactNode;
-  theme: "dark" | "light";
-  onThemeChange: (theme: "dark" | "light") => void;
+  /** Buttons at the right end of the header (e.g. save project, manual). */
+  headerActions?: ReactNode;
   children: ReactNode;
 }
 
 export function AppShell(props: AppShellProps) {
-  const { tabs, activeTab, onTabChange, panelOpen, onPanelOpenChange, theme } = props;
+  const { tabs, activeTab, onTabChange, panelOpen, onPanelOpenChange } = props;
   const current = tabs.find((t) => t.id === activeTab) ?? tabs[0];
   const [panelWidth, setPanelWidth] = usePanelWidth();
   // Tabs stay mounted once visited (hidden when inactive), so running jobs, results and open cards survive a tab switch.
@@ -48,14 +48,7 @@ export function AppShell(props: AppShellProps) {
           <h1>Recon Studio</h1>
         </div>
         <div className="header-info">{props.headerInfo}</div>
-        <button
-          className="icon-btn"
-          title={theme === "dark" ? "Helles Design" : "Dunkles Design"}
-          aria-label="Design umschalten"
-          onClick={() => props.onThemeChange(theme === "dark" ? "light" : "dark")}
-        >
-          {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-        </button>
+        <div className="header-actions">{props.headerActions}</div>
       </header>
       <div className="shell-body">
         <nav className="nav-rail" aria-label="Werkzeuge">

@@ -1,4 +1,4 @@
-/* Recon Studio design tokens. Dark is the default (workstation style); light via data-theme. */
+/* Recon Studio design tokens: dark design (workstation style). */
 :root {
   --bg: #0f1015;
   --surface: #15171e;
@@ -31,28 +31,6 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
-
-:root[data-theme="light"] {
-  --bg: #f4f5f8;
-  --surface: #ffffff;
-  --surface-2: #f7f7fa;
-  --surface-3: #eceef3;
-  --border: #e1e3ea;
-  --border-strong: #c9ccd6;
-  --text: #555a69;
-  --text-h: #12141b;
-  --text-dim: #8b90a0;
-  --accent: #7a4fd6;
-  --accent-strong: #6338c4;
-  --accent-bg: rgba(122, 79, 214, 0.1);
-  --accent-border: rgba(122, 79, 214, 0.45);
-  --danger: #d23a3a;
-  --danger-bg: rgba(210, 58, 58, 0.08);
-  --warning: #b7791f;
-  --success: #1f9d5c;
-  --shadow: 0 8px 24px rgba(20, 22, 30, 0.08);
-  color-scheme: light;
 }
 
 *,
