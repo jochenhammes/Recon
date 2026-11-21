@@ -3,6 +3,7 @@ import { sanitizePatientId, setExportPatientId, umlaut, withPatientId } from "./
 import { Card } from "./ui/Card";
 import { Activity, BarChart3, Brain, Calculator, Crosshair, Download, Eye, FileCode2, FolderOpen, Gauge, Radiation, Save, Target, Wand2 } from "lucide-react";
 import { ManualOverlay } from "./ui/ManualOverlay";
+import { acquisitionMs } from "./dosimetry/sessions";
 import { type DosimetryApi, DosimetryPanel } from "./dosimetry/DosimetryPanel";
 import { type DosimetrySetup, emptySetup } from "./dosimetry/setup";
 import { KineticsPanel, type KineticsApi } from "./kinetics/KineticsPanel";
@@ -337,6 +338,30 @@ function App() {
   const [kineticsActivity, setKineticsActivity] = useState<{ label: string; fraction: number | null } | null>(null);
   const [dosimetry, setDosimetry] = useState<DosimetrySetup>(() => emptySetup());
   const [dosimetryActivity, setDosimetryActivity] = useState<string | null>(null);
+  /**
+   * Acquisition time per dataset for chronological lists: from its own header, else from a dataset of the same
+   * acquisition (frame of reference) or the dataset it was derived from by name (organ map, lesions, dose map).
+   */
+  const timeKey = entries.map((e) => `${e.id}:${e.dataset.displayName}:${e.dataset.current.geometry.frameOfReferenceUid ?? ""}`).join("|");
+  const entryTimes = useMemo(() => {
+    const own = new Map(entries.map((e) => [e.id, acquisitionMs(e.dataset)] as const));
+    const out = new Map<string, number>();
+    for (const e of entries) {
+      let t = own.get(e.id);
+      const fo = e.dataset.current.geometry.frameOfReferenceUid;
+      if (t === undefined && fo) {
+        const same = entries.filter((x) => x.dataset.current.geometry.frameOfReferenceUid === fo).map((x) => own.get(x.id)).filter((x): x is number => x !== undefined);
+        if (same.length) t = Math.min(...same);
+      }
+      if (t === undefined) {
+        const parent = entries.find((x) => x.id !== e.id && own.get(x.id) !== undefined && e.dataset.displayName.endsWith(`· ${x.dataset.displayName}`));
+        if (parent) t = own.get(parent.id);
+      }
+      if (t !== undefined) out.set(e.id, t);
+    }
+    return out;
+  }, [timeKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /** Manual shown over the viewer ("?" in the header). */
   const [manualOpen, setManualOpen] = useState(false);
   const closeManual = useMemo(() => () => setManualOpen(false), []);
@@ -3738,7 +3763,11 @@ function App() {
             entries.length > 0 && (
               <LayerToggle
                 mip={{
-                  options: entries.filter((e) => !e.dataset.atlas).map((e) => ({ id: e.id, label: entryShort(e), title: entryLabel(e) })),
+                  options: entries
+                    .filter((e) => !e.dataset.atlas)
+                    .map((e, i) => ({ e, i, t: entryTimes.get(e.id) }))
+                    .sort((a, b) => (a.t ?? Infinity) - (b.t ?? Infinity) || a.i - b.i)
+                    .map(({ e }) => ({ id: e.id, label: entryShort(e), title: entryLabel(e) })),
                   value: mipChoice.id && byId(mipChoice.id) ? mipChoice.id : null,
                   autoLabel: (() => {
                     const a = byId(mipAutoId ?? null);
@@ -3749,11 +3778,11 @@ function App() {
                   onLutChange: (lut) => setMipChoice((m) => ({ ...m, lut })),
                 }}
                 rows={[
-                  ...[...overlays].reverse().map((e) => ({ id: e.id, label: entryShort(e), title: entryLabel(e), lut: e.display.lut, visible: e.display.visible, opacity: e.display.opacity, role: "overlay" as const })),
-                  ...(reference ? [{ id: reference.id, label: entryShort(reference), title: entryLabel(reference), lut: reference.display.lut, visible: reference.display.visible, role: "base" as const, locked: overlays.length === 0 }] : []),
+                  ...[...overlays].reverse().map((e) => ({ id: e.id, label: entryShort(e), title: entryLabel(e), lut: e.display.lut, visible: e.display.visible, opacity: e.display.opacity, role: "overlay" as const, timeMs: entryTimes.get(e.id) })),
+                  ...(reference ? [{ id: reference.id, label: entryShort(reference), title: entryLabel(reference), lut: reference.display.lut, visible: reference.display.visible, role: "base" as const, locked: overlays.length === 0, timeMs: entryTimes.get(reference.id) }] : []),
                   ...entries
                     .filter((e) => e.id !== reference?.id && !overlays.some((o) => o.id === e.id))
-                    .map((e) => ({ id: e.id, label: entryShort(e), title: `${entryLabel(e)} – anklicken zum Einblenden`, lut: e.display.lut, visible: false, role: "hidden" as const })),
+                    .map((e) => ({ id: e.id, label: entryShort(e), title: `${entryLabel(e)} – anklicken zum Einblenden`, lut: e.display.lut, visible: false, role: "hidden" as const, timeMs: entryTimes.get(e.id) })),
                 ]}
                 onVisibleChange={(id, visible) => {
                   const e = byId(id);

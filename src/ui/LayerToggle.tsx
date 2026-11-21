@@ -14,6 +14,28 @@ export interface LayerToggleRow {
   role: "overlay" | "base" | "hidden";
   /** Visibility cannot be changed (base without overlays). */
   locked?: boolean;
+  /** Acquisition time (ms) of the dataset or of the acquisition it belongs to: rows are sorted and grouped by it. */
+  timeMs?: number;
+}
+
+/** Rows of one acquisition are at most this far apart (same as the dosimetry sessions). */
+const SESSION_MS = 90 * 60 * 1000;
+const fmtTime = (ms: number) => new Date(ms).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+/** Chronological order (stable; rows without time keep their order at the end), with a group label per acquisition. */
+function byTime(rows: LayerToggleRow[]): { row: LayerToggleRow; group?: string }[] {
+  const timed = rows.filter((r) => r.timeMs !== undefined).sort((a, b) => a.timeMs! - b.timeMs!);
+  if (timed.length === 0) return rows.map((row) => ({ row }));
+  const untimed = rows.filter((r) => r.timeMs === undefined);
+  const out: { row: LayerToggleRow; group?: string }[] = [];
+  let start: number | undefined;
+  for (const r of timed) {
+    const newGroup = start === undefined || r.timeMs! - start > SESSION_MS;
+    if (newGroup) start = r.timeMs!;
+    out.push({ row: r, group: newGroup ? fmtTime(r.timeMs!) : undefined });
+  }
+  untimed.forEach((r, i) => out.push({ row: r, group: i === 0 ? "ohne Datum" : undefined }));
+  return out;
 }
 
 /** MIP view: its own dataset and color table. */
@@ -91,13 +113,24 @@ export function LayerToggle({
       )}
     </li>
   );
+  const grouped = (list: LayerToggleRow[]) =>
+    byTime(list).flatMap(({ row: r, group }) => [
+      ...(group
+        ? [
+            <li key={`g-${r.id}`} className="layer-toggle-group" aria-hidden="true">
+              {group}
+            </li>,
+          ]
+        : []),
+      row(r),
+    ]);
   return (
     <div className="layer-toggle" role="dialog" aria-label="Ebenen">
-      <ul>{shown.map(row)}</ul>
+      <ul>{grouped(shown)}</ul>
       {hidden.length > 0 && (
         <>
           <div className="layer-toggle-sep">nicht eingeblendet</div>
-          <ul>{hidden.map(row)}</ul>
+          <ul>{grouped(hidden)}</ul>
         </>
       )}
       {mip && (

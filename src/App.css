@@ -2914,3 +2914,10 @@ select.dos-unit {
   width: auto;
   padding: 4px 10px;
 }
+.layer-toggle li.layer-toggle-group {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  padding: 6px 2px 1px;
+  font-variant-numeric: tabular-nums;
+  list-style: none;
+}

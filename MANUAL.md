@@ -177,7 +177,10 @@ Label-Ebenen werden ohne Interpolation (nächster Nachbar) dargestellt.
 Schnittbildern ein – in jedem Bereich, z. B. während Kinetik, Segmentierung & MTV oder Analyse. Häkchen = Ebene sichtbar,
 Regler = Deckkraft. Datensätze unter *nicht eingeblendet* werden per Häkchen als Overlay hinzugefügt. Der **Papierkorb**
 am Zeilenende entfernt einen Datensatz: erster Klick → *Löschen?*, zweiter Klick innerhalb von 3 s bestätigt. Der Knopf
-schaltet die Liste wieder aus; der Zustand bleibt gespeichert.
+schaltet die Liste wieder aus; der Zustand bleibt gespeichert. Mit Datumsangaben im Header ist die Liste **nach
+Aufnahmezeitpunkt sortiert** und nach Aufnahme gruppiert (Überschrift mit Datum und Uhrzeit; Organkarte, Läsionsbild und
+Dosiskarte stehen bei ihrer Aufnahme, Datensätze ohne Datum am Ende). Die Zeichenreihenfolge der Overlays ändert sich
+dadurch nicht.
 
 **MIP** (unten in der Ebenen-Liste): Datensatz und Farbtabelle der MIP-Ansicht lassen sich getrennt wählen – auch ein
 Datensatz, der in den Schnittbildern ausgeblendet ist. *Automatisch* nimmt PET, sonst SPECT, sonst CT (eingeblendete
