@@ -522,7 +522,8 @@ Counts bzw. Bq/ml, unabhängig vom Umschalter SUV im Viewer.
      mit Anteilen angezeigt.
    - Tabelle groß über dem Viewer und als CSV (alle Messpunkte, Modell, T_eff, TIA, Dosis, Unsicherheit mit Anteilen,
      BED, DVH-Werte).
-   - **Bericht (HTML)** bzw. **Drucken / PDF**: alle Zwischenergebnisse – Zeitpunkte mit Datum, t p.i., Dauer,
+   - **Bericht anzeigen** öffnet den Bericht groß über dem Viewer (dort *Drucken / PDF*, *HTML*, Schließen mit Esc);
+     **HTML** lädt ihn herunter, **PDF** öffnet direkt den Druckdialog. Inhalt: alle Zwischenergebnisse – Zeitpunkte mit Datum, t p.i., Dauer,
      Kalibrierung und Registrierung, Aktivitäten, Modell und Parameter, Akaike-Gewichte, TIA und Dosis mit
      Unsicherheit, BED, DVH, Methodenvergleich, Methodik und Quellen; Kurven als Grafik. Dateiname mit Patient-ID.
 5. **Voxel-Dosiskarte:** auf dem Raster des SPECT von Zeitpunkt 1; alle Zeitpunkte werden über die Registrierung

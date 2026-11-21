@@ -2805,3 +2805,9 @@ tr.focus-row td {
 .dos-lesions select.manual {
   border-color: var(--accent);
 }
+.report-frame {
+  flex: 1;
+  width: 100%;
+  border: 0;
+  background: #fff;
+}

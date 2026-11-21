@@ -20,6 +20,7 @@ import { type DvhStats, dvh, parseKernel, regionDoses } from "./voxelDose";
 import { plain, runVoxelDose, type VoxelDoseRun } from "./runner";
 import { type DoseUncertainty, doseUncertainty } from "./uncertainty";
 import { buildReport } from "./report";
+import { ReportOverlay } from "./ReportOverlay";
 import { type Centroid, type LesionMatch, labelCentroids, matchLesions } from "./lesionMatch";
 import { type SessionItem, acquisitionMs, fmtDateTime, groupSessions, hoursPi, studyUidOf } from "./sessions";
 import { type TpCardView, type UnassignedItem, TimePointsCard } from "./TimePointsCard";
@@ -99,6 +100,8 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [kernelVoxel, setKernelVoxel] = useState("");
   const voxelRun = useRef<VoxelDoseRun | null>(null);
+  /** Report shown in the app (HTML, generated on opening). */
+  const [reportView, setReportView] = useState<string | null>(null);
   const [methodCmp, setMethodCmp] = useState<Map<string, { led: number; kernel: number }> | null>(null);
   const [kernelUnit, setKernelUnit] = useState<"mGy/MBq·s" | "Gy/MBq·s" | "Gy/Bq·s">("mGy/MBq·s");
 
@@ -1098,14 +1101,17 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
               </table>
             </BigTable>
             <div className="button-row">
+              <button className="primary-btn" onClick={() => setReportView(reportHtml())}>
+                Bericht anzeigen
+              </button>
               <button className="secondary-btn" onClick={downloadReport}>
-                Bericht (HTML)
+                HTML
               </button>
               <button className="secondary-btn" onClick={printReport}>
-                Drucken / PDF
+                PDF
               </button>
             </div>
-            <InfoText details="Bericht mit allen Zwischenergebnissen: Zeitpunkte (Datum, t p.i., Dauer, Kalibrierung), Aktivitäten je Region, Modell und Parameter, Akaike-Gewichte, TIA und Dosis mit Unsicherheit, BED, DVH-Kennwerte, Methodenvergleich lokal/Kernel, Methodik und Quellen. „Drucken / PDF“ öffnet ihn zum Drucken oder Speichern als PDF.">
+            <InfoText details="Bericht mit allen Zwischenergebnissen: Zeitpunkte (Datum, t p.i., Dauer, Kalibrierung), Aktivitäten je Region, Modell und Parameter, Akaike-Gewichte, TIA und Dosis mit Unsicherheit, BED, DVH-Kennwerte, Methodenvergleich lokal/Kernel, Methodik und Quellen. „Bericht anzeigen“ öffnet ihn groß über dem Viewer (dort drucken oder als PDF speichern); „HTML“ lädt ihn herunter, „PDF“ öffnet direkt den Druckdialog.">
                 Bericht mit allen Zwischenergebnissen
               </InfoText>
             <div className="field-row">
@@ -1230,6 +1236,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
         )}
       </Card>
 
+      {reportView && <ReportOverlay html={reportView} title={`Dosimetrie-Bericht · ${nuclideId}`} onDownload={downloadReport} onClose={() => setReportView(null)} />}
       {busy && <p className="tool-hint">{busy} … {status}</p>}
       {!busy && status && <p className="tool-hint">{status}</p>}
       {error && <div className="error-banner">{error}</div>}
