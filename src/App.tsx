@@ -208,6 +208,24 @@ function overlayDisplay(entry: Entry): LayerDisplay {
   return { ...d, lut: d.lut === "gray" ? "hot" : d.lut, opacity: d.opacity === 1 ? 0.6 : d.opacity, visible: true };
 }
 
+const UNIT_PREF_KEY = "recon-studio-unit-mode";
+/** Value display chosen in the viewer (SUV or raw), remembered in the browser. */
+function readUnitPreference(): UnitMode | null {
+  try {
+    const v = localStorage.getItem(UNIT_PREF_KEY);
+    return v === "suv" || v === "raw" ? v : null;
+  } catch {
+    return null;
+  }
+}
+function writeUnitPreference(mode: UnitMode) {
+  try {
+    localStorage.setItem(UNIT_PREF_KEY, mode);
+  } catch {
+    /* not remembered */
+  }
+}
+
 function App() {
   const [projectionSet, setProjectionSet] = useState<SpectProjectionSet | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -217,7 +235,9 @@ function App() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [threshold, setThreshold] = useState("");
   const [newValue, setNewValue] = useState("0");
-  const [unitMode, setUnitMode] = useState<UnitMode>("raw");
+  const [unitMode, setUnitMode] = useState<UnitMode>(() => readUnitPreference() ?? "raw");
+  /** The user chose the value display (SUV / raw) in the viewer: loading data no longer switches it. */
+  const unitChosen = useRef<boolean>(readUnitPreference() !== null);
   const [cursor, setCursor] = useState<Vec3 | null>(null);
   const [mipChoice, setMipChoice] = useState<{ id: string | null; lut: ColorLut | null }>({ id: null, lut: null });
   const [landmarkMode, setLandmarkMode] = useState(false);
@@ -526,7 +546,7 @@ function App() {
       setActiveId(entry.id);
       setVoi(null);
       const suv = suvForSource(next.source);
-      if (!anatomical) setUnitMode(suv?.ok ? "suv" : "raw");
+      if (!anatomical) setUnitMode(unitChosen.current ? (readUnitPreference() ?? "raw") : suv?.ok ? "suv" : "raw");
       resetEditInputs(next, !anatomical && suv?.ok ? suv.info.factor : 1);
     }
     live.current = { entries: list, referenceId, activeId, overlayIds: L.overlayIds };
@@ -752,14 +772,19 @@ function App() {
   }
 
   function handleUnitModeChange(mode: UnitMode) {
-    if (mode === unitMode || !activeSuv?.ok) return;
-    const factor = mode === "suv" ? activeSuv.info.factor : 1 / activeSuv.info.factor;
-    const convert = (text: string) => {
-      const v = parseInput(text);
-      return Number.isFinite(v) ? formatInput(v * factor) : text;
-    };
-    setThreshold(convert(threshold));
-    setNewValue(convert(newValue));
+    unitChosen.current = true;
+    writeUnitPreference(mode);
+    if (mode === unitMode) return;
+    // Value inputs of the active dataset keep their meaning.
+    if (activeSuv?.ok) {
+      const factor = mode === "suv" ? activeSuv.info.factor : 1 / activeSuv.info.factor;
+      const convert = (text: string) => {
+        const v = parseInput(text);
+        return Number.isFinite(v) ? formatInput(v * factor) : text;
+      };
+      setThreshold(convert(threshold));
+      setNewValue(convert(newValue));
+    }
     setUnitMode(mode);
   }
 
@@ -3696,6 +3721,18 @@ function App() {
                 }}
               />
             )
+          }
+          toolbarRight={
+            [...suvById.values()].some((x) => x?.ok) ? (
+              <span className="unit-toggle" role="group" aria-label="Werte von PET und SPECT">
+                <button className={unitMode === "suv" ? "active" : ""} aria-pressed={unitMode === "suv"} title="PET/SPECT mit SUV-Angaben im Header als SUV (Körpergewicht) – für die ganze App" onClick={() => handleUnitModeChange("suv")}>
+                  SUV
+                </button>
+                <button className={unitMode === "raw" ? "active" : ""} aria-pressed={unitMode === "raw"} title="Originalwerte aus dem Header (Counts, Bq/ml) – für die ganze App" onClick={() => handleUnitModeChange("raw")}>
+                  Counts/Bq/ml
+                </button>
+              </span>
+            ) : undefined
           }
           toolbar={
             entries.length > 1 &&

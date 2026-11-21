@@ -42,6 +42,8 @@ export interface ViewerProps {
   onPaint?: (world: Vec3, normalAxis: 0 | 1 | 2) => void;
   /** Extra controls for the viewer toolbar. */
   toolbar?: ReactNode;
+  /** Extra controls at the right end of the toolbar (before Skala/Ebenen). */
+  toolbarRight?: ReactNode;
   /** Color table chosen in the color scale (right click). */
   onLutChange?: (layerId: string, lut: ColorLut) => void;
   /** Layer list shown as a floating panel (top right) when the "Ebenen" button is on. */
@@ -356,6 +358,7 @@ export function Viewer(props: ViewerProps) {
         </button>
         {props.toolbar}
         <span className="viewer-toolbar-right">
+          {props.toolbarRight}
           <button className={legendOn ? "active" : ""} aria-pressed={legendOn} title="Farbskala ein-/ausblenden (wird auch im Screenshot gezeigt)" onClick={toggleLegend}>
             Skala
           </button>
