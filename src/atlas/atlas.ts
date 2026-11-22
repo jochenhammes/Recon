@@ -45,6 +45,20 @@ export function parseLabelTable(text: string): Map<number, string> {
   return labels;
 }
 
+/**
+ * Label table of an FSL atlas description (XML, e.g. HarvardOxford-Cortical.xml): `<label index="0" …>Name</label>`.
+ * FSL indices are 0-based; the maximum-probability images store index + 1.
+ */
+export function parseFslAtlasXml(text: string): Map<number, string> {
+  const labels = new Map<number, string>();
+  const decode = (s: string) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+  for (const m of text.matchAll(/<label\b[^>]*\bindex\s*=\s*"(\d+)"[^>]*>([^<]*)<\/label>/gi)) {
+    const name = decode(m[2].trim());
+    if (name) labels.set(Number(m[1]) + 1, name);
+  }
+  return labels;
+}
+
 export async function loadBundledAtlas(): Promise<LoadedDataset> {
   const [img, table] = await Promise.all([
     fetchNifti(BUNDLED_CEREBRA.image),

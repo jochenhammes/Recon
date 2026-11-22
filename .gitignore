@@ -26,3 +26,4 @@ dist-ssr
 # Local diagnostics/validation against licensed data (not distributed)
 src/__gen/
 vgen*.config.ts
+.asset-cache/

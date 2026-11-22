@@ -83,7 +83,7 @@ export async function loadPetTemplate(file: File): Promise<LoadedDataset> {
 }
 
 /** Brain mask of a PET/SPECT template: voxels above 20 % of the 99th percentile. */
-function maskFromBase(base: Float32Array): Float32Array {
+export function maskFromBase(base: Float32Array): Float32Array {
   const sorted = Float32Array.from(base.filter((x) => x > 0)).sort();
   const thr = 0.2 * (sorted[Math.floor(0.99 * (sorted.length - 1))] ?? 1);
   return Float32Array.from(base, (x) => (x > thr ? 1 : 0));

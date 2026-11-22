@@ -8,6 +8,9 @@ License: Creative Commons CC0 1.0 Universal (public domain dedication), as state
 dataset's metadata (G-Node GIN, doi CerebrA).
 
 Source file: tpl-MNI152NLin2009cSym_res-1_atlas-CerebrA_dseg.nii.gz (TemplateFlow).
-Modification for Recon Studio: resampled from the 1 mm symmetric MNI-ICBM2009c grid to the
-2 mm grid of MNI152NLin2009cAsym (97 x 115 x 97) by weighted majority vote; labels unchanged.
+Modifications for Recon Studio:
+- CerebrA_MNI152NLin2009cAsym_res-02_dseg.nii.gz: resampled from the 1 mm symmetric MNI-ICBM2009c grid to the
+  2 mm grid of MNI152NLin2009cAsym (97 x 115 x 97) by weighted majority vote; labels unchanged.
+- CerebrA_MNI152NLin2009cAsym_res-01_dseg.nii.gz: the 1 mm grid of the symmetric template is identical to that of
+  MNI152NLin2009cAsym (193 x 229 x 193, same origin); labels unchanged, stored as uint8.
 CerebrA_labels.tsv: index and name (with hemisphere) from the TemplateFlow label table.

@@ -93,6 +93,8 @@ export interface LoadedDataset {
   template?: TemplateInfo;
   /** Set when the dataset is a label atlas (region indices). */
   atlas?: AtlasInfo;
+  /** Id of the brain catalogue entry the dataset was loaded from (src/brain/catalog.ts). */
+  catalogId?: string;
   /** Set for datasets resampled into a standard space: name, original source (for SUV/units) and space. */
   /** Coordinate change taken into the dataset (e.g. new origin at a landmark); undefined = original header geometry. */
   reoriented?: number[];

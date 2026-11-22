@@ -1,4 +1,5 @@
-ICBM 152 Nonlinear Asymmetrical template version 2009c (MNI152NLin2009cAsym), 2 mm, T1w and brain mask.
+ICBM 152 Nonlinear Asymmetrical template version 2009c (MNI152NLin2009cAsym): T1w and brain mask (1 mm, 2 mm), T2w (1 mm),
+tissue probability maps GM/WM/CSF (1 mm, stored as uint8 with scl_slope 1/255).
 Obtained via TemplateFlow (https://www.templateflow.org), identifier MNI152NLin2009cAsym.
 
 References:
