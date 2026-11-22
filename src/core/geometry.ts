@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 /**
  * Patient-space geometry of a voxel volume, in DICOM LPS coordinates (mm):
  * +x = patient left, +y = posterior, +z = head (superior).
@@ -68,7 +69,7 @@ export function invert3(m: number[]): number[] {
   const B = -(d * i - f * g);
   const C = d * h - e * g;
   const det = a * A + b * B + c * C;
-  if (Math.abs(det) < 1e-12) throw new Error("Singuläre Volumengeometrie.");
+  if (Math.abs(det) < 1e-12) throw new Error(t("Singuläre Volumengeometrie."));
   const inv = 1 / det;
   return [
     A * inv,

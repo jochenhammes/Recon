@@ -1,3 +1,4 @@
+import { tr, tk } from "../i18n";
 /**
  * Time-activity curves of therapy dosimetry: fit and time-integrated activity (TIA).
  * Times in hours after injection, activities in MBq, TIA in MBq·h.
@@ -7,10 +8,10 @@ export type TacModel = "mono" | "biUptake" | "trapezoid" | "hanscheid" | "madsen
 
 export const TAC_MODEL_LABELS: Record<TacModel, string> = {
   mono: "Monoexponentiell",
-  biUptake: "Biexponentiell mit Aufnahme",
-  trapezoid: "Trapez + Ausläufer",
-  hanscheid: "Ein Zeitpunkt (Hänscheid)",
-  madsen: "Ein Zeitpunkt (Madsen, T_eff)",
+  biUptake: tk("Biexponentiell mit Aufnahme"),
+  trapezoid: tk("Trapez + Ausläufer"),
+  hanscheid: tk("Ein Zeitpunkt (Hänscheid)"),
+  madsen: tk("Ein Zeitpunkt (Madsen, T_eff)"),
 };
 
 export interface TacFit {
@@ -233,20 +234,20 @@ export function trapezoid(t: number[], y: number[], o: TacOptions): TacFit {
       for (let i = 1; i < xs.length; i++) if (ti <= xs[i]) return ys[i - 1] + ((ys[i] - ys[i - 1]) * (ti - xs[i - 1])) / (xs[i] - xs[i - 1]);
       return 0;
     },
-    note: "Aufnahme linear ab 0; Ausläufer aus den letzten zwei Punkten",
+    note: tr("Aufnahme linear ab 0; Ausläufer aus den letzten zwei Punkten"),
   };
 }
 
 /** Hänscheid et al.: TIA ≈ A(t)·2t/ln2 (exact for a mono-exponential washout with T_eff = t). */
 export function hanscheid(tH: number, a: number): TacFit {
   const lam = LN2 / tH;
-  return { model: "hanscheid", ok: tH > 0, tia: (a * 2 * tH) / LN2, teffH: tH, curve: (ti) => a * Math.exp(-lam * (ti - tH)), note: "Annahme T_eff ≈ Messzeitpunkt" };
+  return { model: "hanscheid", ok: tH > 0, tia: (a * 2 * tH) / LN2, teffH: tH, curve: (ti) => a * Math.exp(-lam * (ti - tH)), note: tr("Annahme T_eff ≈ Messzeitpunkt") };
 }
 
 /** Madsen et al.: TIA = A(t)·e^{λt}/λ with a population effective half-life. */
 export function madsen(tH: number, a: number, teffH: number): TacFit {
   const lam = LN2 / teffH;
-  return { model: "madsen", ok: tH > 0 && teffH > 0, tia: (a * Math.exp(lam * tH)) / lam, teffH, curve: (ti) => a * Math.exp(-lam * (ti - tH)), note: `Populations-T_eff ${teffH} h` };
+  return { model: "madsen", ok: tH > 0 && teffH > 0, tia: (a * Math.exp(lam * tH)) / lam, teffH, curve: (ti) => a * Math.exp(-lam * (ti - tH)), note: tr("Populations-T_eff {teffH} h", { teffH }) };
 }
 
 /**
@@ -259,18 +260,18 @@ export function fitTac(t: number[], y: number[], model: TacModel | "auto", o: Ta
   const order = t.map((_, i) => i).sort((a, b) => t[a] - t[b]);
   const ts = order.map((i) => t[i]), ys = order.map((i) => y[i]);
   const n = ts.length;
-  if (n === 0) return { model: "mono", ok: false, tia: NaN, curve: () => NaN, note: "keine Messpunkte" };
-  if (!ys.some((v) => v > 0)) return { model: "mono", ok: false, tia: 0, curve: () => 0, note: "keine Aktivität in der Region" };
+  if (n === 0) return { model: "mono", ok: false, tia: NaN, curve: () => NaN, note: tr("keine Messpunkte") };
+  if (!ys.some((v) => v > 0)) return { model: "mono", ok: false, tia: 0, curve: () => 0, note: tr("keine Aktivität in der Region") };
   if (ys.some((v) => !(v > 0)) && model !== "trapezoid" && n > 1) {
     // Points without activity cannot be fitted on relative residuals: trapezoids instead.
-    return { ...trapezoid(ts, ys.map((v) => Math.max(v, 0)), o), note: "Zeitpunkt(e) ohne Aktivität – Trapez statt Fit" };
+    return { ...trapezoid(ts, ys.map((v) => Math.max(v, 0)), o), note: tr("Zeitpunkt(e) ohne Aktivität – Trapez statt Fit") };
   }
   if (model === "hanscheid" || (model === "auto" && n === 1 && !o.teffH)) return hanscheid(ts[n - 1], ys[n - 1]);
   if (model === "madsen" || (model === "auto" && n === 1)) return madsen(ts[n - 1], ys[n - 1], o.teffH ?? o.physHalfLifeH);
-  if (n === 1) return { model: model === "auto" ? "mono" : model, ok: false, tia: NaN, curve: () => NaN, note: "Ein Zeitpunkt: Hänscheid oder Madsen wählen" };
+  if (n === 1) return { model: model === "auto" ? "mono" : model, ok: false, tia: NaN, curve: () => NaN, note: tr("Ein Zeitpunkt: Hänscheid oder Madsen wählen") };
   if (model === "trapezoid") return trapezoid(ts, ys, o);
   if (model === "mono") return fitMono(ts, ys, o);
-  if (model === "biUptake") return n >= 3 ? fitBiUptake(ts, ys, o) : { ...fitMono(ts, ys, o), note: "Biexponentiell braucht ≥ 3 Zeitpunkte – monoexponentiell" };
+  if (model === "biUptake") return n >= 3 ? fitBiUptake(ts, ys, o) : { ...fitMono(ts, ys, o), note: tr("Biexponentiell braucht ≥ 3 Zeitpunkte – monoexponentiell") };
   // auto
   const mono = fitMono(ts, ys, o);
   if (n < 3) return mono;

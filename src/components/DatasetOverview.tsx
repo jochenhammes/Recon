@@ -9,6 +9,7 @@ import { type VoiStats, voiStats } from "../edit/voi";
 import type { Volume3D } from "../viewer/volume";
 import { formatValue } from "./format";
 
+import { t } from "../i18n";
 export interface OverviewRow {
   id: string;
   label: string;
@@ -62,28 +63,28 @@ export function DatasetOverview({ rows, selectedId, onSelect, voi }: DatasetOver
 
   return (
     <>
-      <Card title={<>Alle Datensätze</>}>
-        <BigTable title="Alle Datensätze">
+      <Card title={<>{t("Alle Datensätze")}</>}>
+        <BigTable title={t("Alle Datensätze")}>
           <table className="region-table overview-table">
             <thead>
               <tr>
-                <th>Datensatz</th>
-                <th>Matrix</th>
-                <th>Voxel (mm)</th>
-                <th>Min</th>
-                <th>Mittel</th>
-                <th>Median</th>
-                <th>Max</th>
+                <th>{t("Datensatz")}</th>
+                <th>{t("Matrix")}</th>
+                <th>{t("Voxel (mm)")}</th>
+                <th>{t("Min")}</th>
+                <th>{t("Mittel")}</th>
+                <th>{t("Median")}</th>
+                <th>{t("Max")}</th>
                 <th>SD</th>
-                <th>Varianz</th>
-                <th>Einheit</th>
+                <th>{t("Varianz")}</th>
+                <th>{t("Einheit")}</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => {
                 const s = stats.get(r.id)!;
                 return (
-                  <tr key={r.id} className={r.id === selectedId ? "reference-row clickable" : "clickable"} onClick={() => onSelect(r.id)} title="Für die Detailanalyse auswählen">
+                  <tr key={r.id} className={r.id === selectedId ? "reference-row clickable" : "clickable"} onClick={() => onSelect(r.id)} title={t("Für die Detailanalyse auswählen")}>
                     <td>{r.label}</td>
                     <td>
                       {r.volume.nx}×{r.volume.ny}×{r.volume.nz}
@@ -102,23 +103,23 @@ export function DatasetOverview({ rows, selectedId, onSelect, voi }: DatasetOver
             </tbody>
           </table>
         </BigTable>
-        <p className="tool-hint">Zeile anklicken = Detailanalyse</p>
+        <p className="tool-hint">{t("Zeile anklicken = Detailanalyse")}</p>
       </Card>
       {voi && voiRows && (
-        <Card title={<>VOI auf allen Datensätzen</>}>
+        <Card title={<>{t("VOI auf allen Datensätzen")}</>}>
           <p className="hint">{voi.label} – über die Registrierung auf jeden Datensatz übertragen.</p>
-          <BigTable title={`VOI auf allen Datensätzen – ${voi.label}`}>
+          <BigTable title={t("VOI auf allen Datensätzen – {label}", { label: voi.label })}>
             <table className="region-table overview-table">
               <thead>
                 <tr>
-                  <th>Datensatz</th>
+                  <th>{t("Datensatz")}</th>
                   <th>ml</th>
-                  <th>Mittel</th>
-                  <th>Peak</th>
-                  <th>Max</th>
+                  <th>{t("Mittel")}</th>
+                  <th>{t("Peak")}</th>
+                  <th>{t("Max")}</th>
                   <th>SD</th>
-                  <th>Varianz</th>
-                  <th>Einheit</th>
+                  <th>{t("Varianz")}</th>
+                  <th>{t("Einheit")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -137,7 +138,7 @@ export function DatasetOverview({ rows, selectedId, onSelect, voi }: DatasetOver
                           <td>{v2(r, s.variance)}</td>
                         </>
                       ) : (
-                        <td colSpan={6}>außerhalb</td>
+                        <td colSpan={6}>{t("außerhalb")}</td>
                       )}
                       <td>{r.unitLabel}</td>
                     </tr>
@@ -146,7 +147,7 @@ export function DatasetOverview({ rows, selectedId, onSelect, voi }: DatasetOver
               </tbody>
             </table>
           </BigTable>
-          <p className="tool-hint">Peak: Mittel der 1-ml-Kugel um die heißesten Voxel in der VOI.</p>
+          <p className="tool-hint">{t("Peak: Mittel der 1-ml-Kugel um die heißesten Voxel in der VOI.")}</p>
         </Card>
       )}
     </>

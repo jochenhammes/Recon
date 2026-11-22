@@ -2,6 +2,7 @@ import type { Vec3, WorldToVoxel } from "../../core/geometry";
 import type { LayerDisplay, VoxelGrid } from "../types";
 import { type ColorLut, lutTable } from "../volume";
 
+import { t } from "../../i18n";
 /**
  * WebGL2 renderer shared by all views: one offscreen canvas renders a view at screen resolution and the
  * view's 2D canvas copies it (so overlays, labels and screenshots keep working). Volumes live on the GPU
@@ -223,7 +224,7 @@ export class GlRenderer {
       const sh = gl.createShader(type)!;
       gl.shaderSource(sh, src);
       gl.compileShader(sh);
-      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(`Shader: ${gl.getShaderInfoLog(sh)}`);
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(t("Shader: {v}", { v: gl.getShaderInfoLog(sh) }));
       return sh;
     };
     const prog = gl.createProgram()!;
@@ -231,7 +232,7 @@ export class GlRenderer {
     gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, frag));
     gl.bindAttribLocation(prog, 0, "aPos");
     gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(`Program: ${gl.getProgramInfoLog(prog)}`);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(t("Program: {v}", { v: gl.getProgramInfoLog(prog) }));
     return { prog, loc: Object.fromEntries(uniforms.map((u) => [u, gl.getUniformLocation(prog, u)])) };
   }
 

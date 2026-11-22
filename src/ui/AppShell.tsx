@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
+import { t } from "../i18n";
 export interface ShellTab {
   id: string;
   label: string;
@@ -45,13 +46,13 @@ export function AppShell(props: AppShellProps) {
       <header className="shell-header">
         <div className="brand">
           <BrandMark />
-          <h1>Recon Studio</h1>
+          <h1>{t("Recon Studio")}</h1>
         </div>
         <div className="header-info">{props.headerInfo}</div>
         <div className="header-actions">{props.headerActions}</div>
       </header>
       <div className="shell-body">
-        <nav className="nav-rail" aria-label="Werkzeuge">
+        <nav className="nav-rail" aria-label={t("Werkzeuge")}>
           {tabs.map((t) => {
             const Icon = t.icon;
             const selected = t.id === current.id && panelOpen;
@@ -156,11 +157,11 @@ function ResizeHandle({ width, onChange }: { width: number; onChange: (w: number
       className="panel-resize"
       role="separator"
       aria-orientation="vertical"
-      aria-label="Panelbreite"
+      aria-label={t("Panelbreite")}
       aria-valuenow={width}
       aria-valuemin={MIN_WIDTH}
       tabIndex={0}
-      title="Ziehen: Panelbreite ändern · Doppelklick: Standardbreite"
+      title={t("Ziehen: Panelbreite ändern · Doppelklick: Standardbreite")}
       onPointerDown={(e) => {
         e.preventDefault();
         e.currentTarget.setPointerCapture(e.pointerId);

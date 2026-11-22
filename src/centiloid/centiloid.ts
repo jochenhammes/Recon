@@ -2,6 +2,7 @@ import type { DataSet } from "dicom-parser";
 import { parseDicomDateTime } from "../analysis/suv";
 import type { VoiMean, VoiName } from "./vois";
 
+import { t, tk } from "../i18n";
 /**
  * Linear conversion SUVR → Centiloid for one tracer and pipeline: CL = slope · SUVR + intercept, where
  * SUVR = mean(ctx) / mean(reference VOI) in MNI space.
@@ -33,46 +34,46 @@ export const CALIBRATIONS: CentiloidCalibration[] = [
   {
     id: "fbb-recon",
     tracer: "FBB",
-    label: "Florbetaben – Recon-Studio-Pipeline (GAAIN-kalibriert)",
+    label: tk("Florbetaben – Recon-Studio-Pipeline (GAAIN-kalibriert)"),
     reference: "WhlCbl",
     slope: 164.06,
     intercept: -171.67,
     window: [90, 110],
-    source: "eigene Kalibrierung an GAAIN-FBB-Daten (n = 35): R² 0,990; Kreuzvalidierung RMSE 5,8 CL",
+    source: tk("eigene Kalibrierung an GAAIN-FBB-Daten (n = 35): R² 0,990; Kreuzvalidierung RMSE 5,8 CL"),
     pipeline: "recon",
   },
   {
     id: "pib-recon",
     tracer: "PiB",
-    label: "[11C]PiB – Recon-Studio-Pipeline (GAAIN-kalibriert)",
+    label: tk("[11C]PiB – Recon-Studio-Pipeline (GAAIN-kalibriert)"),
     reference: "WhlCbl",
     slope: 100.68,
     intercept: -105.61,
     window: [50, 70],
-    source: "eigene Kalibrierung an GAAIN-PiB-Daten (n = 35): R² 0,995; Kreuzvalidierung RMSE 4,1 CL",
+    source: tk("eigene Kalibrierung an GAAIN-PiB-Daten (n = 35): R² 0,995; Kreuzvalidierung RMSE 4,1 CL"),
     pipeline: "recon",
   },
   {
     id: "fbb-rowe2017",
     tracer: "FBB",
-    label: "Florbetaben – SPM8-Standard (Rowe et al. 2017)",
+    label: tk("Florbetaben – SPM8-Standard (Rowe et al. 2017)"),
     reference: "WhlCbl",
     slope: 153.4,
     intercept: -154.9,
     window: [90, 110],
-    source: "Rowe CC et al., Eur J Nucl Med Mol Imaging 2017;44:2053–2059 (SPM8-Standardmethode, ganzes Kleinhirn) – für extern normalisierte Daten",
+    source: tk("Rowe CC et al., Eur J Nucl Med Mol Imaging 2017;44:2053–2059 (SPM8-Standardmethode, ganzes Kleinhirn) – für extern normalisierte Daten"),
     pipeline: "standard",
   },
   {
     id: "pib-klunk2015",
     tracer: "PiB",
-    label: "[11C]PiB – Standard (Klunk et al. 2015)",
+    label: tk("[11C]PiB – Standard (Klunk et al. 2015)"),
     reference: "WhlCbl",
     // CL = 100 (SUVR − 1.009) / 1.067
     slope: 100 / 1.067,
     intercept: (-100 * 1.009) / 1.067,
     window: [50, 70],
-    source: "Klunk WE et al., Alzheimers Dement 2015;11:1–15 (Standardmethode, ganzes Kleinhirn) – für extern normalisierte Daten",
+    source: tk("Klunk WE et al., Alzheimers Dement 2015;11:1–15 (Standardmethode, ganzes Kleinhirn) – für extern normalisierte Daten"),
     pipeline: "standard",
   },
 ];
@@ -115,15 +116,15 @@ function str(ds: DataSet, tag: string): string | undefined {
  */
 export function acquisitionWindow(ds: DataSet): AcquisitionWindow | { reason: string } {
   const rp = ds.elements["x00540016"]?.items?.[0]?.dataSet;
-  if (!rp) return { reason: "Radiopharmaceutical Information Sequence fehlt." };
+  if (!rp) return { reason: t("Radiopharmaceutical Information Sequence fehlt.") };
   const date = str(ds, "x00080021") ?? str(ds, "x00080022") ?? str(ds, "x00080020");
   const dt = str(rp, "x00181078");
   const injection = dt && dt.length >= 10 ? parseDicomDateTime(dt.slice(0, 8), dt.slice(8).replace(/[+-]\d{4}$/, "")) : parseDicomDateTime(date, str(rp, "x00181072"));
   const startTimes = [str(ds, "x00080031"), str(ds, "x00080032")].map((t) => parseDicomDateTime(date, t)).filter((t): t is number => t !== undefined);
-  if (injection === undefined || !startTimes.length) return { reason: "Injektions- oder Aufnahmezeit fehlt." };
+  if (injection === undefined || !startTimes.length) return { reason: t("Injektions- oder Aufnahmezeit fehlt.") };
   let start = Math.min(...startTimes) - injection;
   if (start < 0 && start > -24 * 3600e3 && !dt) start += 24 * 3600e3;
-  if (start < 0) return { reason: "Aufnahme liegt vor der Injektion." };
+  if (start < 0) return { reason: t("Aufnahme liegt vor der Injektion.") };
   const frameMs = parseFloat(str(ds, "x00181242") ?? "");
   const frames = Math.max(1, parseInt(str(ds, "x00540101") ?? "1", 10) || 1);
   const durationMin = Number.isFinite(frameMs) ? (frameMs * frames) / 60000 : 0;
@@ -144,6 +145,6 @@ export function windowWarning(w: AcquisitionWindow, calibration: CentiloidCalibr
   const [a, b] = calibration.window;
   const end = w.endMin > w.startMin ? w.endMin : w.startMin;
   if (w.startMin < a - toleranceMin || end > b + toleranceMin)
-    return `Aufnahme ${w.startMin.toFixed(0)}–${end.toFixed(0)} min p. i., Kalibrierung gilt für ${a}–${b} min p. i.`;
+    return t("Aufnahme {v}–{v2} min p. i., Kalibrierung gilt für {a}–{b} min p. i.", { v: w.startMin.toFixed(0), v2: end.toFixed(0), a, b });
   return null;
 }

@@ -8,6 +8,7 @@ import { Card } from "../ui/Card";
 import { InfoText } from "../ui/Info";
 import { formatInput, formatValue, parseInput } from "./format";
 
+import { t, tn } from "../i18n";
 export interface ExportPanelProps {
   /** All datasets that can be exported (with placement and SUV factor). */
   items: ExportItem[];
@@ -106,20 +107,20 @@ export function ExportPanel({ items, activeId, onActivity }: ExportPanelProps) {
         const r = await exportDatasetFiles(item, settings, i, (f) => setStatus(`${text} ${Math.round(f * 100)} %`));
         all.push(...r.files);
         warnings.push(...r.warnings);
-        if (format === "nifti" && suv && item.suvFactor && !suvApplies(item, settings)) warnings.push(`${item.label}: Labelbild – ohne SUV.`);
+        if (format === "nifti" && suv && item.suvFactor && !suvApplies(item, settings)) warnings.push(t("{label}: Labelbild – ohne SUV.", { label: item.label }));
       }
       if (format === "nifti" && suv) {
         const noSuv = chosen.filter((i) => !i.suvFactor && !i.dataset.atlas && /PT|PET/.test(i.label));
-        if (noSuv.length) warnings.push(`Ohne SUV-Angaben (Originalwerte): ${noSuv.map((i) => i.label).join(", ")}.`);
+        if (noSuv.length) warnings.push(t("Ohne SUV-Angaben (Originalwerte): {v}.", { v: noSuv.map((i) => i.label).join(", ") }));
       }
-      setStatus("Datei wird erstellt …");
-      const pkg = packageFiles(all, `Export_${chosen.length}_Datensaetze.zip`);
+      setStatus(t("Datei wird erstellt …"));
+      const pkg = packageFiles(all, t("Export_{length}_Datensaetze.zip", { length: chosen.length }));
       download(pkg);
-      setStatus(`${pkg.name}: ${chosen.length} ${chosen.length === 1 ? "Datensatz" : "Datensätze"}, ${all.length} ${all.length === 1 ? "Datei" : "Dateien"}.`);
-      setMessages(warnings.length > 6 ? [...warnings.slice(0, 5), `… und ${warnings.length - 5} weitere Hinweise`] : warnings);
+      setStatus(`${pkg.name}: ${tn(chosen.length, "{n} Datensatz", "{n} Datensätze")}, ${tn(all.length, "{n} Datei", "{n} Dateien")}.`);
+      setMessages(warnings.length > 6 ? [...warnings.slice(0, 5), t("… und {v} weitere Hinweise", { v: warnings.length - 5 })] : warnings);
     } catch (e) {
       setStatus(null);
-      setError(`Export fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
+      setError(t("Export fehlgeschlagen: {v}", { v: e instanceof Error ? e.message : String(e) }));
     } finally {
       setWorking(false);
       onActivity?.(null);
@@ -134,7 +135,7 @@ export function ExportPanel({ items, activeId, onActivity }: ExportPanelProps) {
   return (
     <div className="export-panel">
       <Card
-        title={<>Dateien exportieren</>}
+        title={<>{t("Dateien exportieren")}</>}
         info={
           <>
             <p>
@@ -142,27 +143,26 @@ export function ExportPanel({ items, activeId, onActivity }: ExportPanelProps) {
               Ist im Bereich „Daten“ eine Patient-ID eingetragen, beginnen NIfTI-Dateien (und das ZIP) damit.
             </p>
             <p>
-              <strong>Eigenes Raster</strong>: kein Resampling, jeder Datensatz behält Matrix und Voxelgröße (das PET bleibt in seiner Auflösung).
-              Bei NIfTI steht die Koregistrierung im Header (sform/qform) – in SPM, FSL oder 3D Slicer liegen die Dateien deckungsgleich. DICOM-Serien
-              behalten die Original-Lage.
+              <strong>{t("Eigenes Raster")}</strong>
+              {t(": kein Resampling, jeder Datensatz behält Matrix und Voxelgröße (das PET bleibt in seiner Auflösung). Bei NIfTI steht die Koregistrierung im Header (sform/qform) – in SPM, FSL oder 3D Slicer liegen die Dateien deckungsgleich. DICOM-Serien behalten die Original-Lage.")}
             </p>
             <p>
-              <strong>Raster von …</strong>: alle Datensätze werden über ihre Registrierung in das Raster eines Datensatzes resampelt (wahlweise mit
+              <strong>{t("Raster von …")}</strong>: alle Datensätze werden über ihre Registrierung in das Raster eines Datensatzes resampelt (wahlweise mit
               eigener Matrix oder Voxelgröße); Labelbilder immer mit nächstem Nachbarn.
             </p>
-            <p>DICOM aus DICOM-Quellen: alle Header-Daten des Originals bleiben erhalten, neue UIDs, ImageType DERIVED. Andere Quellen: Secondary Capture.</p>
+            <p>{t("DICOM aus DICOM-Quellen: alle Header-Daten des Originals bleiben erhalten, neue UIDs, ImageType DERIVED. Andere Quellen: Secondary Capture.")}</p>
           </>
         }
       >
         <div className="export-list-head">
-          <span>Datensätze</span>
+          <span>{t("Datensätze")}</span>
           <span>
             <button className="link-btn" disabled={working} onClick={() => setSelected(items.map((i) => i.id))}>
-              alle
+              {t("alle")}
             </button>{" "}
             ·{" "}
             <button className="link-btn" disabled={working} onClick={() => setSelected([])}>
-              keine
+              {t("keine")}
             </button>
           </span>
         </div>
@@ -177,8 +177,8 @@ export function ExportPanel({ items, activeId, onActivity }: ExportPanelProps) {
         </div>
 
         <div className="field">
-          Format
-          <div className="segmented-control" role="group" aria-label="Format">
+          {t("Format")}
+          <div className="segmented-control" role="group" aria-label={t("Format")}>
             {(
               [
                 ["nifti", "NIfTI"],
@@ -193,10 +193,10 @@ export function ExportPanel({ items, activeId, onActivity }: ExportPanelProps) {
         </div>
 
         <div className="field">
-          Raum
-          <div className="segmented-control" role="group" aria-label="Raum">
+          {t("Raum")}
+          <div className="segmented-control" role="group" aria-label={t("Raum")}>
             <button className={spaceMode === "native" ? "active" : ""} disabled={working} onClick={() => setSpaceMode("native")}>
-              Eigenes Raster
+              {t("Eigenes Raster")}
             </button>
             <button className={spaceMode === "resampled" ? "active" : ""} disabled={working} onClick={() => setSpaceMode("resampled")}>
               Raster von … (Resampling)
@@ -208,17 +208,17 @@ export function ExportPanel({ items, activeId, onActivity }: ExportPanelProps) {
             Kein Resampling.{" "}
             {format === "nifti"
               ? anyRegistered
-                ? "Registrierungen werden in den NIfTI-Header geschrieben."
+                ? t("Registrierungen werden in den NIfTI-Header geschrieben.")
                 : ""
               : anyRegistered
-                ? "DICOM behält die Original-Lage – für deckungsgleiche DICOM-Dateien „Raster von …“ wählen."
+                ? t("DICOM behält die Original-Lage – für deckungsgleiche DICOM-Dateien „Raster von …“ wählen.")
                 : ""}
           </p>
         )}
         {spaceMode === "resampled" && target && tv && (
           <>
             <label className="field">
-              Zielraster
+              {t("Zielraster")}
               <select
                 value={target.id}
                 disabled={working}
@@ -235,12 +235,12 @@ export function ExportPanel({ items, activeId, onActivity }: ExportPanelProps) {
                 ))}
               </select>
             </label>
-            <div className="segmented-control" role="group" aria-label="Raster">
+            <div className="segmented-control" role="group" aria-label={t("Raster")}>
               {(
                 [
-                  ["target", "wie Ziel"],
-                  ["matrix", "Matrix"],
-                  ["voxel", "Voxelgröße"],
+                  ["target", t("wie Ziel")],
+                  ["matrix", t("Matrix")],
+                  ["voxel", t("Voxelgröße")],
                 ] as [GridMode, string][]
               ).map(([m, l]) => (
                 <button key={m} className={gridMode === m ? "active" : ""} disabled={working} onClick={() => setGridMode(m)}>
@@ -285,7 +285,7 @@ export function ExportPanel({ items, activeId, onActivity }: ExportPanelProps) {
               <select value={method} disabled={working} onChange={(e) => setMethod(e.target.value as Interpolation)}>
                 {(Object.keys(INTERPOLATION_LABELS) as Interpolation[]).map((m) => (
                   <option key={m} value={m}>
-                    {INTERPOLATION_LABELS[m]}
+                    {t(INTERPOLATION_LABELS[m])}
                   </option>
                 ))}
               </select>
@@ -307,13 +307,13 @@ export function ExportPanel({ items, activeId, onActivity }: ExportPanelProps) {
             </label>
             <label className="checkbox-field">
               <input type="checkbox" checked={adjustWindow} disabled={working} onChange={(e) => setAdjustWindow(e.target.checked)} />
-              Fensterwerte an neuen Wertebereich anpassen
+              {t("Fensterwerte an neuen Wertebereich anpassen")}
             </label>
           </>
         )}
 
         <button className="primary-btn" disabled={working || chosen.length === 0 || !settings} onClick={() => void run()}>
-          {working ? "Export läuft …" : chosen.length > 1 ? `${chosen.length} Datensätze exportieren (ZIP)` : "Exportieren"}
+          {working ? t("Export läuft …") : chosen.length > 1 ? t("{length} Datensätze exportieren (ZIP)", { length: chosen.length }) : "Exportieren"}
         </button>
         {status && <p className="tool-hint">{status}</p>}
         {messages.length > 0 && (
@@ -342,12 +342,12 @@ export function ExportPanel({ items, activeId, onActivity }: ExportPanelProps) {
                 <input type="checkbox" checked={retainPatientChars} onChange={(e) => setRetainPatientChars(e.target.checked)} />
                 Gewicht, Größe, Geschlecht, Alter behalten (für SUV)
               </label>
-              <InfoText details="Entfernt bzw. geleert werden Patientendaten (Name, ID, Geburtsdatum, Adresse …), Betreiber (Institution, Abteilung, Ärzte, Bediener, Station), Gerät (Hersteller, Modell, Seriennummern, Software, Kalibrierung), Freitexte, Auftrags-/Referenz-Sequenzen und alle Private Tags. UIDs werden ersetzt, Dateien heißen IM00001.dcm usw. Datum und Uhrzeit bleiben erhalten (für Zerfallskorrektur/SUV). Eingebrannte Beschriftungen im Bild werden nicht erkannt.">
-                Patienten-, Geräte- und Freitextangaben werden entfernt.
+              <InfoText details={t("Entfernt bzw. geleert werden Patientendaten (Name, ID, Geburtsdatum, Adresse …), Betreiber (Institution, Abteilung, Ärzte, Bediener, Station), Gerät (Hersteller, Modell, Seriennummern, Software, Kalibrierung), Freitexte, Auftrags-/Referenz-Sequenzen und alle Private Tags. UIDs werden ersetzt, Dateien heißen IM00001.dcm usw. Datum und Uhrzeit bleiben erhalten (für Zerfallskorrektur/SUV). Eingebrannte Beschriftungen im Bild werden nicht erkannt.")}>
+                {t("Patienten-, Geräte- und Freitextangaben werden entfernt.")}
               </InfoText>
             </>
           )}
-          {!anonymize && <p className="export-note">Ohne Anonymisierung bleiben alle Patientendaten aus dem Original-Header enthalten.</p>}
+          {!anonymize && <p className="export-note">{t("Ohne Anonymisierung bleiben alle Patientendaten aus dem Original-Header enthalten.")}</p>}
         </section>
       )}
     </div>

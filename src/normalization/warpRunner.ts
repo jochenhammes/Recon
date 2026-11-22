@@ -2,6 +2,7 @@ import type { WarpJob } from "../workers/warp.worker";
 import { type WarpInput, type WarpOptions, type WarpProgress, type WarpResult, estimateWarp } from "./warp";
 
 import { workerOptions } from "../i18n/lang";
+import { t } from "../i18n";
 export interface WarpRun {
   promise: Promise<WarpResult>;
   /** Stops the computation (the promise rejects with an AbortError). */
@@ -30,7 +31,7 @@ export function runWarp(input: WarpInput, options: WarpOptions, onProgress?: (p:
     };
     worker.onerror = (e) => {
       worker.terminate();
-      reject(new Error(e.message || "Nichtlineare Normalisierung fehlgeschlagen."));
+      reject(new Error(e.message || t("Nichtlineare Normalisierung fehlgeschlagen.")));
     };
   });
   const job: WarpJob = { input, options };
@@ -39,7 +40,7 @@ export function runWarp(input: WarpInput, options: WarpOptions, onProgress?: (p:
     promise,
     cancel: () => {
       worker.terminate();
-      rejectFn(new DOMException("Normalisierung abgebrochen.", "AbortError"));
+      rejectFn(new DOMException(t("Normalisierung abgebrochen."), "AbortError"));
     },
   };
 }

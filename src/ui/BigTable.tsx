@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { csvText, csvWithInfo } from "../core/csv";
 
+import { t } from "../i18n";
 interface Extracted {
   head: string[];
   rows: { cells: string[]; index: number; selected: boolean }[];
@@ -104,7 +105,7 @@ export function BigTable({ title, children, onCsv, csvInfo = [] }: { title: stri
     <>
       <div className="big-table">
         <div className="big-table-tools">
-          <button className="icon-btn small" title="Tabelle groß über dem Viewer anzeigen" aria-label="Tabelle vergrößern" onClick={() => setOpen(true)}>
+          <button className="icon-btn small" title={t("Tabelle groß über dem Viewer anzeigen")} aria-label={t("Tabelle vergrößern")} onClick={() => setOpen(true)}>
             <Maximize2 size={13} />
           </button>
         </div>
@@ -120,7 +121,7 @@ export function BigTable({ title, children, onCsv, csvInfo = [] }: { title: stri
               <h3>{title}</h3>
               <label className="table-overlay-search">
                 <Search size={13} />
-                <input type="search" placeholder="Suchen …" value={query} onChange={(e) => setQuery(e.target.value)} />
+                <input type="search" placeholder={t("Suchen …")} value={query} onChange={(e) => setQuery(e.target.value)} />
               </label>
               <span className="table-overlay-count">
                 {rows.length} / {data.rows.length} Zeilen
@@ -128,7 +129,7 @@ export function BigTable({ title, children, onCsv, csvInfo = [] }: { title: stri
               <button className="secondary-btn" onClick={csv}>
                 <Download size={13} /> CSV
               </button>
-              <button className="icon-btn small" title="Schließen (Esc)" aria-label="Schließen" onClick={() => setOpen(false)}>
+              <button className="icon-btn small" title={t("Schließen (Esc)")} aria-label={t("Schließen")} onClick={() => setOpen(false)}>
                 <X size={14} />
               </button>
             </div>
@@ -140,7 +141,7 @@ export function BigTable({ title, children, onCsv, csvInfo = [] }: { title: stri
                       <th key={i} aria-sort={sort?.col === i ? (sort.dir === 1 ? "ascending" : "descending") : "none"}>
                         <button
                           className="th-sort"
-                          title="Sortieren"
+                          title={t("Sortieren")}
                           onClick={() => setSort((s) => (s?.col === i ? (s.dir === 1 ? { col: i, dir: -1 } : null) : { col: i, dir: 1 }))}
                         >
                           {h}

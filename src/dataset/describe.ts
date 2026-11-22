@@ -1,8 +1,10 @@
+import { getLang } from "../i18n/lang";
 import { type SuvResult, computeSuv } from "../analysis/suv";
 import type { LayerDisplay } from "../viewer/types";
 import type { Volume3D } from "../viewer/volume";
 import type { LoadedDataset, VolumeSource } from "./types";
 
+import { t, tk } from "../i18n";
 /** Short modality label for chips and the status bar. */
 export function modalityLabel(source: VolumeSource | undefined): string {
   if (!source) return "Volumen";
@@ -22,7 +24,7 @@ export const MODALITIES: { code: string; label: string }[] = [
   { code: "NM", label: "SPECT" },
   { code: "CT", label: "CT" },
   { code: "MR", label: "MRT" },
-  { code: "OT", label: "Sonstige" },
+  { code: "OT", label: tk("Sonstige") },
 ];
 
 /** Display name of a modality code. */
@@ -80,7 +82,7 @@ export function middleEllipsis(s: string, max = 28): string {
 
 /** Label for chips and lists: the modality, or "T1-Vorlage"/"PET-Vorlage" for templates. */
 export function datasetModality(d: LoadedDataset): string {
-  if (d.template) return `${d.template.kind}-Vorlage`;
+  if (d.template) return t("{kind}-Vorlage", { kind: d.template.kind });
   if (d.atlas) return "Labels";
   if (d.kindLabel) return d.kindLabel;
   if (d.derivedFrom) return d.derivedFrom.label ?? modalityLabel(d.derivedFrom.source);
@@ -164,16 +166,16 @@ export function formatAcquisitionTime(a: AcquisitionTime, short = false): string
   if (!t || t.length < 4) return d;
   const hm = `${t.slice(0, 2)}:${t.slice(2, 4)}`;
   if (short) return `${d} ${hm}`;
-  return `${d}, ${hm}${t.length >= 6 ? `:${t.slice(4, 6)}` : ""} Uhr`;
+  return `${d}, ${hm}${t.length >= 6 ? `:${t.slice(4, 6)}` : ""}${getLang() === "de" ? " Uhr" : ""}`;
 }
 
 /** CT window presets (center/width in HU) as [min, max]. */
 export const CT_PRESETS: { label: string; window: [number, number] }[] = [
-  { label: "Weichteil", window: [-160, 240] },
-  { label: "Lunge", window: [-1350, 150] },
-  { label: "Knochen", window: [-450, 1050] },
-  { label: "Gehirn", window: [0, 80] },
-  { label: "Leber", window: [-25, 175] },
+  { label: tk("Weichteil"), window: [-160, 240] },
+  { label: tk("Lunge"), window: [-1350, 150] },
+  { label: tk("Knochen"), window: [-450, 1050] },
+  { label: tk("Gehirn"), window: [0, 80] },
+  { label: tk("Leber"), window: [-25, 175] },
 ];
 
 /**

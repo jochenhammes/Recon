@@ -3,6 +3,7 @@ import { createDataset } from "../dataset/types";
 import { Volume3D } from "../viewer/volume";
 import { decompressGzip, parseNifti1, readNiftiAll } from "../viewer/volumeLoader";
 
+import { t, tk } from "../i18n";
 /** Marks a dataset as a standard-space template. */
 /** Contrast of a template: T1 MRI, tracer PET/SPECT or CT-like (attenuation). */
 export type TemplateKind = "T1" | "PET" | "CT";
@@ -34,7 +35,7 @@ export const BUNDLED_MNI = {
 
 export async function fetchNifti(url: string) {
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`Vorlage konnte nicht geladen werden (${res.status}).`);
+  if (!res.ok) throw new Error(t("Vorlage konnte nicht geladen werden ({status}).", { status: res.status }));
   let buffer = await res.arrayBuffer();
   // Servers may already have decoded the gzip transfer (Content-Encoding): check the magic bytes.
   const head = new Uint8Array(buffer, 0, 2);
@@ -79,7 +80,7 @@ export async function loadPetTemplate(file: File): Promise<LoadedDataset> {
   const name = file.name.replace(/\.nii(\.gz)?$/i, "");
   const nifti = parseNifti1(buffer).nifti;
   const d = createDataset(vol, { kind: "nifti", fileName: file.name, nifti }, name);
-  return { ...d, template: { name: components.length ? `${name} (adaptiv, ${components.length + 1} Komponenten)` : name, kind: "PET", mask, components } };
+  return { ...d, template: { name: components.length ? t("{name} (adaptiv, {v} Komponenten)", { name, v: components.length + 1 }) : name, kind: "PET", mask, components } };
 }
 
 /** Brain mask of a PET/SPECT template: voxels above 20 % of the 99th percentile. */
@@ -95,27 +96,27 @@ export const BUNDLED_PET_TEMPLATES = [
     id: "spm-pet",
     name: "SPM12 PET (H₂¹⁵O-Perfusion, 2 mm)",
     file: `${BASE}spm12_PET.nii.gz`,
-    hint: "für Hirn-PET ohne MRT (Perfusion, näherungsweise auch FDG)",
+    hint: tk("für Hirn-PET ohne MRT (Perfusion, näherungsweise auch FDG)"),
     kind: "PET",
   },
   {
     id: "spm-spect",
     name: "SPM12 SPECT (Perfusion, 2 mm)",
     file: `${BASE}spm12_SPECT.nii.gz`,
-    hint: "für Hirnperfusions-SPECT (HMPAO/ECD)",
+    hint: tk("für Hirnperfusions-SPECT (HMPAO/ECD)"),
     kind: "PET",
   },
   {
     id: "spm-transm",
-    name: "SPM12 Transmission (CT-ähnlich, 2 mm)",
+    name: tk("SPM12 Transmission (CT-ähnlich, 2 mm)"),
     file: `${BASE}spm12_Transm.nii.gz`,
-    hint: "für das Kopf-CT (z. B. aus PET/CT): Schwächungsbild mit hellem Knochen",
+    hint: tk("für das Kopf-CT (z. B. aus PET/CT): Schwächungsbild mit hellem Knochen"),
     kind: "CT",
   },
 ] as const;
 
 export const SPM_TEMPLATE_LICENSE = `${BASE}LICENSE-SPM12-GPL.txt`;
-export const SPM_TEMPLATE_ATTRIBUTION = "SPM12 (Wellcome Centre for Human Neuroimaging, UCL), toolbox/OldNorm, GNU General Public License v2 oder später.";
+export const SPM_TEMPLATE_ATTRIBUTION = tk("SPM12 (Wellcome Centre for Human Neuroimaging, UCL), toolbox/OldNorm, GNU General Public License v2 oder später.");
 
 export async function loadBundledPetTemplate(id: (typeof BUNDLED_PET_TEMPLATES)[number]["id"]): Promise<LoadedDataset> {
   const t = BUNDLED_PET_TEMPLATES.find((x) => x.id === id)!;

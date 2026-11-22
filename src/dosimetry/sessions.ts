@@ -2,6 +2,7 @@ import { acquisitionTime } from "../dataset/describe";
 import type { LoadedDataset } from "../dataset/types";
 import { dicomDateTime } from "./calibration";
 
+import { t } from "../i18n";
 /**
  * Grouping of the loaded datasets into acquisition sessions (one SPECT/PET with its CT and label maps per
  * measurement time point), from FrameOfReference, StudyInstanceUID and the acquisition date/time of the DICOM header.
@@ -144,4 +145,4 @@ export function hoursPi(acqMs: number | undefined, injectionMs: number | undefin
 
 /** "21.11.2026, 14:31" or "ohne Datum". */
 export const fmtDateTime = (ms: number | undefined) =>
-  ms === undefined ? "ohne Datum" : new Date(ms).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  ms === undefined ? t("ohne Datum") : new Date(ms).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });

@@ -4,6 +4,7 @@ import type { TargetGrid } from "../resample/resample";
 import type { CoregProgress } from "../registration/coregister";
 import type { WarpProgress } from "./warp";
 
+import { t } from "../i18n";
 /**
  * Spatial normalization of a subject dataset (usually a T1 MRI) to a template.
  *
@@ -118,12 +119,12 @@ export function pullbackAt(n: Normalization, i: number, j: number, k: number): V
 
 /** Progress text for the affine stage of a normalization (`share`: fraction of the whole run). */
 export function describeCoregProgress(p: CoregProgress, share = 1): { stage: string; detail: string; fraction: number } {
-  return { stage: `Affin · Stufe ${p.level}/${p.levels}`, detail: `${p.stage}, Iteration ${p.iteration + 1}`, fraction: share * ((p.level - 1) / p.levels + 0.5 / p.levels) };
+  return { stage: t("Affin · Stufe {level}/{levels}", { level: p.level, levels: p.levels }), detail: t("{stage}, Iteration {v}", { stage: p.stage, v: p.iteration + 1 }), fraction: share * ((p.level - 1) / p.levels + 0.5 / p.levels) };
 }
 
 /** Progress text for the nonlinear stage, mapped to the range [start, 1]. */
 export function describeWarpProgress(p: WarpProgress, start = 0.5): { stage: string; detail: string; fraction: number } {
-  return { stage: "Nichtlinear", detail: `Iteration ${p.iteration}/${p.iterations}`, fraction: start + (1 - start) * (p.iteration / p.iterations) };
+  return { stage: t("Nichtlinear"), detail: t("Iteration {iteration}/{iterations}", { iteration: p.iteration, iterations: p.iterations }), fraction: start + (1 - start) * (p.iteration / p.iterations) };
 }
 
 /** Regularization presets (relative weight of the bending energy). */

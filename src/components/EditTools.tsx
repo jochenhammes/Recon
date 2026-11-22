@@ -7,6 +7,7 @@ import type { VoiStats } from "../edit/voi";
 import type { Volume3D } from "../viewer/volume";
 import { formatCount, formatValue, parseInput } from "./format";
 
+import { t, tk, tr } from "../i18n";
 /** Above this fraction of affected voxels the user must confirm the edit. */
 const LARGE_EDIT_FRACTION = 0.01;
 
@@ -21,19 +22,19 @@ function confirmLarge(affected: number, total: number): boolean {
   if (fraction <= LARGE_EDIT_FRACTION) return true;
   const percent = (fraction * 100).toLocaleString("de-DE", { maximumFractionDigits: 2 });
   return window.confirm(
-    `Achtung: ${formatCount(affected)} Voxel (${percent} % des Datensatzes) wären betroffen.\n\n` +
-      "Stimmen Grenzwerte, Bereich und Einheit?\n\nTrotzdem anwenden?",
+    t("Achtung: {v} Voxel ({percent} % des Datensatzes) wären betroffen.\n\n", { v: formatCount(affected), percent }) +
+      t("Stimmen Grenzwerte, Bereich und Einheit?\n\nTrotzdem anwenden?"),
   );
 }
 
 function AffectedHint({ affected, total }: { affected: number | null; total: number }) {
-  if (affected === null) return <p className="tool-hint">Bitte gültige Zahlen eingeben.</p>;
+  if (affected === null) return <p className="tool-hint">{t("Bitte gültige Zahlen eingeben.")}</p>;
   const fraction = affected / Math.max(total, 1);
   const large = fraction > LARGE_EDIT_FRACTION;
   return (
     <p className={large ? "tool-hint tool-warning" : "tool-hint"}>
       Betroffen: {formatCount(affected)} Voxel ({(fraction * 100).toLocaleString("de-DE", { maximumFractionDigits: 2 })} %)
-      {large ? " – ungewöhnlich viel, bitte Grenzwerte und Einheit prüfen." : ""}
+      {large ? t(" – ungewöhnlich viel, bitte Grenzwerte und Einheit prüfen.") : ""}
     </p>
   );
 }
@@ -57,7 +58,7 @@ export interface EditTarget {
 function TargetSelect({ targets, targetId, onTargetChange, disabled }: EditTarget & { disabled?: boolean }) {
   return (
     <label className="field">
-      Datensatz
+      {t("Datensatz")}
       <select value={targetId} disabled={disabled} onChange={(e) => onTargetChange(e.target.value)}>
         {targets.map((t) => (
           <option key={t.id} value={t.id} title={t.label}>
@@ -74,11 +75,11 @@ function TargetSelect({ targets, targetId, onTargetChange, disabled }: EditTarge
 type ValueMode = ValueRule["kind"];
 
 const VALUE_MODES: { value: ValueMode; label: string }[] = [
-  { value: "ge", label: "Werte ≥ Grenzwert ersetzen" },
-  { value: "le", label: "Werte ≤ Grenzwert ersetzen" },
-  { value: "range", label: "Werte in Bereich [a, b] ersetzen" },
-  { value: "clip", label: "Auf Bereich [min, max] begrenzen" },
-  { value: "linear", label: "Linear umrechnen: a · x + b" },
+  { value: "ge", label: tk("Werte ≥ Grenzwert ersetzen") },
+  { value: "le", label: tk("Werte ≤ Grenzwert ersetzen") },
+  { value: "range", label: tk("Werte in Bereich [a, b] ersetzen") },
+  { value: "clip", label: tk("Auf Bereich [min, max] begrenzen") },
+  { value: "linear", label: tk("Linear umrechnen: a · x + b") },
 ];
 
 export interface ValueSectionProps extends Units, EditTarget {
@@ -141,10 +142,10 @@ export function ValueSection(props: ValueSectionProps) {
   }
 
   return (
-    <Card title={<>Werte</>} info="Werte des gewählten Datensatzes ersetzen, begrenzen oder linear umrechnen (in der angezeigten Einheit). Rückgängig im Verlauf unten.">
+    <Card title={<>{t("Werte")}</>} info={t("Werte des gewählten Datensatzes ersetzen, begrenzen oder linear umrechnen (in der angezeigten Einheit). Rückgängig im Verlauf unten.")}>
       <TargetSelect targets={props.targets} targetId={props.targetId} onTargetChange={props.onTargetChange} disabled={busy} />
       <label className="field">
-        Operation
+        {t("Operation")}
         <select value={mode} onChange={(e) => changeMode(e.target.value as ValueMode)}>
           {VALUE_MODES.map((m) => (
             <option key={m.value} value={m.value}>
@@ -164,7 +165,7 @@ export function ValueSection(props: ValueSectionProps) {
             step={(sliderMax - sliderMin) / 1000 || 1}
             value={Number.isFinite(displayThreshold) ? Math.min(Math.max(displayThreshold, sliderMin), sliderMax) : sliderMax}
             onChange={(e) => props.onThresholdChange(e.target.value)}
-            aria-label="Grenzwert"
+            aria-label={t("Grenzwert")}
           />
         </label>
       )}
@@ -176,18 +177,18 @@ export function ValueSection(props: ValueSectionProps) {
       )}
       {mode === "linear" && (
         <div className="field-row">
-          <TextInput label="Faktor a" value={a} onChange={setA} />
-          <TextInput label={`Summand b${unit}`} value={b} onChange={setB} />
+          <TextInput label={t("Faktor a")} value={a} onChange={setA} />
+          <TextInput label={t("Summand b{unit}", { unit })} value={b} onChange={setB} />
         </div>
       )}
-      {(mode === "ge" || mode === "le" || mode === "range") && <TextInput label={`Neuer Wert${unit}`} value={value} onChange={props.onValueChange} />}
+      {(mode === "ge" || mode === "le" || mode === "range") && <TextInput label={t("Neuer Wert{unit}", { unit })} value={value} onChange={props.onValueChange} />}
       <AffectedHint affected={affected} total={stats.count} />
       <button
         className="primary-btn"
         disabled={!op || !affected || busy}
         onClick={() => op && affected !== null && confirmLarge(affected, stats.count) && props.onApply(op)}
       >
-        Anwenden
+        {t("Anwenden")}
       </button>
     </Card>
   );
@@ -239,9 +240,9 @@ export function VoiSection(props: VoiSectionProps) {
   const affected = useMemo(() => (hasVoi && action ? countFor(region, action) : null), [hasVoi, region, action, countFor]);
 
   return (
-    <Card title={<>VOI (Volume of Interest)</>} info="VOI (Kugel, Quader oder Pinsel) auf dem gewählten Datensatz setzen; Werte innerhalb oder außerhalb ersetzen bzw. skalieren, oder auf die VOI zuschneiden. Ein Wechsel des Datensatzes verwirft die aktuelle VOI.">
+    <Card title={<>{t("VOI (Volume of Interest)")}</>} info={t("VOI (Kugel, Quader oder Pinsel) auf dem gewählten Datensatz setzen; Werte innerhalb oder außerhalb ersetzen bzw. skalieren, oder auf die VOI zuschneiden. Ein Wechsel des Datensatzes verwirft die aktuelle VOI.")}>
       <TargetSelect targets={props.targets} targetId={props.targetId} onTargetChange={props.onTargetChange} disabled={busy} />
-      <div className="segmented-control" role="group" aria-label="VOI-Werkzeug">
+      <div className="segmented-control" role="group" aria-label={t("VOI-Werkzeug")}>
         {(
           [
             ["sphere", "Kugel"],
@@ -261,7 +262,7 @@ export function VoiSection(props: VoiSectionProps) {
             <input type="number" min={1} step={1} value={props.sphereRadius} onChange={(e) => props.onSphereRadiusChange(Number(e.target.value))} />
           </label>
           <button className="secondary-btn" onClick={props.onPlace}>
-            Kugel am Fadenkreuz setzen
+            {t("Kugel am Fadenkreuz setzen")}
           </button>
         </>
       )}
@@ -286,7 +287,7 @@ export function VoiSection(props: VoiSectionProps) {
             ))}
           </div>
           <button className="secondary-btn" onClick={props.onPlace}>
-            Quader am Fadenkreuz setzen
+            {t("Quader am Fadenkreuz setzen")}
           </button>
         </>
       )}
@@ -298,41 +299,41 @@ export function VoiSection(props: VoiSectionProps) {
           </label>
           <div className="button-row">
             <button className={props.brush.active && !props.brush.erase ? "secondary-btn toggled" : "secondary-btn"} onClick={() => props.onBrushChange({ ...props.brush, active: !(props.brush.active && !props.brush.erase), erase: false })}>
-              Malen
+              {t("Malen")}
             </button>
             <button className={props.brush.active && props.brush.erase ? "secondary-btn toggled" : "secondary-btn"} onClick={() => props.onBrushChange({ ...props.brush, active: !(props.brush.active && props.brush.erase), erase: true })}>
-              Radieren
+              {t("Radieren")}
             </button>
           </div>
-          <p className="tool-hint">{props.brush.active ? "Im Bild mit gedrückter linker Maustaste malen (schichtweise). Werkzeug erneut anklicken zum Beenden." : "Malen aktivieren, dann im Bild zeichnen."}</p>
+          <p className="tool-hint">{props.brush.active ? t("Im Bild mit gedrückter linker Maustaste malen (schichtweise). Werkzeug erneut anklicken zum Beenden.") : t("Malen aktivieren, dann im Bild zeichnen.")}</p>
         </>
       )}
       {props.hasVoi && stats && (
         <>
           <dl className="summary-list voi-stats">
-            <dt>Volumen</dt>
+            <dt>{t("Volumen")}</dt>
             <dd>
               {formatValue(stats.volumeMl)} ml ({formatCount(stats.voxels)} Voxel)
             </dd>
-            <dt>Mittelwert</dt>
+            <dt>{t("Mittelwert")}</dt>
             <dd>{formatValue(stats.mean * scale) + unit}</dd>
-            <dt>Maximum</dt>
+            <dt>{t("Maximum")}</dt>
             <dd>{formatValue(stats.max * scale) + unit}</dd>
-            <dt>Minimum</dt>
+            <dt>{t("Minimum")}</dt>
             <dd>{formatValue(stats.min * scale) + unit}</dd>
-            <dt>Peak (1 ml)</dt>
+            <dt>{t("Peak (1 ml)")}</dt>
             <dd>{formatValue(stats.peak * scale) + unit}</dd>
           </dl>
           <div className="field-row">
             <label className="field">
-              Bereich
+              {t("Bereich")}
               <select value={region} onChange={(e) => setRegion(e.target.value as "inside" | "outside")}>
-                <option value="inside">innen</option>
-                <option value="outside">außen</option>
+                <option value="inside">{t("innen")}</option>
+                <option value="outside">{t("außen")}</option>
               </select>
             </label>
             <label className="field">
-              Aktion
+              {t("Aktion")}
               <select
                 value={actionKind}
                 onChange={(e) => {
@@ -341,31 +342,31 @@ export function VoiSection(props: VoiSectionProps) {
                   setAmount(k === "set" ? "0" : "1");
                 }}
               >
-                <option value="set">Wert setzen</option>
-                <option value="scale">skalieren</option>
+                <option value="set">{t("Wert setzen")}</option>
+                <option value="scale">{t("skalieren")}</option>
               </select>
             </label>
           </div>
-          <TextInput label={actionKind === "set" ? `Wert${unit ? ` (${unitLabel})` : ""}` : "Faktor"} value={amount} onChange={setAmount} />
+          <TextInput label={actionKind === "set" ? `${tr("Wert")}${unit ? ` (${unitLabel})` : ""}` : tr("Faktor")} value={amount} onChange={setAmount} />
           <AffectedHint affected={affected} total={props.totalVoxels} />
           <button
             className="primary-btn"
             disabled={!action || !affected || busy}
             onClick={() => action && affected !== null && confirmLarge(affected, props.totalVoxels) && props.onApply(region, action)}
           >
-            Auf VOI anwenden
+            {t("Auf VOI anwenden")}
           </button>
           <div className="button-row">
             <button className="secondary-btn" disabled={busy} onClick={props.onCrop}>
-              Auf VOI zuschneiden
+              {t("Auf VOI zuschneiden")}
             </button>
             <button className="secondary-btn" onClick={props.onClear}>
-              VOI löschen
+              {t("VOI löschen")}
             </button>
           </div>
         </>
       )}
-      {props.hasVoi && !stats && <p className="tool-hint">VOI ist leer.</p>}
+      {props.hasVoi && !stats && <p className="tool-hint">{t("VOI ist leer.")}</p>}
     </Card>
   );
 }
@@ -376,10 +377,10 @@ export function FilterSection({ busy, onApply }: { busy: boolean; onApply: (op: 
   const [fwhm, setFwhm] = useState("6");
   const v = parseInput(fwhm);
   return (
-    <Card title={<>Filter</>} defaultOpen={false} persistKey="edit-filter">
-      <TextInput label="Gauß-Glättung, FWHM (mm)" value={fwhm} onChange={setFwhm} />
+    <Card title={<>{t("Filter")}</>} defaultOpen={false} persistKey="edit-filter">
+      <TextInput label={t("Gauß-Glättung, FWHM (mm)")} value={fwhm} onChange={setFwhm} />
       <button className="primary-btn" disabled={!(v > 0) || busy} onClick={() => onApply({ type: "gaussian", fwhmMm: v })}>
-        Glätten
+        {t("Glätten")}
       </button>
     </Card>
   );
@@ -435,23 +436,23 @@ export function GeometrySection({
   const usable = targets.filter((t) => !t.disabledReason);
   return (
     <Card
-      title={<>Geometrie</>}
-      info="Spiegeln, Drehen und Resampling wirken auf alle angehakten Datensätze gemeinsam: Gespiegelt bzw. gedreht wird um die Mitte des aktiven Datensatzes, so dass übereinanderliegende Datensätze (z. B. PET und CT) deckungsgleich bleiben. Datensätze in einem anderen Raum (Standardraum) werden um ihre eigene Mitte bearbeitet. Rückgängig macht den Schritt in allen beteiligten Datensätzen rückgängig."
-      status={targets.length > 1 ? { text: `${ids.length} von ${usable.length}`, tone: "info" } : null}
+      title={<>{t("Geometrie")}</>}
+      info={t("Spiegeln, Drehen und Resampling wirken auf alle angehakten Datensätze gemeinsam: Gespiegelt bzw. gedreht wird um die Mitte des aktiven Datensatzes, so dass übereinanderliegende Datensätze (z. B. PET und CT) deckungsgleich bleiben. Datensätze in einem anderen Raum (Standardraum) werden um ihre eigene Mitte bearbeitet. Rückgängig macht den Schritt in allen beteiligten Datensätzen rückgängig.")}
+      status={targets.length > 1 ? { text: t("{length} von {length2}", { length: ids.length, length2: usable.length }), tone: "info" } : null}
       defaultOpen={false}
       persistKey="edit-geometry"
     >
       {targets.length > 1 && (
         <>
           <div className="export-list-head">
-            <span>Betroffene Datensätze</span>
+            <span>{t("Betroffene Datensätze")}</span>
             <span>
               <button className="link-btn" disabled={busy} onClick={() => { setExcluded(new Set()); setIncluded(new Set(targets.map((t) => t.id))); }}>
-                alle
+                {t("alle")}
               </button>{" "}
               ·{" "}
               <button className="link-btn" disabled={busy} onClick={() => { setExcluded(new Set(targets.map((t) => t.id))); setIncluded(new Set()); }}>
-                keine
+                {t("keine")}
               </button>
             </span>
           </div>
@@ -461,7 +462,7 @@ export function GeometrySection({
                 <input type="checkbox" disabled={!!t.disabledReason || busy} checked={isOn(t)} onChange={(e) => toggle(t, e.target.checked)} />
                 <span className="export-item-name">
                   {t.label}
-                  {t.id === activeId ? " (aktiv)" : ""}
+                  {t.id === activeId ? ` (${tr("aktiv")})` : ""}
                 </span>
                 {(t.disabledReason || t.note) && <em className="export-item-grid">{t.disabledReason ?? t.note}</em>}
               </label>
@@ -471,13 +472,13 @@ export function GeometrySection({
       )}
       <div className="chip-row">
         <button className="chip-btn" disabled={busy || none} onClick={() => run({ kind: "flip", patientAxis: 0 })}>
-          Spiegeln R↔L
+          {t("Spiegeln R↔L")}
         </button>
         <button className="chip-btn" disabled={busy || none} onClick={() => run({ kind: "flip", patientAxis: 1 })}>
-          Spiegeln A↔P
+          {t("Spiegeln A↔P")}
         </button>
         <button className="chip-btn" disabled={busy || none} onClick={() => run({ kind: "flip", patientAxis: 2 })}>
-          Spiegeln H↔F
+          {t("Spiegeln H↔F")}
         </button>
       </div>
       <div className="chip-row">
@@ -495,7 +496,7 @@ export function GeometrySection({
         {(["x", "y", "z"] as const).map((axis, a) => (
           <TextInput
             key={axis}
-            label={`Voxel ${axis} (mm)`}
+            label={t("Voxel {axis} (mm)", { axis })}
             value={spacing[a]}
             onChange={(v) => setSpacing((s) => s.map((old, i) => (i === a ? v : old)))}
           />
@@ -504,11 +505,11 @@ export function GeometrySection({
       {dims && (
         <p className="tool-hint">
           Neue Matrix (aktiver Datensatz): {dims.join(" × ")} (bisher {volume.nx} × {volume.ny} × {volume.nz})
-          {ids.length > 1 ? " · alle angehakten Datensätze erhalten diese Voxelgröße" : ""}
+          {ids.length > 1 ? t(" · alle angehakten Datensätze erhalten diese Voxelgröße") : ""}
         </p>
       )}
       <button className="primary-btn" disabled={!valid || busy || none} onClick={() => run({ kind: "resample", spacing: parsed })}>
-        Resampling
+        {t("Resampling")}
       </button>
     </Card>
   );
@@ -520,10 +521,10 @@ export function HistorySection(props: Units & { edits: EditOp[]; busy: boolean; 
   const { edits, busy } = props;
   const gridChanged = edits.some(changesGrid);
   return (
-    <Card title={<>Verlauf</>} status={edits.length ? { text: `${edits.length} Schritt${edits.length === 1 ? "" : "e"}`, tone: "info" } : null}>
-      {busy && <p className="tool-hint">Berechnung läuft …</p>}
+    <Card title={<>{t("Verlauf")}</>} status={edits.length ? { text: t("{length} Schritt{v}", { length: edits.length, v: edits.length === 1 ? "" : "e" }), tone: "info" } : null}>
+      {busy && <p className="tool-hint">{t("Berechnung läuft …")}</p>}
       {edits.length === 0 ? (
-        <p className="tool-hint">Noch keine Bearbeitung.</p>
+        <p className="tool-hint">{t("Noch keine Bearbeitung.")}</p>
       ) : (
         <ol className="edit-history">
           {edits.map((e, i) => (
@@ -531,13 +532,13 @@ export function HistorySection(props: Units & { edits: EditOp[]; busy: boolean; 
           ))}
         </ol>
       )}
-      {gridChanged && <p className="tool-hint" title="Das Voxelraster wurde verändert – der DICOM-Export erzeugt eine neue Serie.">Raster verändert → neue DICOM-Serie</p>}
+      {gridChanged && <p className="tool-hint" title={t("Das Voxelraster wurde verändert – der DICOM-Export erzeugt eine neue Serie.")}>{t("Raster verändert → neue DICOM-Serie")}</p>}
       <div className="button-row">
         <button className="secondary-btn" disabled={edits.length === 0 || busy} onClick={props.onUndo}>
-          Rückgängig
+          {t("Rückgängig")}
         </button>
         <button className="secondary-btn" disabled={edits.length === 0 || busy} onClick={props.onReset}>
-          Original
+          {t("Original")}
         </button>
       </div>
     </Card>

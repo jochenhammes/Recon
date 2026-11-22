@@ -1,9 +1,9 @@
 import { getLang } from "./lang";
 import { EN } from "./en";
 
-export type Vars = Record<string, string | number>;
+export type Vars = Record<string, string | number | null | undefined>;
 
-const fill = (s: string, vars?: Vars) => (vars ? s.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m)) : s);
+const fill = (s: string, vars?: Vars) => (vars ? s.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k] ?? "") : m)) : s);
 
 /**
  * Translates a German source text (the key) into the current language; placeholders `{name}` are filled from
@@ -25,3 +25,12 @@ export function tIn(lang: "de" | "en", de: string, vars?: Vars): string {
 
 /** Marks a German text as translation key without translating it now (for constant tables shown later via `t()`). */
 export const tk = (de: string): string => de;
+
+/** Same as `t`, for modules where `t` is a local name (e.g. time). */
+export const tr = t;
+
+/** Same as `t`, for modules where `t` and `tr` are local names. */
+export const tx = t;
+
+/** The text in both languages (to recognise names created in either language, e.g. "CT-Organe · …"). */
+export const tBoth = (de: string, vars?: Vars): string[] => [tIn("de", de, vars), tIn("en", de, vars)];

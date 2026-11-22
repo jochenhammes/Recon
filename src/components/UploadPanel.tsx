@@ -3,6 +3,7 @@ import { InfoText } from "../ui/Info";
 import { DicomParseError, mergeProjectionSets, parseSpectDicom } from "../dicom/parse";
 import type { SpectProjectionSet } from "../dicom/types";
 
+import { t } from "../i18n";
 export interface UploadPanelProps {
   onLoaded: (projectionSet: SpectProjectionSet) => void;
 }
@@ -24,7 +25,7 @@ export function UploadPanel({ onLoaded }: UploadPanelProps) {
       const merged = mergeProjectionSets(sets);
       onLoaded(merged);
     } catch (e) {
-      setError(e instanceof DicomParseError ? e.message : `Unerwarteter Fehler: ${String(e)}`);
+      setError(e instanceof DicomParseError ? e.message : t("Unerwarteter Fehler: {v}", { v: String(e) }));
     } finally {
       setBusy(false);
     }
@@ -32,7 +33,7 @@ export function UploadPanel({ onLoaded }: UploadPanelProps) {
 
   return (
     <div className="upload-panel">
-      <InfoText details="Multi-Frame DICOM-Datei (Modality NM) mit den Projektionen beider Detektorköpfe. Falls jeder Kopf als eigene Datei exportiert wurde, können auch zwei Dateien gleichzeitig ausgewählt werden.">
+      <InfoText details={t("Multi-Frame DICOM-Datei (Modality NM) mit den Projektionen beider Detektorköpfe. Falls jeder Kopf als eigene Datei exportiert wurde, können auch zwei Dateien gleichzeitig ausgewählt werden.")}>
         SPECT-Projektionen (DICOM NM)
       </InfoText>
       <div
@@ -44,7 +45,7 @@ export function UploadPanel({ onLoaded }: UploadPanelProps) {
         }}
         onClick={() => inputRef.current?.click()}
       >
-        {busy ? "Wird verarbeitet…" : "Dateien hierher ziehen oder klicken, um auszuwählen"}
+        {busy ? t("Wird verarbeitet…") : t("Dateien hierher ziehen oder klicken, um auszuwählen")}
         <input
           ref={inputRef}
           type="file"

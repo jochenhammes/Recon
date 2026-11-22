@@ -2,6 +2,7 @@ import type { Placed } from "./dose";
 import type { DosimetryWorkerMessage, PlainPlaced, VoxelDoseJob } from "../workers/dosimetry.worker";
 
 import { workerOptions } from "../i18n/lang";
+import { t } from "../i18n";
 export interface VoxelDoseRun {
   promise: Promise<{ dose: Float32Array; led?: Float32Array }>;
   cancel: () => void;
@@ -26,7 +27,7 @@ export function runVoxelDose(job: Omit<VoxelDoseJob, "type">, onProgress: (stage
     };
     worker.onerror = (e) => {
       worker.terminate();
-      rej(new Error(e.message || "Fehler im Dosimetrie-Worker"));
+      rej(new Error(e.message || t("Fehler im Dosimetrie-Worker")));
     };
     worker.postMessage({ type: "voxelDose", ...job } satisfies VoxelDoseJob);
   });

@@ -2,6 +2,7 @@ import { type Vec3, voxelToWorld } from "../core/geometry";
 import { PEAK_RADIUS_MM, sphereMean } from "../edit/voi";
 import type { Volume3D } from "../viewer/volume";
 
+import { t } from "../i18n";
 /**
  * Whole-body lesion segmentation for metabolic tumor volume (TMTV/MTV) on PET:
  * threshold → 26-connected components → per-lesion statistics. All thresholds are in SUV; the volume
@@ -66,8 +67,8 @@ export function methodThreshold(m: ThresholdMethod): number | null {
 
 export function describeMethod(m: ThresholdMethod): string {
   if (m.kind === "absolute") return `SUV ≥ ${m.suv}`;
-  if (m.kind === "liver") return `SUV ≥ ${m.a} × Leber-Mittel + ${m.b} × SD = ${(m.a * m.liverMean + m.b * m.liverSd).toFixed(2)}`;
-  return `${Math.round(m.percent * 100)} % SUVmax je Läsion (Detektion SUV ≥ ${m.detectSuv})`;
+  if (m.kind === "liver") return t("SUV ≥ {a} × Leber-Mittel + {b} × SD = {v}", { a: m.a, b: m.b, v: (m.a * m.liverMean + m.b * m.liverSd).toFixed(2) });
+  return t("{v} % SUVmax je Läsion (Detektion SUV ≥ {detectSuv})", { v: Math.round(m.percent * 100), detectSuv: m.detectSuv });
 }
 
 const NEIGHBORS: [number, number, number][] = [];

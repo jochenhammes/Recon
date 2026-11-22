@@ -8,6 +8,7 @@ import { Card } from "./Card";
 import { InfoText } from "./Info";
 import type { Option } from "./NormalizationPanel";
 
+import { t } from "../i18n";
 /** Result of one model in the comparison. */
 export interface SegBenchmarkResult {
   modelId: string;
@@ -60,8 +61,9 @@ export function SegBenchmarkCard(props: SegBenchmarkCardProps) {
   // Column header: the part in parentheses ("3 mm", "1,5 mm") when unique among the shown models, else the short name.
   const column = (id: string) => {
     const tag = (x: string) => label(x).match(/\(([^)]+)\)/)?.[1];
-    const t = tag(id);
-    return t && props.results.filter((r) => tag(r.modelId) === t).length === 1 ? t : (CT_MODELS.find((m) => m.id === id)?.short ?? id);
+    const tg = tag(id);
+    const short = CT_MODELS.find((m) => m.id === id)?.short;
+    return tg && props.results.filter((r) => tag(r.modelId) === tg).length === 1 ? tg : short ? t(short) : id;
   };
   const ok = props.results.filter((r) => !r.error);
   // Structures scored by all successful models (fair mean), then the union for the table.
@@ -114,14 +116,14 @@ export function SegBenchmarkCard(props: SegBenchmarkCardProps) {
 
   return (
     <Card
-      title={<>Modellvergleich</>}
+      title={<>{t("Modellvergleich")}</>}
       defaultOpen={false}
       persistKey="ctseg-benchmark"
       status={
         props.running
-          ? { text: "läuft", tone: "run" }
+          ? { text: t("läuft"), tone: "run" }
           : ok.length
-            ? { text: `${ok.length} Modelle`, tone: "ok" }
+            ? { text: t("{length} Modelle", { length: ok.length }), tone: "ok" }
             : null
       }
       info={
@@ -141,14 +143,13 @@ export function SegBenchmarkCard(props: SegBenchmarkCardProps) {
             Koordinatensystem des CTs liegen.
           </p>
           <p>
-            Reproduzierbarer Vergleich auf öffentlichen Daten:
-            tools/ctseg-benchmark im Repository.
+            {t("Reproduzierbarer Vergleich auf öffentlichen Daten: tools/ctseg-benchmark im Repository.")}
           </p>
         </>
       }
     >
       {props.cts.length === 0 ? (
-        <p className="tool-hint">Kein CT geladen.</p>
+        <p className="tool-hint">{t("Kein CT geladen.")}</p>
       ) : (
         <>
           <label className="field">
@@ -166,13 +167,13 @@ export function SegBenchmarkCard(props: SegBenchmarkCardProps) {
             </select>
           </label>
           <label className="field">
-            Referenz
+            {t("Referenz")}
             <select
               value={refId}
               disabled={props.running}
               onChange={(e) => setRefId(e.target.value)}
             >
-              <option value="">keine (nur Laufzeit)</option>
+              <option value="">{t("keine (nur Laufzeit)")}</option>
               {props.references.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.label}
@@ -186,7 +187,7 @@ export function SegBenchmarkCard(props: SegBenchmarkCardProps) {
               <label
                 key={m.id}
                 className="checkbox-field"
-                title={`${m.info} · ${m.license} · ${m.sizeMb} MB`}
+                title={`${t(m.info)} · ${m.license} · ${m.sizeMb} MB`}
               >
                 <input
                   type="checkbox"
@@ -202,19 +203,19 @@ export function SegBenchmarkCard(props: SegBenchmarkCardProps) {
                     )
                   }
                 />
-                {m.label}
+                {t(m.label)}
               </label>
             ))}
           </div>
           <label className="field">
-            Berechnung
+            {t("Berechnung")}
             <select
               value={backend}
               disabled={props.running}
               onChange={(e) => setBackend(e.target.value as CtSegBackend)}
             >
-              <option value="auto">Automatisch</option>
-              <option value="webgpu">WebGPU</option>
+              <option value="auto">{t("Automatisch")}</option>
+              <option value="webgpu">{t("WebGPU")}</option>
               <option value="wasm">CPU</option>
             </select>
           </label>
@@ -225,7 +226,7 @@ export function SegBenchmarkCard(props: SegBenchmarkCardProps) {
               disabled={props.running}
               onChange={(e) => setKeep(e.target.checked)}
             />
-            Ergebnisse als Label-Datensätze behalten
+            {t("Ergebnisse als Label-Datensätze behalten")}
           </label>
           {!props.running ? (
             <button
@@ -242,7 +243,7 @@ export function SegBenchmarkCard(props: SegBenchmarkCardProps) {
             <>
               <p className="tool-hint">{props.progress ?? "Vorbereitung …"}</p>
               <button className="secondary-btn" onClick={props.onCancel}>
-                Abbrechen
+                {t("Abbrechen")}
               </button>
             </>
           )}
@@ -256,16 +257,16 @@ export function SegBenchmarkCard(props: SegBenchmarkCardProps) {
             .map((r) => `${label(r.modelId)}: ${r.error}`)
             .join(" · ")}
         >
-          Nicht alle Modelle liefen durch
+          {t("Nicht alle Modelle liefen durch")}
         </InfoText>
       )}
       {ok.length > 0 && (
-        <BigTable title="Modellvergleich CT-Segmentierung" onCsv={downloadCsv}>
+        <BigTable title={t("Modellvergleich CT-Segmentierung")} onCsv={downloadCsv}>
           <div style={{ overflowX: "auto" }}>
             <table className="region-table">
               <thead>
                 <tr>
-                  <th>Struktur</th>
+                  <th>{t("Struktur")}</th>
                   {ok.map((r) => (
                     <th key={r.modelId} title={label(r.modelId)}>
                       {column(r.modelId)}
@@ -275,7 +276,7 @@ export function SegBenchmarkCard(props: SegBenchmarkCardProps) {
               </thead>
               <tbody>
                 <tr>
-                  <td>Laufzeit</td>
+                  <td>{t("Laufzeit")}</td>
                   {ok.map((r) => (
                     <td key={r.modelId}>
                       {r.seconds.toFixed(0)} s {r.backend}
@@ -283,7 +284,7 @@ export function SegBenchmarkCard(props: SegBenchmarkCardProps) {
                   ))}
                 </tr>
                 <tr>
-                  <td>Strukturen</td>
+                  <td>{t("Strukturen")}</td>
                   {ok.map((r) => (
                     <td key={r.modelId}>{r.structures}</td>
                   ))}

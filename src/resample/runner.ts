@@ -4,6 +4,7 @@ import type { ResampleJob } from "../workers/resample.worker";
 import { type Interpolation, type TargetGrid, resampleAtPoints, resampleInto } from "./resample";
 
 import { workerOptions } from "../i18n/lang";
+import { t } from "../i18n";
 /** Resamples onto a grid (or at explicit world positions) in a worker; synchronous fallback without workers. */
 export function runResample(
   source: Volume3D,
@@ -31,7 +32,7 @@ export function runResample(
     };
     worker.onerror = (e) => {
       worker.terminate();
-      reject(new Error(e.message || "Resampling fehlgeschlagen."));
+      reject(new Error(e.message || t("Resampling fehlgeschlagen.")));
     };
     const job: ResampleJob = { source: { nx: source.nx, ny: source.ny, nz: source.nz, data: source.data, geometry: source.geometry }, w2v, target: grid, points, method };
     worker.postMessage(job);

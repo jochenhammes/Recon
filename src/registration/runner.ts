@@ -5,6 +5,7 @@ import type { RegistrationJob } from "../workers/registration.worker";
 import { type CoregImage, type CoregOptions, type CoregProgress, type CoregResult, coregister } from "./coregister";
 
 import { workerOptions } from "../i18n/lang";
+import { t } from "../i18n";
 export interface RegistrationRun {
   promise: Promise<CoregResult>;
   /** Stops the computation (the promise rejects with an AbortError). */
@@ -62,7 +63,7 @@ export function runCoregistration(fixed: Volume3D, moving: Volume3D, options: Co
     };
     worker.onerror = (e) => {
       worker.terminate();
-      reject(new Error(e.message || "Registrierung fehlgeschlagen."));
+      reject(new Error(e.message || t("Registrierung fehlgeschlagen.")));
     };
   });
   const job: RegistrationJob = { fixed: prepFixed(), moving: prepareCoregImage(moving, options.levels), options };
@@ -73,7 +74,7 @@ export function runCoregistration(fixed: Volume3D, moving: Volume3D, options: Co
     promise,
     cancel: () => {
       worker.terminate();
-      rejectFn(new DOMException("Registrierung abgebrochen.", "AbortError"));
+      rejectFn(new DOMException(t("Registrierung abgebrochen."), "AbortError"));
     },
   };
 }

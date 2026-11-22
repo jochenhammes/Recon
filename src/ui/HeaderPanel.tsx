@@ -8,6 +8,7 @@ import { NUCLIDES, RP_SEQUENCE, currentNuclide, nuclideEdit, readNuclideEdit } f
 import { Card } from "./Card";
 import { EDITABLE_VRS, type HeaderEdit, type HeaderRow, headerRows, lockReason, validateValue } from "../header/headerModel";
 
+import { t } from "../i18n";
 export interface HeaderPanelProps {
   dataset: LoadedDataset;
   onEditsChange: (edits: HeaderEdit[]) => void;
@@ -33,7 +34,7 @@ export function HeaderPanel({ dataset, onEditsChange }: HeaderPanelProps) {
   const rows = useMemo(() => (file ? headerRows(file.dataSet, file.transferSyntax !== IMPLICIT_VR_LE) : []), [file]);
 
   if (source.kind !== "dicom" || !file) {
-    return <p className="tool-hint">Der Header-Editor steht für DICOM-Datensätze zur Verfügung.</p>;
+    return <p className="tool-hint">{t("Der Header-Editor steht für DICOM-Datensätze zur Verfügung.")}</p>;
   }
 
   // Rows for tags added by edits that do not exist in the file yet.
@@ -75,14 +76,14 @@ export function HeaderPanel({ dataset, onEditsChange }: HeaderPanelProps) {
         )}
         <label className="field">
           Suche (Tag, Name oder Wert)
-          <input type="text" value={query} placeholder="z. B. 0010,0010 oder Patient" onChange={(e) => setQuery(e.target.value)} />
+          <input type="text" value={query} placeholder={t("z. B. 0010,0010 oder Patient")} onChange={(e) => setQuery(e.target.value)} />
         </label>
-        <InfoText details="Gesperrt sind Tags, die der Export selbst setzt (Pixeldaten, Geometrie, Instanz-UIDs, Meta-Header).">Änderungen wirken beim DICOM-Export.</InfoText>
+        <InfoText details={t("Gesperrt sind Tags, die der Export selbst setzt (Pixeldaten, Geometrie, Instanz-UIDs, Meta-Header).")}>{t("Änderungen wirken beim DICOM-Export.")}</InfoText>
       </section>
 
       <NuclideCard dataSet={file.dataSet} edits={edits} onChange={onEditsChange} />
 
-      <div className="tag-table" role="table" aria-label="DICOM-Header">
+      <div className="tag-table" role="table" aria-label={t("DICOM-Header")}>
         {visible.map((r) => (
           <TagRowView
             key={r.tag}
@@ -105,7 +106,7 @@ export function HeaderPanel({ dataset, onEditsChange }: HeaderPanelProps) {
             onSave={addEdit}
           />
         ))}
-        {visible.length === 0 && <p className="tool-hint">Keine Treffer.</p>}
+        {visible.length === 0 && <p className="tool-hint">{t("Keine Treffer.")}</p>}
       </div>
 
       <AddTagForm seriesSize={files.length} fileIndex={fileIndex} onAdd={addEdit} />
@@ -121,20 +122,20 @@ export function HeaderPanel({ dataset, onEditsChange }: HeaderPanelProps) {
                   {e.vr === "SQ" && e.tag === RP_SEQUENCE ? (
                     <strong>Radionuklid {readNuclideEdit([e])?.nuclide ?? "?"}</strong>
                   ) : e.value === null ? (
-                    <em>löschen</em>
+                    <em>{t("löschen")}</em>
                   ) : (
                     <strong>{e.value || "(leer)"}</strong>
                   )}
-                  <span className="scope-note">{e.scope === "all" ? " · alle Dateien" : ` · nur Datei ${e.scope + 1}`}</span>
+                  <span className="scope-note">{e.scope === "all" ? t(" · alle Dateien") : t(" · nur Datei {v}", { v: e.scope + 1 })}</span>
                 </span>
-                <button className="icon-btn small" title="Änderung verwerfen" aria-label="Änderung verwerfen" onClick={() => onEditsChange(edits.filter((_, j) => j !== i))}>
+                <button className="icon-btn small" title={t("Änderung verwerfen")} aria-label={t("Änderung verwerfen")} onClick={() => onEditsChange(edits.filter((_, j) => j !== i))}>
                   <Undo2 size={13} />
                 </button>
               </li>
             ))}
           </ul>
           <button className="secondary-btn" onClick={() => onEditsChange([])}>
-            Alle Änderungen verwerfen
+            {t("Alle Änderungen verwerfen")}
           </button>
         </section>
       )}
@@ -174,12 +175,12 @@ function TagRowView({ row, edit, editing, expanded, seriesSize, fileIndex, onTog
           {row.name || "–"}
         </span>
         {row.editable && !editing && (
-          <button className="icon-btn small" title="Bearbeiten" aria-label={`${row.name || formatTag(row.tag)} bearbeiten`} onClick={onStartEdit}>
+          <button className="icon-btn small" title={t("Bearbeiten")} aria-label={t("{v} bearbeiten", { v: row.name || formatTag(row.tag) })} onClick={onStartEdit}>
             <Pencil size={12} />
           </button>
         )}
       </div>
-      {!editing && <div className="tag-value" title={row.lockReason}>{deleted ? "(wird gelöscht)" : shownValue || <span className="empty">(leer)</span>}</div>}
+      {!editing && <div className="tag-value" title={row.lockReason}>{deleted ? t("(wird gelöscht)") : shownValue || <span className="empty">{t("(leer)")}</span>}</div>}
       {editing && (
         <TagEditor
           tag={row.tag}
@@ -236,13 +237,13 @@ function TagEditor(props: { tag: string; vr: string; initial: string; seriesSize
       )}
       <div className="button-row">
         <button className="secondary-btn" disabled={!!error} onClick={() => props.onSave({ tag: props.tag, vr: props.vr, value, scope: resolvedScope })}>
-          Übernehmen
+          {t("Übernehmen")}
         </button>
-        <button className="secondary-btn" title="Element beim Export entfernen" onClick={() => props.onSave({ tag: props.tag, vr: props.vr, value: null, scope: resolvedScope })}>
+        <button className="secondary-btn" title={t("Element beim Export entfernen")} onClick={() => props.onSave({ tag: props.tag, vr: props.vr, value: null, scope: resolvedScope })}>
           <Trash2 size={13} /> Löschen
         </button>
         <button className="secondary-btn" onClick={props.onCancel}>
-          Abbrechen
+          {t("Abbrechen")}
         </button>
       </div>
     </div>
@@ -258,13 +259,13 @@ function AddTagForm({ seriesSize, fileIndex, onAdd }: { seriesSize: number; file
   const known = tag ? lookupTag(tag) : undefined;
   const effectiveVr = known && EDITABLE_VRS.has(known.vr) ? known.vr : vr;
   const lock = tag ? lockReason(tag) : undefined;
-  const error = !tagText ? null : !tag ? "Tag im Format gggg,eeee angeben." : lock ?? (known && !EDITABLE_VRS.has(known.vr) ? `VR ${known.vr} ist nicht editierbar.` : validateValue(effectiveVr, value));
+  const error = !tagText ? null : !tag ? t("Tag im Format gggg,eeee angeben.") : lock ?? (known && !EDITABLE_VRS.has(known.vr) ? t("VR {vr} ist nicht editierbar.", { vr: known.vr }) : validateValue(effectiveVr, value));
   return (
     <section className="card">
-      <h3>Tag hinzufügen / setzen</h3>
+      <h3>{t("Tag hinzufügen / setzen")}</h3>
       <div className="field-row">
         <label className="field">
-          Tag
+          {t("Tag")}
           <input type="text" value={tagText} placeholder="0010,1030" onChange={(e) => setTagText(e.target.value)} />
         </label>
         <label className="field">
@@ -280,12 +281,12 @@ function AddTagForm({ seriesSize, fileIndex, onAdd }: { seriesSize: number; file
       </div>
       {known && <p className="tool-hint">{known.name}</p>}
       <label className="field">
-        Wert
+        {t("Wert")}
         <input type="text" value={value} onChange={(e) => setValue(e.target.value)} />
       </label>
       {seriesSize > 1 && (
         <label className="field">
-          Geltungsbereich
+          {t("Geltungsbereich")}
           <select value={scope} onChange={(e) => setScope(e.target.value as "all" | "file")}>
             <option value="all">alle {seriesSize} Dateien</option>
             <option value="file">nur Datei {fileIndex + 1}</option>
@@ -303,7 +304,7 @@ function AddTagForm({ seriesSize, fileIndex, onAdd }: { seriesSize: number; file
           setValue("");
         }}
       >
-        Hinzufügen
+        {t("Hinzufügen")}
       </button>
     </section>
   );
@@ -320,12 +321,12 @@ function NuclideCard({ dataSet, edits, onChange }: { dataSet: import("dicom-pars
   const others = edits.filter((e) => !(e.tag === RP_SEQUENCE && e.vr === "SQ"));
   return (
     <Card
-      title={<>Radionuklid</>}
+      title={<>{t("Radionuklid")}</>}
       status={pending ? { text: `→ ${pending.nuclide}`, tone: "run" } : cur.match ? { text: cur.match.id, tone: "info" } : null}
       info={
         <>
           <p>
-            Ändert das Radionuklid der Serie in der <em>Radiopharmaceutical Information Sequence</em> (0054,0016): Nuklid-Code (0054,0300), Halbwertszeit
+            Ändert das Radionuklid der Serie in der <em>{t("Radiopharmaceutical Information Sequence")}</em> (0054,0016): Nuklid-Code (0054,0300), Halbwertszeit
             (0018,1075) und Positronenanteil (0018,1076), optional das Radiopharmazeutikum (0018,0031). Dosis, Injektionszeit und alle übrigen Angaben
             bleiben unverändert.
           </p>
@@ -337,12 +338,12 @@ function NuclideCard({ dataSet, edits, onChange }: { dataSet: import("dicom-pars
       }
     >
       <p className="tool-hint">
-        Aktuell: {cur.meaning ?? "kein Nuklid-Code"} · T½ {fmtHl(cur.halfLifeSec)}
+        Aktuell: {cur.meaning ?? t("kein Nuklid-Code")} · T½ {fmtHl(cur.halfLifeSec)}
         {cur.positronFraction !== undefined ? ` · β⁺ ${cur.positronFraction.toLocaleString("de-DE")}` : ""}
         {cur.radiopharmaceutical ? ` · ${cur.radiopharmaceutical}` : ""}
       </p>
       <label className="field">
-        Neues Radionuklid
+        {t("Neues Radionuklid")}
         <select value={choice} onChange={(e) => setChoice(e.target.value)}>
           {NUCLIDES.map((x) => (
             <option key={x.id} value={x.id}>
@@ -361,11 +362,11 @@ function NuclideCard({ dataSet, edits, onChange }: { dataSet: import("dicom-pars
       </label>
       <div className="button-row">
         <button className="secondary-btn" onClick={() => onChange([...others, nuclideEdit({ nuclide: choice, ...(pharma.trim() ? { radiopharmaceutical: pharma.trim() } : {}) })])}>
-          {pending ? "Änderung aktualisieren" : "Nuklid übernehmen"}
+          {pending ? t("Änderung aktualisieren") : t("Nuklid übernehmen")}
         </button>
         {pending && (
           <button className="secondary-btn" onClick={() => onChange(others)}>
-            Verwerfen
+            {t("Verwerfen")}
           </button>
         )}
       </div>

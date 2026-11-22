@@ -20,6 +20,7 @@ import {
 import { type AtlasInfo, atlasFromLabels, parseLabelTable } from "../atlas/atlas";
 import { LABEL_FILE_NAME, looksLikeLabels, niftiLabelInfo, parseXmlLabelTable } from "../atlas/labelNifti";
 
+import { t } from "../i18n";
 export class VolumeLoadError extends Error {
   constructor(message: string) {
     super(message);
@@ -146,9 +147,9 @@ export async function loadVolumesFromFiles(input: File[]): Promise<MultiLoadResu
       const desc = ds.string("x0008103e")?.trim();
       const number = parseInt(ds.string("x00200011") ?? "", 10);
       const base = desc || (g.length === 1 ? g[0].file.fileName : "Serie");
-      series.push({ loaded, name: g.length > 1 ? `${base} (${g.length} Dateien)` : base, number: Number.isFinite(number) ? number : 1e9 });
+      series.push({ loaded, name: g.length > 1 ? t("{base} ({length} Dateien)", { base, length: g.length }) : base, number: Number.isFinite(number) ? number : 1e9 });
     } catch {
-      skipped.push(`Serie mit ${g.length} Datei(en)`);
+      skipped.push(t("Serie mit {length} Datei(en)", { length: g.length }));
     }
   }
   series.sort((a, b) => a.number - b.number);
@@ -158,15 +159,15 @@ export async function loadVolumesFromFiles(input: File[]): Promise<MultiLoadResu
 
 /** Loads one or more files as a 3D volume. Supports NIfTI (.nii, .nii.gz) and DICOM. */
 export async function loadVolumeFromFiles(files: File[]): Promise<LoadedVolume> {
-  if (files.length === 0) throw new VolumeLoadError("Keine Dateien ausgewählt.");
+  if (files.length === 0) throw new VolumeLoadError(t("Keine Dateien ausgewählt."));
 
   const niftiFiles = files.filter((f) => /\.nii(\.gz)?$/i.test(f.name));
   const dicomFiles = files.filter((f) => !/\.nii(\.gz)?$/i.test(f.name));
 
   if (niftiFiles.length > 0 && dicomFiles.length > 0)
-    throw new VolumeLoadError("Bitte nur NIfTI- oder nur DICOM-Dateien auf einmal laden.");
+    throw new VolumeLoadError(t("Bitte nur NIfTI- oder nur DICOM-Dateien auf einmal laden."));
   if (niftiFiles.length > 1)
-    throw new VolumeLoadError("Bitte nur eine NIfTI-Datei gleichzeitig laden.");
+    throw new VolumeLoadError(t("Bitte nur eine NIfTI-Datei gleichzeitig laden."));
 
   if (niftiFiles.length === 1) return loadNiftiFile(niftiFiles[0]);
   return loadDicomVolume(dicomFiles);
@@ -214,7 +215,7 @@ function niftiDynamic(buffer: ArrayBuffer, volume: Volume3D, sidecarJson?: strin
     start: frames.map((_, i) => i * step),
     duration: frames.map(() => step),
     timeSource: "nifti",
-    note: tr > 0 ? "Frame-Zeiten aus pixdim[4] (gleich lange Frames) – bitte prüfen oder Tabelle anpassen." : "Keine Frame-Zeiten im NIfTI – bitte Tabelle eingeben (oder BIDS-JSON mitladen).",
+    note: tr > 0 ? t("Frame-Zeiten aus pixdim[4] (gleich lange Frames) – bitte prüfen oder Tabelle anpassen.") : t("Keine Frame-Zeiten im NIfTI – bitte Tabelle eingeben (oder BIDS-JSON mitladen)."),
   };
 }
 
@@ -240,23 +241,23 @@ export async function decompressGzip(buffer: ArrayBuffer): Promise<ArrayBuffer> 
 
 export function parseNifti1(buffer: ArrayBuffer): { volume: Volume3D; nifti: NiftiSourceInfo } {
   if (buffer.byteLength < 352)
-    throw new VolumeLoadError("Datei zu klein für einen NIfTI-1-Header.");
+    throw new VolumeLoadError(t("Datei zu klein für einen NIfTI-1-Header."));
   const view = new DataView(buffer);
 
   const sizeofHdrLE = view.getInt32(0, true);
   const littleEndian = sizeofHdrLE === 348;
   if (!littleEndian && view.getInt32(0, false) !== 348)
-    throw new VolumeLoadError("Ungültiger NIfTI-1-Header (sizeof_hdr ≠ 348).");
+    throw new VolumeLoadError(t("Ungültiger NIfTI-1-Header (sizeof_hdr ≠ 348)."));
 
   const ndim = view.getInt16(40, littleEndian);
   if (ndim < 3)
-    throw new VolumeLoadError(`NIfTI hat nur ${ndim} Dimension(en) – mindestens 3D erwartet.`);
+    throw new VolumeLoadError(t("NIfTI hat nur {ndim} Dimension(en) – mindestens 3D erwartet.", { ndim }));
 
   const nx = view.getInt16(42, littleEndian);
   const ny = view.getInt16(44, littleEndian);
   const nz = view.getInt16(46, littleEndian);
   if (nx <= 0 || ny <= 0 || nz <= 0)
-    throw new VolumeLoadError("NIfTI: ungültige Dimension(en).");
+    throw new VolumeLoadError(t("NIfTI: ungültige Dimension(en)."));
 
   const dx = Math.abs(view.getFloat32(80, littleEndian)) || 1; // pixdim[1] = spacingX
   const dy = Math.abs(view.getFloat32(84, littleEndian)) || 1; // pixdim[2] = spacingY
@@ -289,7 +290,7 @@ export function parseNifti1(buffer: ArrayBuffer): { volume: Volume3D; nifti: Nif
 /** Reads `count` voxel values (any supported datatype, little endian) as float32. */
 function readNiftiValues(buffer: ArrayBuffer, littleEndian: boolean, datatype: number, voxOffset: number, count: number): Float32Array {
   const data = new Float32Array(count);
-  if (datatype !== 2 && !littleEndian) throw new VolumeLoadError("Big-Endian NIfTI wird nicht unterstützt.");
+  if (datatype !== 2 && !littleEndian) throw new VolumeLoadError(t("Big-Endian NIfTI wird nicht unterstützt."));
   const bytes = (size: number) => buffer.slice(voxOffset, voxOffset + count * size);
   let src: ArrayLike<number>;
   switch (datatype) {
@@ -312,7 +313,7 @@ function readNiftiValues(buffer: ArrayBuffer, littleEndian: boolean, datatype: n
       src = new Float64Array(bytes(8));
       break;
     default:
-      throw new VolumeLoadError(`NIfTI-Datentyp ${datatype} wird nicht unterstützt.`);
+      throw new VolumeLoadError(t("NIfTI-Datentyp {datatype} wird nicht unterstützt.", { datatype }));
   }
   const m = Math.min(count, src.length);
   for (let i = 0; i < m; i++) data[i] = src[i];
@@ -333,7 +334,7 @@ export interface NiftiAll {
 export function readNiftiAll(buffer: ArrayBuffer): NiftiAll {
   const view = new DataView(buffer);
   const littleEndian = view.getInt32(0, true) === 348;
-  if (!littleEndian) throw new VolumeLoadError("Nur Little-Endian-NIfTI-1 wird unterstützt.");
+  if (!littleEndian) throw new VolumeLoadError(t("Nur Little-Endian-NIfTI-1 wird unterstützt."));
   const ndim = view.getInt16(40, true);
   const dims = Array.from({ length: Math.max(3, Math.min(7, ndim)) }, (_, i) => Math.max(1, view.getInt16(42 + 2 * i, true)));
   const count = dims.reduce((a, b) => a * b, 1);
@@ -393,13 +394,13 @@ interface ParsedDicomFile {
 async function loadDicomVolume(input: File[]): Promise<LoadedVolume> {
   // Files without extension are common for DICOM; skip hidden files and DICOMDIR index files.
   const files = input.filter((f) => !f.name.startsWith(".") && f.name.toUpperCase() !== "DICOMDIR");
-  if (files.length === 0) throw new VolumeLoadError("Keine Dateien ausgewählt.");
+  if (files.length === 0) throw new VolumeLoadError(t("Keine Dateien ausgewählt."));
   // Tolerate non-image files in a folder (reports, text files …) as long as some files are images.
   const results = await Promise.allSettled(files.map(parseDicomFile));
   const ok = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
   if (ok.length === 0) {
     const first = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
-    throw first?.reason instanceof Error ? first.reason : new VolumeLoadError("Keine lesbaren DICOM-Bilddateien gefunden.");
+    throw first?.reason instanceof Error ? first.reason : new VolumeLoadError(t("Keine lesbaren DICOM-Bilddateien gefunden."));
   }
   // Several series in one selection (e.g. a whole study folder): use the series with the most files.
   const bySeries = new Map<string, ParsedDicomFile[]>();
@@ -458,7 +459,7 @@ function buildDicomDynamic(parsed: ParsedDicomFile[]): LoadedVolume | null {
   if (distinct) {
     const t0 = injection !== undefined && injection <= starts[0] ? injection : starts[0];
     start = starts.map((s) => (s - t0) / 1000);
-    if (t0 === starts[0]) note = "Start relativ zum ersten Frame (Injektionszeit fehlt im Header).";
+    if (t0 === starts[0]) note = t("Start relativ zum ersten Frame (Injektionszeit fehlt im Header).");
   } else {
     // Some systems write the series start into every frame: use the frame durations cumulatively.
     start = [];
@@ -467,13 +468,13 @@ function buildDicomDynamic(parsed: ParsedDicomFile[]): LoadedVolume | null {
       start.push(acc);
       acc += d;
     }
-    note = "Frame-Startzeiten aus den Frame-Dauern aufsummiert (Aufnahmezeiten im Header identisch).";
+    note = t("Frame-Startzeiten aus den Frame-Dauern aufsummiert (Aufnahmezeiten im Header identisch).");
   }
   if (duration.some((d) => !(d > 0))) {
     for (let i = 0; i < nt; i++) if (!(duration[i] > 0)) duration[i] = i + 1 < nt ? start[i + 1] - start[i] : duration[i - 1] ?? 60;
-    note = (note ? note + " " : "") + "Frame-Dauer (0018,1242) fehlt teilweise – aus den Startzeiten abgeleitet.";
+    note = (note ? note + " " : "") + t("Frame-Dauer (0018,1242) fehlt teilweise – aus den Startzeiten abgeleitet.");
   }
-  if (str(first, "x00541102") === "NONE") note = (note ? note + " " : "") + "Achtung: Daten sind laut Header nicht zerfallskorrigiert.";
+  if (str(first, "x00541102") === "NONE") note = (note ? note + " " : "") + t("Achtung: Daten sind laut Header nicht zerfallskorrigiert.");
   const mean = vols[0].volume.withData(meanOfFrames(frames, duration));
   return { volume: mean, source: vols[0].source, dynamic: { frames, start, duration, timeSource: "dicom", note } };
 }
@@ -496,7 +497,7 @@ function buildDicomVolume(parsed: ParsedDicomFile[]): LoadedVolume {
   }
   const { rows, cols } = parsed[0];
   if (!parsed.every((p) => p.rows === rows && p.cols === cols))
-    throw new VolumeLoadError("DICOM-Serie: inkonsistente Bildgrößen.");
+    throw new VolumeLoadError(t("DICOM-Serie: inkonsistente Bildgrößen."));
 
   const nz = parsed.reduce((sum, p) => sum + p.frames.length, 0);
   const sliceSize = rows * cols;
@@ -553,21 +554,21 @@ async function parseDicomFile(file: File): Promise<ParsedDicomFile> {
   try {
     dataSet = parseDicomBytes(bytes);
   } catch (e) {
-    throw new VolumeLoadError(`DICOM-Parser-Fehler in ${file.name}: ${describeParseError(e)}`);
+    throw new VolumeLoadError(t("DICOM-Parser-Fehler in {name}: {v}", { name: file.name, v: describeParseError(e) }));
   }
 
   const transferSyntax = dataSet.string("x00020010")?.trim() || undefined;
   if (transferSyntax === "1.2.840.10008.1.2.2" || transferSyntax === "1.2.840.10008.1.2.1.99")
-    throw new VolumeLoadError(`${file.name}: Transfer Syntax ${transferSyntax} (Big Endian/Deflate) wird nicht unterstützt.`);
+    throw new VolumeLoadError(t("{name}: Transfer Syntax {transferSyntax} (Big Endian/Deflate) wird nicht unterstützt.", { name: file.name, transferSyntax }));
   if (dataSet.elements["x7fe00008"] || dataSet.elements["x7fe00009"])
-    throw new VolumeLoadError(`${file.name}: Float-PixelData wird nicht unterstützt.`);
+    throw new VolumeLoadError(t("{name}: Float-PixelData wird nicht unterstützt.", { name: file.name }));
 
   const rows = dataSet.uint16("x00280010") ?? 0;
   const cols = dataSet.uint16("x00280011") ?? 0;
   const nFrames = parseInt(dataSet.string("x00280008") ?? "1", 10) || 1;
-  if (!rows || !cols) throw new VolumeLoadError(`DICOM: Bildgröße nicht lesbar in ${file.name}.`);
+  if (!rows || !cols) throw new VolumeLoadError(t("DICOM: Bildgröße nicht lesbar in {name}.", { name: file.name }));
   if ((dataSet.uint16("x00280002") ?? 1) !== 1)
-    throw new VolumeLoadError(`${file.name}: Nur Graustufenbilder (SamplesPerPixel = 1) werden unterstützt.`);
+    throw new VolumeLoadError(t("{name}: Nur Graustufenbilder (SamplesPerPixel = 1) werden unterstützt.", { name: file.name }));
 
   const bitsAllocated = dataSet.uint16("x00280100") ?? 16;
   const encoding: DicomPixelEncoding = {

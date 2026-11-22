@@ -1,6 +1,7 @@
 import { AlertTriangle, Check, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { t } from "../i18n";
 export interface Activity {
   id: string;
   label: string;
@@ -65,14 +66,14 @@ export function ActivityBar({ activities, idleText, onOpen }: { activities: Acti
         <button key={`done-${a.id}`} className="activity-item done" onClick={() => onOpen(a.tab)}>
           <Check size={13} />
           <span className="activity-label">{a.label}</span>
-          <span className="activity-detail">fertig</span>
+          <span className="activity-detail">{t("fertig")}</span>
         </button>
       ))}
       {errors.map((a) => (
         <button key={a.id} className="activity-item error" title={a.error} onClick={() => onOpen(a.tab)}>
           <AlertTriangle size={13} />
           <span className="activity-label">{a.label}</span>
-          <span className="activity-detail">Fehler</span>
+          <span className="activity-detail">{t("Fehler")}</span>
         </button>
       ))}
     </div>

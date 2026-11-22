@@ -3,7 +3,7 @@
  * completeness test and scripts/i18n-check.mjs. Only plain literals count (no ${…} in template strings).
  */
 const LIT = String.raw`("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|\`(?:[^\`\\$]|\\.|\$(?!\{))*\`)`;
-const CALL = new RegExp(String.raw`(?<![\w.$])(t|tk)\(\s*` + LIT, "g");
+const CALL = new RegExp(String.raw`(?<![\w.$])(t|tk|tr|tx)\(\s*` + LIT, "g");
 const PLURAL = new RegExp(String.raw`(?<![\w.$])tn\(\s*[^,]+?,\s*` + LIT + String.raw`\s*,\s*` + LIT, "g");
 const COMP = new RegExp(String.raw`<T\s+k=` + LIT, "g");
 

@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 /** Minimal ZIP reader (stored and deflate entries, no ZIP64/encryption) for user-supplied archives. */
 
 export interface UnzippedEntry {
@@ -25,13 +26,13 @@ export function listZip(buffer: ArrayBuffer): UnzippedEntry[] {
       eocd = i;
       break;
     }
-  if (eocd < 0) throw new ZipError("Keine ZIP-Datei (Verzeichnis nicht gefunden).");
+  if (eocd < 0) throw new ZipError(t("Keine ZIP-Datei (Verzeichnis nicht gefunden)."));
   const count = view.getUint16(eocd + 10, true);
   let p = view.getUint32(eocd + 16, true);
   const decoder = new TextDecoder();
   const entries: UnzippedEntry[] = [];
   for (let n = 0; n < count; n++) {
-    if (view.getUint32(p, true) !== 0x02014b50) throw new ZipError("Beschädigtes ZIP-Verzeichnis.");
+    if (view.getUint32(p, true) !== 0x02014b50) throw new ZipError(t("Beschädigtes ZIP-Verzeichnis."));
     const method = view.getUint16(p + 10, true);
     const compSize = view.getUint32(p + 20, true);
     const size = view.getUint32(p + 24, true);
@@ -43,12 +44,12 @@ export function listZip(buffer: ArrayBuffer): UnzippedEntry[] {
     p += 46 + nameLen + extraLen + commentLen;
     if (name.endsWith("/")) continue;
     const read = async () => {
-      if (view.getUint32(local, true) !== 0x04034b50) throw new ZipError(`Beschädigter Eintrag ${name}.`);
+      if (view.getUint32(local, true) !== 0x04034b50) throw new ZipError(t("Beschädigter Eintrag {name}.", { name }));
       const start = local + 30 + view.getUint16(local + 26, true) + view.getUint16(local + 28, true);
       const data = bytes.slice(start, start + compSize);
       if (method === 0) return data;
       if (method === 8) return inflateRaw(data);
-      throw new ZipError(`Kompressionsverfahren ${method} wird nicht unterstützt (${name}).`);
+      throw new ZipError(t("Kompressionsverfahren {method} wird nicht unterstützt ({name}).", { method, name }));
     };
     entries.push({ name, size, read });
   }

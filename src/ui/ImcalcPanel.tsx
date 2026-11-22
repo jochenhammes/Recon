@@ -2,6 +2,7 @@ import { useState } from "react";
 import { parseInput } from "../components/format";
 import { Card } from "./Card";
 
+import { t } from "../i18n";
 export interface ImcalcDataset {
   id: string;
   label: string;
@@ -89,9 +90,9 @@ export function ImcalcPanel(props: {
           ? `${fmt(num(pA, 1))}·${d1?.short ?? "X1"} ${num(pB, -1) < 0 ? "−" : "+"} ${fmt(Math.abs(num(pB, -1)))}·${d2?.short ?? "X2"}`
           : `${d1?.short ?? "X1"} ${opLabel} ${d2?.short ?? "X2"}`
         : mode === "group"
-          ? `Gruppe-Mittelwert (n=${group.length})`
+          ? t("Gruppe-Mittelwert (n={length})", { length: group.length })
           : "_z";
-  const suggested2 = `Gruppe-SD (n=${group.length})`;
+  const suggested2 = t("Gruppe-SD (n={length})", { length: group.length });
   const outName = name ?? suggested;
 
   const toggle = (list: string[], set: (v: string[]) => void, id: string, on: boolean) => set(on ? [...list, id] : list.filter((x) => x !== id));
@@ -102,10 +103,10 @@ export function ImcalcPanel(props: {
         .map((d) => {
           const incompatible = !!key && d.gridKey !== key;
           return (
-            <label key={d.id} className={`checkbox-field${incompatible ? " disabled" : ""}`} title={incompatible ? `Anderes Raster: ${d.gridInfo}` : d.gridInfo}>
+            <label key={d.id} className={`checkbox-field${incompatible ? " disabled" : ""}`} title={incompatible ? t("Anderes Raster: {gridInfo}", { gridInfo: d.gridInfo }) : d.gridInfo}>
               <input type="checkbox" checked={selected.includes(d.id)} disabled={props.busy || (incompatible && !selected.includes(d.id))} onChange={(e) => toggle(selected, set, d.id, e.target.checked)} />
               {d.label}
-              {d.dynamic && <em className="row-note"> Mittelbild</em>}
+              {d.dynamic && <em className="row-note"> {t("Mittelbild")}</em>}
             </label>
           );
         })}
@@ -115,7 +116,7 @@ export function ImcalcPanel(props: {
     <label className="field">
       {label}
       <select value={value ?? ""} disabled={props.busy} onChange={(e) => onChange(e.target.value)}>
-        {!value && <option value="">– wählen –</option>}
+        {!value && <option value="">{t("– wählen –")}</option>}
         {options.map((d) => (
           <option key={d.id} value={d.id}>
             {d.label}
@@ -130,27 +131,27 @@ export function ImcalcPanel(props: {
   let hint = "";
   if (mode === "linear" && lin) job = { kind: "linear", id: lin.id, a: num(linA, 1), b: num(linB, 0), name: outName };
   if (mode === "pair") {
-    if (!d1 || !d2) hint = "Zweiter Datensatz auf demselben Raster fehlt.";
+    if (!d1 || !d2) hint = t("Zweiter Datensatz auf demselben Raster fehlt.");
     else job = { kind: "pair", id1: d1.id, id2: d2.id, op: pairOp, a: num(pA, 1), b: num(pB, -1), name: outName };
   }
   if (mode === "group") {
-    if (group.length < 2) hint = "Mindestens 2 Datensätze anhaken.";
+    if (group.length < 2) hint = t("Mindestens 2 Datensätze anhaken.");
     else job = { kind: "group", ids: group.map((d) => d.id), nameMean: outName, nameSd: name2 ?? suggested2 };
   }
   if (mode === "z") {
     if (!zs.length) hint = "Individuen anhaken.";
-    else if (!mean || !sd) hint = "Mittelwert- und SD-Karte der Vergleichskohorte wählen (gleiches Raster).";
+    else if (!mean || !sd) hint = t("Mittelwert- und SD-Karte der Vergleichskohorte wählen (gleiches Raster).");
     else job = { kind: "z", ids: zs.map((d) => d.id), meanId: mean.id, sdId: sd.id, suffix: outName };
   }
 
   return (
     <>
       <Card
-        title={<>1 · Operation</>}
+        title={<>{t("1 · Operation")}</>}
         info={
           <>
             <p>
-              Voxelweise Rechnung auf Datensätzen mit <strong>demselben Raster</strong> (gleiche Matrix und Geometrie). Ergebnisse sind neue Datensätze im
+              Voxelweise Rechnung auf Datensätzen mit <strong>{t("demselben Raster")}</strong> (gleiche Matrix und Geometrie). Ergebnisse sind neue Datensätze im
               selben Bildraum – anzeigen, exportieren, im Projekt speichern und weiterverarbeiten wie alle anderen. Daten verschiedener Patienten vorher in
               den Standardraum bringen.
             </p>
@@ -162,7 +163,7 @@ export function ImcalcPanel(props: {
           </>
         }
       >
-        <div className="segmented-control imcalc-modes" role="group" aria-label="Operation">
+        <div className="segmented-control imcalc-modes" role="group" aria-label={t("Operation")}>
           {MODES.map(([m, label]) => (
             <button
               key={m}
@@ -179,7 +180,7 @@ export function ImcalcPanel(props: {
           ))}
         </div>
 
-        {ds.length === 0 && <p className="tool-hint">Keine geeigneten Datensätze (Labelbilder sind ausgenommen).</p>}
+        {ds.length === 0 && <p className="tool-hint">{t("Keine geeigneten Datensätze (Labelbilder sind ausgenommen).")}</p>}
 
         {mode === "linear" && ds.length > 0 && (
           <>
@@ -201,8 +202,8 @@ export function ImcalcPanel(props: {
         {mode === "pair" && ds.length > 0 && (
           <>
             {select(d1?.id, setP1, ds, "Datensatz X₁")}
-            {select(d2?.id, setP2, sameGrid(d1?.gridKey).filter((d) => d.id !== d1?.id), "Datensatz X₂ (gleiches Raster)")}
-            <div className="segmented-control" role="group" aria-label="Verknüpfung">
+            {select(d2?.id, setP2, sameGrid(d1?.gridKey).filter((d) => d.id !== d1?.id), t("Datensatz X₂ (gleiches Raster)"))}
+            <div className="segmented-control" role="group" aria-label={t("Verknüpfung")}>
               {(
                 [
                   ["sum", "a·X₁ + b·X₂"],
@@ -233,35 +234,35 @@ export function ImcalcPanel(props: {
 
         {mode === "group" && ds.length > 0 && (
           <>
-            <p className="tool-hint">Datensätze der Gruppe anhaken (das erste bestimmt das Raster):</p>
+            <p className="tool-hint">{t("Datensätze der Gruppe anhaken (das erste bestimmt das Raster):")}</p>
             {checkList(groupIds, setGroupIds, groupKey)}
           </>
         )}
 
         {mode === "z" && ds.length > 0 && (
           <>
-            <p className="tool-hint">Individuen anhaken – je Individuum entsteht eine Z-Karte:</p>
+            <p className="tool-hint">{t("Individuen anhaken – je Individuum entsteht eine Z-Karte:")}</p>
             {checkList(zIds, setZIds, zKey, [mean?.id ?? "", sd?.id ?? ""])}
-            {select(mean?.id, setMeanId, zOptions, "Mittelwert-Karte der Vergleichskohorte")}
-            {select(sd?.id, setSdId, zOptions, "SD-Karte der Vergleichskohorte")}
+            {select(mean?.id, setMeanId, zOptions, t("Mittelwert-Karte der Vergleichskohorte"))}
+            {select(sd?.id, setSdId, zOptions, t("SD-Karte der Vergleichskohorte"))}
           </>
         )}
 
         {ds.length > 0 && (
           <>
             <label className="field">
-              {mode === "z" ? "Namenszusatz der Z-Karten (an den Namen des Individuums)" : mode === "group" ? "Name der Mittelwert-Karte" : "Name des Ergebnisses"}
+              {mode === "z" ? t("Namenszusatz der Z-Karten (an den Namen des Individuums)") : mode === "group" ? t("Name der Mittelwert-Karte") : t("Name des Ergebnisses")}
               <input value={outName} disabled={props.busy} onChange={(e) => setName(e.target.value)} />
             </label>
             {mode === "group" && (
               <label className="field">
-                Name der SD-Karte
+                {t("Name der SD-Karte")}
                 <input value={name2 ?? suggested2} disabled={props.busy} onChange={(e) => setName2(e.target.value)} />
               </label>
             )}
             {hint && <p className="tool-hint">{hint}</p>}
             <button className="primary-btn" disabled={props.busy || !job} onClick={() => job && props.onRun(job)}>
-              {props.busy ? "Wird berechnet …" : mode === "z" && zs.length > 1 ? `${zs.length} Z-Karten berechnen` : "Berechnen"}
+              {props.busy ? t("Wird berechnet …") : mode === "z" && zs.length > 1 ? t("{length} Z-Karten berechnen", { length: zs.length }) : "Berechnen"}
             </button>
           </>
         )}
@@ -270,13 +271,13 @@ export function ImcalcPanel(props: {
       </Card>
 
       {props.results.length > 0 && (
-        <Card title={<>Ergebnisse</>} status={{ text: String(props.results.length), tone: "ok" }}>
+        <Card title={<>{t("Ergebnisse")}</>} status={{ text: String(props.results.length), tone: "ok" }}>
           <ul className="imcalc-results">
             {props.results.map((r) => (
               <li key={r.id}>
                 <span>{r.label}</span>
                 <button className="link-btn" onClick={() => props.onShow(r.id)}>
-                  einblenden
+                  {t("einblenden")}
                 </button>
               </li>
             ))}

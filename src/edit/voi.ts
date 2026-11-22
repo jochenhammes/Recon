@@ -1,6 +1,7 @@
 import { type Vec3, applyWorldToVoxel, voxelToWorld, worldToVoxelTransform } from "../core/geometry";
 import type { Volume3D } from "../viewer/volume";
 
+import { tr } from "../i18n";
 /**
  * Volume of interest in the volume's own patient coordinates (mm). Sphere/box are analytic; a mask
  * VOI (e.g. painted with the brush) stores one byte per voxel of the volume it was drawn on.
@@ -15,7 +16,7 @@ export function voiMask(volume: Volume3D, shape: VoiShape): Uint8Array {
   const { nx, ny, nz } = volume;
   if (shape.kind === "mask") {
     if (shape.dims[0] !== nx || shape.dims[1] !== ny || shape.dims[2] !== nz)
-      throw new Error("VOI-Maske passt nicht zur Volumengröße.");
+      throw new Error(tr("VOI-Maske passt nicht zur Volumengröße."));
     return shape.mask;
   }
   const mask = new Uint8Array(nx * ny * nz);

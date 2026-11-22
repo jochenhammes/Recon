@@ -3,6 +3,7 @@ import type { DataSet } from "dicom-parser";
 import { PixelDecodeError, decodeJpegLosslessFrame, decodePixelFrames, describeParseError } from "./pixelDecode";
 import type { ProjectionFrame, SpectProjectionSet } from "./types";
 
+import { t } from "../i18n";
 const TAG = {
   TransferSyntaxUID: "x00020010",
   Rows: "x00280010",
@@ -365,27 +366,27 @@ export function parseSpectDicom(arrayBuffer: ArrayBuffer, fileName: string): Spe
           TransferSyntaxUID: "1.2.840.10008.1.2.1",
         });
       } catch (e2) {
-        throw new DicomParseError(`Konnte DICOM-Datei nicht parsen: ${describeParseError(e2)}`);
+        throw new DicomParseError(t("Konnte DICOM-Datei nicht parsen: {v}", { v: describeParseError(e2) }));
       }
     } else {
-      throw new DicomParseError(`Konnte DICOM-Datei nicht parsen: ${describeParseError(e)}`);
+      throw new DicomParseError(t("Konnte DICOM-Datei nicht parsen: {v}", { v: describeParseError(e) }));
     }
   }
 
   const modality = dataSet.string(TAG.Modality);
   if (modality && modality !== "NM") {
-    throw new DicomParseError(`Erwartet Modality "NM" (Nuklearmedizin), gefunden "${modality}".`);
+    throw new DicomParseError(t("Erwartet Modality \"NM\" (Nuklearmedizin), gefunden \"{modality}\".", { modality }));
   }
 
   const rows = readNumeric(dataSet, TAG.Rows);
   const cols = readNumeric(dataSet, TAG.Columns);
-  if (!rows || !cols) throw new DicomParseError("Rows/Columns fehlen in der DICOM-Datei.");
+  if (!rows || !cols) throw new DicomParseError(t("Rows/Columns fehlen in der DICOM-Datei."));
 
   const numberOfFrames = readNumeric(dataSet, TAG.NumberOfFrames) ?? 1;
   if (numberOfFrames < 2) {
     throw new DicomParseError(
-      "Die Datei enthält nur einen Frame. Für eine SPECT-Rekonstruktion wird ein Multi-Frame-Datensatz " +
-        "mit mehreren Projektionswinkeln benötigt.",
+      t("Die Datei enthält nur einen Frame. Für eine SPECT-Rekonstruktion wird ein Multi-Frame-Datensatz ") +
+        t("mit mehreren Projektionswinkeln benötigt."),
     );
   }
 
@@ -437,12 +438,12 @@ export function parseSpectDicom(arrayBuffer: ArrayBuffer, fileName: string): Spe
  * DetectorVector), covering vendors that export each head as a separate series.
  */
 export function mergeProjectionSets(sets: SpectProjectionSet[]): SpectProjectionSet {
-  if (sets.length === 0) throw new DicomParseError("Keine Dateien zum Zusammenführen übergeben.");
+  if (sets.length === 0) throw new DicomParseError(t("Keine Dateien zum Zusammenführen übergeben."));
   const [first, ...rest] = sets;
   for (const s of rest) {
     if (s.rows !== first.rows || s.cols !== first.cols) {
       throw new DicomParseError(
-        `Bildgrößen der hochgeladenen Dateien stimmen nicht überein (${first.rows}x${first.cols} vs. ${s.rows}x${s.cols}).`,
+        t("Bildgrößen der hochgeladenen Dateien stimmen nicht überein ({rows}x{cols} vs. {rows2}x{cols2}).", { rows: first.rows, cols: first.cols, rows2: s.rows, cols2: s.cols }),
       );
     }
   }

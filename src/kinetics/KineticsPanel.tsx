@@ -16,6 +16,7 @@ import { runKineticsJob } from "./runner";
 import { type SrtmFit, srtmFit, srtmSetup } from "./srtm";
 import { type FrameTiming, frameMids, parseFrameDurations, regionTac } from "./tac";
 
+import { t } from "../i18n";
 export interface KineticsApi {
   dynamics: { id: string; label: string; dataset: LoadedDataset; inMni: boolean }[];
   t1s: Option[];
@@ -132,7 +133,7 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
       acc += x;
     }
     api.setTiming(dyn.id, start, d);
-    setTimingMsg({ ok: true, text: `Übernommen: ${d.length} Frames, Gesamtdauer ${fmt(acc / 60, 1)} min.` });
+    setTimingMsg({ ok: true, text: t("Übernommen: {length} Frames, Gesamtdauer {v} min.", { length: d.length, v: fmt(acc / 60, 1) }) });
   }
 
   const motionCorrect = () =>
@@ -170,7 +171,7 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
       const timing: FrameTiming = { start: minutes(info.start), duration: minutes(info.duration) };
       const refSet = preset.indices;
       const cref = Array.from(regionTac(info.frames, (i) => refSet.has(Math.round(labels[i]))));
-      if (!cref.some((c) => c > 0)) throw new Error("Referenzregion enthält keine Daten – liegen Atlas und Datensatz im selben Raum?");
+      if (!cref.some((c) => c > 0)) throw new Error(t("Referenzregion enthält keine Daten – liegen Atlas und Datensatz im selben Raum?"));
       const tStarMin = parseFloat(tStar.replace(",", ".")) || 0;
       const ps = model === "patlak" ? patlakSetup(cref, timing, tStarMin) : null;
       const ss = model === "srtm" ? srtmSetup(cref, timing) : null;
@@ -209,16 +210,16 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
         const defs =
           model === "patlak"
             ? [
-                { label: `Ki_ref (Patlak, t* ${tStarMin} min)`, data: r.maps.ki, window: win(r.maps.ki), hint: "Einstromkonstante relativ zur Referenz (1/min)" },
-                { label: "V (Patlak-Achsenabschnitt)", data: r.maps.intercept, window: win(r.maps.intercept), visible: false, hint: "Verteilungsvolumen relativ zur Referenz" },
-                { label: "R² (Patlak)", data: r.maps.r2, window: [0, 1] as [number, number], visible: false, hint: "Linearität des Patlak-Plots ab t*" },
+                { label: `Ki_ref (Patlak, t* ${tStarMin} min)`, data: r.maps.ki, window: win(r.maps.ki), hint: t("Einstromkonstante relativ zur Referenz (1/min)") },
+                { label: t("V (Patlak-Achsenabschnitt)"), data: r.maps.intercept, window: win(r.maps.intercept), visible: false, hint: t("Verteilungsvolumen relativ zur Referenz") },
+                { label: "R² (Patlak)", data: r.maps.r2, window: [0, 1] as [number, number], visible: false, hint: t("Linearität des Patlak-Plots ab t*") },
               ]
             : [
-                { label: "BP_ND (SRTM)", data: r.maps.bp, window: win(r.maps.bp), hint: "Bindungspotenzial (nicht verdrängbar)" },
-                { label: "R1 (SRTM)", data: r.maps.r1, window: [0, 2] as [number, number], visible: false, hint: "relativer Einstrom K1/K1′ (Perfusion)" },
-                { label: "k2 (SRTM)", data: r.maps.k2, window: win(r.maps.k2), visible: false, hint: "Auswaschrate der Zielregion (1/min)" },
-                { label: "k2a (SRTM)", data: r.maps.k2a, window: win(r.maps.k2a), visible: false, hint: "scheinbare Auswaschrate k2/(1+BP_ND) (1/min)" },
-                { label: "R² (SRTM)", data: r.maps.r2, window: [0, 1] as [number, number], visible: false, hint: "Fitgüte je Voxel" },
+                { label: "BP_ND (SRTM)", data: r.maps.bp, window: win(r.maps.bp), hint: t("Bindungspotenzial (nicht verdrängbar)") },
+                { label: "R1 (SRTM)", data: r.maps.r1, window: [0, 2] as [number, number], visible: false, hint: t("relativer Einstrom K1/K1′ (Perfusion)") },
+                { label: "k2 (SRTM)", data: r.maps.k2, window: win(r.maps.k2), visible: false, hint: t("Auswaschrate der Zielregion (1/min)") },
+                { label: "k2a (SRTM)", data: r.maps.k2a, window: win(r.maps.k2a), visible: false, hint: t("scheinbare Auswaschrate k2/(1+BP_ND) (1/min)") },
+                { label: "R² (SRTM)", data: r.maps.r2, window: [0, 1] as [number, number], visible: false, hint: t("Fitgüte je Voxel") },
               ];
         const made = api.addMaps(dyn.id, defs);
         setCreatedMaps({ dynId: dyn.id, maps: made.map((m, i) => ({ ...m, hint: defs[i].hint })) });
@@ -239,14 +240,14 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
     const tacRows = result.mids.map((t, i) => [f(t, 3), f(result.cref[i]), ...result.rows.map((r) => f(r.tac[i]))].join(sep));
     const csv = csvWithInfo([head.join(sep), ...rows, "", tacHead, ...tacRows], [
       ["Datensatz", dyn?.label ?? ""],
-      ["Modell", result.model === "patlak" ? `Patlak (Referenz), t* = ${result.tStarMin} min` : "SRTM (Basisfunktionen, Gunn 1997)"],
+      ["Modell", result.model === "patlak" ? t("Patlak (Referenz), t* = {tStarMin} min", { tStarMin: result.tStarMin }) : t("SRTM (Basisfunktionen, Gunn 1997)")],
       ["Atlas", result.atlasLabel],
       ["Referenzregion", result.refLabel],
     ]);
     const url = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = withPatientId(`Kinetik_${result.model}_${(dyn?.label ?? "").replace(/[äöüÄÖÜß]/g, umlaut).replace(/[^A-Za-z0-9_.-]+/g, "_")}.csv`);
+    a.download = withPatientId(t("Kinetik_{model}_{v}.csv", { model: result.model, v: (dyn?.label ?? "").replace(/[äöüÄÖÜß]/g, umlaut).replace(/[^A-Za-z0-9_.-]+/g, "_") }));
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -255,36 +256,36 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
   const sel = current?.rows.find((r) => r.index === selected) ?? null;
   const tacSeries: ChartSeries[] = current
     ? [
-        { label: "Referenz", x: current.mids, y: current.cref, style: "both", color: "#8a8f98" },
+        { label: t("Referenz"), x: current.mids, y: current.cref, style: "both", color: "#8a8f98" },
         ...(sel ? [{ label: sel.name, x: current.mids, y: sel.tac, style: "points" as const, color: "#a78bfa" }] : []),
-        ...(sel?.srtm?.fitted.length ? [{ label: "SRTM-Fit", x: current.mids, y: sel.srtm.fitted, style: "line" as const, color: "#f59e0b" }] : []),
+        ...(sel?.srtm?.fitted.length ? [{ label: t("SRTM-Fit"), x: current.mids, y: sel.srtm.fitted, style: "line" as const, color: "#f59e0b" }] : []),
       ]
     : globalTac && info
-      ? [{ label: "Mittel (Gehirn/Volumen)", x: frameMids({ start: minutes(info.start), duration: minutes(info.duration) }), y: globalTac, style: "both", color: "#a78bfa" }]
+      ? [{ label: t("Mittel (Gehirn/Volumen)"), x: frameMids({ start: minutes(info.start), duration: minutes(info.duration) }), y: globalTac, style: "both", color: "#a78bfa" }]
       : [];
   const patlakSeries: ChartSeries[] =
     sel?.patlak
       ? [
-          { label: "Patlak-Punkte", x: sel.patlak.x, y: sel.patlak.y, style: "points", color: "#a78bfa" },
-          { label: "Fit", x: [0, Math.max(...sel.patlak.x)], y: [sel.patlak.intercept, sel.patlak.intercept + sel.patlak.ki * Math.max(...sel.patlak.x)], style: "line", color: "#f59e0b" },
+          { label: t("Patlak-Punkte"), x: sel.patlak.x, y: sel.patlak.y, style: "points", color: "#a78bfa" },
+          { label: t("Fit"), x: [0, Math.max(...sel.patlak.x)], y: [sel.patlak.intercept, sel.patlak.intercept + sel.patlak.ki * Math.max(...sel.patlak.x)], style: "line", color: "#f59e0b" },
         ]
       : [];
   const maxShift = info?.motion ? Math.max(...info.motion.map((m) => m.maxShiftMm)) : null;
 
   return (
     <>
-      <Card title={<>1 · Dynamische Serie</>} info={
+      <Card title={<>{t("1 · Dynamische Serie")}</>} info={
             <>
               Kinetische Modellierung mit Referenzregion (ohne Blutentnahme): Patlak für irreversibel bindende Tracer (z. B. FDOPA, FDG) und SRTM für
               reversibel bindende Tracer (Rezeptorliganden, Amyloid). Portierung eines MATLAB-Pakets der wissenschaftlichen Arbeitsgruppe MMNI der Universität zu Köln, deren Alumnus der Autor dieser App ist (github.com/ghaefner/kinetic-modeling).
             </>
-          } done={!!dyn?.inMni} status={info ? { text: `${info.frames.length} Frames${dyn?.inMni ? " · MNI" : ""}`, tone: dyn?.inMni ? "ok" : "info" } : { text: "keine Daten", tone: "warn" }}>
+          } done={!!dyn?.inMni} status={info ? { text: t("{length} Frames{v}", { length: info.frames.length, v: dyn?.inMni ? " · MNI" : "" }), tone: dyn?.inMni ? "ok" : "info" } : { text: t("keine Daten"), tone: "warn" }}>
         {api.dynamics.length === 0 ? (
-          <InfoText details="Im Bereich „Daten“ eine dynamische DICOM-Serie oder ein 4D-NIfTI (+ BIDS-JSON mit Frame-Zeiten) laden.">Keine dynamischen Daten</InfoText>
+          <InfoText details={t("Im Bereich „Daten“ eine dynamische DICOM-Serie oder ein 4D-NIfTI (+ BIDS-JSON mit Frame-Zeiten) laden.")}>{t("Keine dynamischen Daten")}</InfoText>
         ) : (
           <>
             <label className="field">
-              Serie
+              {t("Serie")}
               <select value={dyn?.id ?? ""} disabled={!!busy} onChange={(e) => (setDynId(e.target.value), setResult(null))}>
                 {api.dynamics.map((d) => (
                   <option key={d.id} value={d.id}>
@@ -303,13 +304,13 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
                 </p>
                 {info.note && <p className="warning-banner">{info.note}</p>}
                 <details className="kin-frames">
-                  <summary>Frame-Zeiten anzeigen / eingeben</summary>
+                  <summary>{t("Frame-Zeiten anzeigen / eingeben")}</summary>
                   <table className="region-table">
                     <thead>
                       <tr>
-                        <th>Frame</th>
-                        <th>Start (s)</th>
-                        <th>Dauer (s)</th>
+                        <th>{t("Frame")}</th>
+                        <th>{t("Start (s)")}</th>
+                        <th>{t("Dauer (s)")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -326,13 +327,13 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
                     Frame-Dauern in Sekunden ({info.frames.length} Frames): ein Wert für alle, eine Liste oder Anzahl×Dauer; Start = Summe der vorherigen
                     <input
                       value={durText}
-                      placeholder="z. B. 60  oder  6x10, 3x20, 2x30, 2x60, 2x150, 10x300"
+                      placeholder={t("z. B. 60  oder  6x10, 3x20, 2x30, 2x60, 2x150, 10x300")}
                       onChange={(e) => (setDurText(e.target.value), setTimingMsg(null))}
                       onKeyDown={(e) => e.key === "Enter" && applyDurations()}
                     />
                   </label>
                   <button className="secondary-btn" onClick={applyDurations}>
-                    Frame-Zeiten übernehmen
+                    {t("Frame-Zeiten übernehmen")}
                   </button>
                   {timingMsg && <p className={timingMsg.ok ? "tool-hint success-text" : "error-banner"}>{timingMsg.text}</p>}
                 </details>
@@ -344,15 +345,15 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
 
       {dyn && info && !dyn.inMni && (
         <>
-          <Card title={<>2 · Bewegungskorrektur</>} info="Frames ab der Startzeit werden rigide auf die gewählte Referenz registriert; frühere Frames (wenig Signal) übernehmen die Lage des ersten registrierten Frames." done={!!info.motion} status={info.motion ? { text: "✓ korrigiert", tone: "ok" } : null}>
+          <Card title={<>{t("2 · Bewegungskorrektur")}</>} info={t("Frames ab der Startzeit werden rigide auf die gewählte Referenz registriert; frühere Frames (wenig Signal) übernehmen die Lage des ersten registrierten Frames.")} done={!!info.motion} status={info.motion ? { text: t("✓ korrigiert"), tone: "ok" } : null}>
             <label className="field">
               Registrieren ab (s nach Start)
               <input value={fromSec} disabled={!!busy} onChange={(e) => setFromSec(e.target.value)} />
             </label>
             <label className="field">
-              Referenz der Bewegungskorrektur
+              {t("Referenz der Bewegungskorrektur")}
               <select value={motionRef} disabled={!!busy} onChange={(e) => setMotionRef(e.target.value)}>
-                <option value="sum">Summenbild der registrierten Frames</option>
+                <option value="sum">{t("Summenbild der registrierten Frames")}</option>
                 {info.start.map((s, i) => (
                   <option key={i} value={i}>
                     Frame {i + 1} ({fmt(s / 60, 1)}–{fmt((s + info.duration[i]) / 60, 1)} min)
@@ -361,26 +362,23 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
               </select>
             </label>
             <button className="secondary-btn" disabled={!!busy} onClick={() => void motionCorrect()}>
-              Bewegung korrigieren
+              {t("Bewegung korrigieren")}
             </button>
             {info.motion && (
               <>
-                <Chart xLabel="Frame-Mitte (min)" yLabel="max. Verschiebung (mm)" series={[{ label: "Bewegung", x: frameMids({ start: minutes(info.start), duration: minutes(info.duration) }), y: info.motion.map((m) => m.maxShiftMm), style: "both", color: "#a78bfa" }]} />
+                <Chart xLabel={t("Frame-Mitte (min)")} yLabel={t("max. Verschiebung (mm)")} series={[{ label: t("Bewegung"), x: frameMids({ start: minutes(info.start), duration: minutes(info.duration) }), y: info.motion.map((m) => m.maxShiftMm), style: "both", color: "#a78bfa" }]} />
                 {maxShift! > 2 && (
-                  <InfoText warn details="Die Bewegung wurde korrigiert; das Ergebnis bitte im Viewer prüfen (Frames durchblättern).">
+                  <InfoText warn details={t("Die Bewegung wurde korrigiert; das Ergebnis bitte im Viewer prüfen (Frames durchblättern).")}>
                     Bewegung bis {fmt(maxShift!, 1)} mm
                   </InfoText>
                 )}
               </>
             )}
           </Card>
-          <Card title={<>3 · In den MNI-Raum</>} info={
+          <Card title={<>{t("3 · In den MNI-Raum")}</>} info={
                 <>
-                  <p>Summenbild → T1 rigide und T1 → MNI affin (wie bei Centiloid), oder ohne MRT affin auf die SPM-PET-Vorlage; danach werden alle Frames übertragen.</p>
-                  <p>
-                    Alternativ im Bereich „Standardraum“ normalisieren (Grundlage T1, PET oder CT): Die dynamische Serie wird dort mit allen
-                    anderen Datensätzen übertragen und erscheint hier oben als Serie im MNI-Raum.
-                  </p>
+                  <p>{t("Summenbild → T1 rigide und T1 → MNI affin (wie bei Centiloid), oder ohne MRT affin auf die SPM-PET-Vorlage; danach werden alle Frames übertragen.")}</p>
+                  <p>{t("Alternativ im Bereich „Standardraum“ normalisieren (Grundlage T1, PET oder CT): Die dynamische Serie wird dort mit allen anderen Datensätzen übertragen und erscheint hier oben als Serie im MNI-Raum.")}</p>
                   <p>
                     Das Summenbild des Zeitfensters wird registriert; die Transformation gilt für alle Frames. Frühe Frames (z. B. 0–10 min) zeigen meist die
                     Perfusion und passen gut zur SPM-PET-Vorlage, späte Frames die Tracerbindung.
@@ -398,12 +396,12 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
               </label>
             </div>
             {!t1Id && (
-              <InfoText warn details="Ohne MRT deutlich ungenauer (Phantom: Putamen-BP_ND 1,3 statt 1,8) – wenn möglich ein T1 wählen.">Ohne MRT ungenauer</InfoText>
+              <InfoText warn details={t("Ohne MRT deutlich ungenauer (Phantom: Putamen-BP_ND 1,3 statt 1,8) – wenn möglich ein T1 wählen.")}>{t("Ohne MRT ungenauer")}</InfoText>
             )}
             <label className="field">
               T1-MRT
               <select value={t1Id} disabled={!!busy} onChange={(e) => setT1Id(e.target.value)}>
-                <option value="">ohne MRT (SPM-PET-Vorlage)</option>
+                <option value="">{t("ohne MRT (SPM-PET-Vorlage)")}</option>
                 {api.t1s.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.label}
@@ -412,23 +410,23 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
               </select>
             </label>
             <button className="primary-btn" disabled={!!busy} onClick={() => void toMni()}>
-              Frames in den MNI-Raum übertragen
+              {t("Frames in den MNI-Raum übertragen")}
             </button>
           </Card>
         </>
       )}
 
       {dyn && info && dyn.inMni && (
-        <Card title={<>4 · Referenzregion und Modell</>} status={result ? { text: `✓ ${result.model === "patlak" ? "Patlak" : "SRTM"}`, tone: "ok" } : null}>
+        <Card title={<>{t("4 · Referenzregion und Modell")}</>} status={result ? { text: `✓ ${result.model === "patlak" ? "Patlak" : "SRTM"}`, tone: "ok" } : null}>
           <div className="button-row">
             <AtlasPicker busy={api.atlasBusy} onLoad={api.loadCerebra} />
           </div>
           {api.atlases.length === 0 ? (
-            <p className="tool-hint">Zuerst einen Hirnatlas laden (CerebrA oder AAL3 im Bereich „Analyse“).</p>
+            <p className="tool-hint">{t("Zuerst einen Hirnatlas laden (CerebrA oder AAL3 im Bereich „Analyse“).")}</p>
           ) : (
             <>
               <label className="field">
-                Atlas
+                {t("Atlas")}
                 <select value={atlas?.id ?? ""} disabled={!!busy} onChange={(e) => setAtlasId(e.target.value)}>
                   {api.atlases.map((a) => (
                     <option key={a.id} value={a.id}>
@@ -438,7 +436,7 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
                 </select>
               </label>
               <label className="field">
-                Referenzregion
+                {t("Referenzregion")}
                 <select value={preset?.id ?? ""} disabled={!!busy} onChange={(e) => setRefMode(e.target.value)}>
                   {presets.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -447,7 +445,7 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
                   ))}
                 </select>
               </label>
-              <div className="segmented-control" role="group" aria-label="Modell">
+              <div className="segmented-control" role="group" aria-label={t("Modell")}>
                 <button className={model === "srtm" ? "active" : ""} onClick={() => setModel("srtm")}>
                   SRTM (reversibel)
                 </button>
@@ -461,13 +459,13 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
                   <input value={tStar} disabled={!!busy} onChange={(e) => setTStar(e.target.value)} />
                 </label>
               ) : (
-                <InfoText details="SRTM mit Basisfunktionen (Gunn 1997): BP_ND, R1, k2 – Gewichtung nach Frame-Dauer.">SRTM (Basisfunktionen)</InfoText>
+                <InfoText details={t("SRTM mit Basisfunktionen (Gunn 1997): BP_ND, R1, k2 – Gewichtung nach Frame-Dauer.")}>{t("SRTM (Basisfunktionen)")}</InfoText>
               )}
               <label className="checkbox-field">
                 <input type="checkbox" checked={makeMaps} onChange={(e) => setMakeMaps(e.target.checked)} /> Parameterkarten (voxelweise) anlegen
               </label>
               <button className="primary-btn" disabled={!!busy || !preset} onClick={() => void compute()}>
-                Berechnen
+                {t("Berechnen")}
               </button>
             </>
           )}
@@ -487,37 +485,37 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
       {error && <div className="error-banner">{error}</div>}
 
       {tacSeries.length > 0 && (
-        <Card title={<>{current ? `Ergebnis · ${current.model === "patlak" ? "Patlak" : "SRTM"} · Referenz ${current.refLabel}` : "Zeit-Aktivitäts-Kurve"}</>}>
-          <Chart xLabel="Zeit (min)" yLabel="Aktivität" series={tacSeries} />
+        <Card title={<>{current ? t("Ergebnis · {v} · Referenz {refLabel}", { v: current.model === "patlak" ? "Patlak" : "SRTM", refLabel: current.refLabel }) : t("Zeit-Aktivitäts-Kurve")}</>}>
+          <Chart xLabel={t("Zeit (min)")} yLabel={t("Aktivität")} series={tacSeries} />
           {patlakSeries.length > 0 && <Chart xLabel="∫C_ref / C_ref (min)" yLabel="C / C_ref" series={patlakSeries} />}
           {current && (
             <>
               <div className="button-row">
                 <button className="secondary-btn" onClick={downloadCsv}>
-                  Tabelle + TACs als CSV
+                  {t("Tabelle + TACs als CSV")}
                 </button>
               </div>
               {createdMaps?.dynId === current.dynId && (
                 <>
-                  <h4 className="subheading">Parameterkarten (neue Datensätze, exportierbar)</h4>
+                  <h4 className="subheading">{t("Parameterkarten (neue Datensätze, exportierbar)")}</h4>
                   {createdMaps.maps.map((m) => (
                     <div key={m.id} className="hidden-dataset-row">
                       <span>
                         <strong>{m.label}</strong> – {m.hint}
                       </span>
                       <button className="chip-btn" onClick={() => api.showDataset(m.id)}>
-                        einblenden
+                        {t("einblenden")}
                       </button>
                     </div>
                   ))}
                 </>
               )}
-              <p className="tool-hint">Zeile anklicken = Kurve und Fit der Region anzeigen.</p>
-              <BigTable title={`Kinetik – ${current.model === "patlak" ? "Patlak" : "SRTM"} · Referenz ${current.refLabel}`} onCsv={downloadCsv}>
+              <p className="tool-hint">{t("Zeile anklicken = Kurve und Fit der Region anzeigen.")}</p>
+              <BigTable title={t("Kinetik – {v} · Referenz {refLabel}", { v: current.model === "patlak" ? "Patlak" : "SRTM", refLabel: current.refLabel })} onCsv={downloadCsv}>
                 <table className="region-table label-stats-table">
                   <thead>
                     <tr>
-                      <th>Region</th>
+                      <th>{t("Region")}</th>
                       {current.model === "patlak" ? (
                         <>
                           <th>Ki_ref (1/min)</th>

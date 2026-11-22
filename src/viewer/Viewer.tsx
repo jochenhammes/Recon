@@ -22,6 +22,7 @@ import {
 } from "./planes";
 import { IDENTITY_TRANSFORM, type LayoutKind, type ViewKind, type ViewTransform, type ViewerLayer } from "./types";
 
+import { tr } from "../i18n";
 export interface ViewerProps {
   /** Bottom layer first. */
   layers: ViewerLayer[];
@@ -122,7 +123,7 @@ function legendItems(layers: ViewerLayer[], point: Vec3): LegendItem[] {
       // Same mapping as the renderer: label images use the window [0, 255].
       const w = l.display.window;
       const idx = Math.max(0, Math.min(255, Math.round(((v - w[0]) / (w[1] - w[0] || 1)) * 255)));
-      const region = Number.isFinite(v) && v > 0 ? { name: l.labelNames?.get(v) ?? `Label ${v}`, color: `rgb(${t[idx * 3]}, ${t[idx * 3 + 1]}, ${t[idx * 3 + 2]})` } : undefined;
+      const region = Number.isFinite(v) && v > 0 ? { name: l.labelNames?.get(v) ?? tr("Label {v}", { v }), color: `rgb(${t[idx * 3]}, ${t[idx * 3 + 1]}, ${t[idx * 3 + 2]})` } : undefined;
       out.push({ id: l.id, label: l.label, lut: "labels", region });
       continue;
     }
@@ -338,7 +339,7 @@ export function Viewer(props: ViewerProps) {
   return (
     <div className="viewer-root">
       <div className="viewer-toolbar">
-        <div className="segmented" role="group" aria-label="Layout">
+        <div className="segmented" role="group" aria-label={tr("Layout")}>
           {(
             [
               ["grid", "2×2"],
@@ -352,7 +353,7 @@ export function Viewer(props: ViewerProps) {
           ))}
         </div>
         {layout !== "grid" && (
-          <select value={focusView} onChange={(e) => onLayoutChange(layout, e.target.value as ViewKind)} aria-label="Hauptansicht">
+          <select value={focusView} onChange={(e) => onLayoutChange(layout, e.target.value as ViewKind)} aria-label={tr("Hauptansicht")}>
             {GRID_ORDER.map((k) => (
               <option key={k} value={k}>
                 {VIEW_TITLES[k]}
@@ -361,40 +362,40 @@ export function Viewer(props: ViewerProps) {
           </select>
         )}
         <button onClick={() => setTransforms({ axial: IDENTITY_TRANSFORM, coronal: IDENTITY_TRANSFORM, sagittal: IDENTITY_TRANSFORM, mip: IDENTITY_TRANSFORM })}>
-          Zoom zurücksetzen
+          {tr("Zoom zurücksetzen")}
         </button>
-        <button onClick={screenshot} title="Aktuelle Ansicht als PNG speichern">
-          Screenshot
+        <button onClick={screenshot} title={tr("Aktuelle Ansicht als PNG speichern")}>
+          {tr("Screenshot")}
         </button>
         {props.toolbar}
         <span className="viewer-toolbar-right">
           {props.toolbarRight}
-          <button className={legendOn ? "active" : ""} aria-pressed={legendOn} title="Farbskala ein-/ausblenden (wird auch im Screenshot gezeigt)" onClick={toggleLegend}>
-            Skala
+          <button className={legendOn ? "active" : ""} aria-pressed={legendOn} title={tr("Farbskala ein-/ausblenden (wird auch im Screenshot gezeigt)")} onClick={toggleLegend}>
+            {tr("Skala")}
           </button>
           {props.layerPanel && (
-            <button className={layersOpen ? "active" : ""} aria-pressed={layersOpen} title="Ebenen ein-/ausblenden" onClick={toggleLayers}>
+            <button className={layersOpen ? "active" : ""} aria-pressed={layersOpen} title={tr("Ebenen ein-/ausblenden")} onClick={toggleLayers}>
               <Layers size={13} /> Ebenen
             </button>
           )}
-          <button className={helpOpen ? "active" : ""} aria-pressed={helpOpen} aria-label="Maus- und Tastenbedienung" title="Maus- und Tastenbedienung" onClick={() => setHelpOpen((o) => !o)}>
+          <button className={helpOpen ? "active" : ""} aria-pressed={helpOpen} aria-label={tr("Maus- und Tastenbedienung")} title={tr("Maus- und Tastenbedienung")} onClick={() => setHelpOpen((o) => !o)}>
             ?
           </button>
           {helpOpen && (
-            <div className="viewer-help" role="dialog" aria-label="Bedienung">
+            <div className="viewer-help" role="dialog" aria-label={tr("Bedienung")}>
               <dl>
-                <dt>Klick</dt>
-                <dd>Fadenkreuz setzen</dd>
-                <dt>Mausrad</dt>
-                <dd>Schicht wechseln</dd>
-                <dt>Strg + Mausrad</dt>
-                <dd>Zoom</dd>
-                <dt>Rechts ziehen</dt>
-                <dd>Fenster (Helligkeit/Kontrast)</dd>
-                <dt>Shift / Mitte ziehen</dt>
-                <dd>Bild verschieben</dd>
-                <dt>Doppelklick</dt>
-                <dd>Ansicht maximieren</dd>
+                <dt>{tr("Klick")}</dt>
+                <dd>{tr("Fadenkreuz setzen")}</dd>
+                <dt>{tr("Mausrad")}</dt>
+                <dd>{tr("Schicht wechseln")}</dd>
+                <dt>{tr("Strg + Mausrad")}</dt>
+                <dd>{tr("Zoom")}</dd>
+                <dt>{tr("Rechts ziehen")}</dt>
+                <dd>{tr("Fenster (Helligkeit/Kontrast)")}</dd>
+                <dt>{tr("Shift / Mitte ziehen")}</dt>
+                <dd>{tr("Bild verschieben")}</dd>
+                <dt>{tr("Doppelklick")}</dt>
+                <dd>{tr("Ansicht maximieren")}</dd>
               </dl>
             </div>
           )}
@@ -660,7 +661,7 @@ function MipView({ layer, transform, onTransformChange, onWindowDrag, onDoubleCl
             min={0}
             max={359}
             value={Math.round(azimuth)}
-            aria-label="MIP-Winkel"
+            aria-label={tr("MIP-Winkel")}
             onChange={(e) => {
               setRotating(false);
               setAzimuth(Number(e.target.value));
@@ -754,7 +755,7 @@ function Legend({
   };
 
   return (
-    <div className="viewer-legend" aria-label="Farbskala" ref={rootRef} onPointerDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()}>
+    <div className="viewer-legend" aria-label={tr("Farbskala")} ref={rootRef} onPointerDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()}>
       {items.map((it) =>
         it.lut === "labels" ? (
           <div key={it.id} className="legend-row">
@@ -834,11 +835,11 @@ function LegendBar({
     onPointerCancel: endDrag,
   });
   return (
-    <div className="legend-bar-wrap" title="Griffe ziehen: Fenster-Min/-Max · Bereich dazwischen ziehen: verschieben · Rechtsklick: Farbtabelle" onContextMenu={onContextMenu}>
+    <div className="legend-bar-wrap" title={tr("Griffe ziehen: Fenster-Min/-Max · Bereich dazwischen ziehen: verschieben · Rechtsklick: Farbtabelle")} onContextMenu={onContextMenu}>
       <span className="legend-bar" style={{ background: windowGradient(item.lut, a, b) }} />
       <span className="legend-window-span" style={{ left: `${a * 100}%`, width: `${(b - a) * 100}%` }} {...drag("shift")} />
-      <span className="legend-handle" style={{ left: `${a * 100}%` }} aria-label="Fenster-Minimum ziehen" {...drag("min")} />
-      <span className="legend-handle" style={{ left: `${b * 100}%` }} aria-label="Fenster-Maximum ziehen" {...drag("max")} />
+      <span className="legend-handle" style={{ left: `${a * 100}%` }} aria-label={tr("Fenster-Minimum ziehen")} {...drag("min")} />
+      <span className="legend-handle" style={{ left: `${b * 100}%` }} aria-label={tr("Fenster-Maximum ziehen")} {...drag("max")} />
     </div>
   );
 }

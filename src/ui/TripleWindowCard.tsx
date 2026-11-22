@@ -4,6 +4,7 @@ import { type HuWindow, TRIPLE_DEFAULTS } from "../edit/tripleWindow";
 import { Card } from "./Card";
 import type { Option } from "./NormalizationPanel";
 
+import { t } from "../i18n";
 export interface TripleWindowRequest {
   ctId: string;
   organId: string;
@@ -58,13 +59,13 @@ export function TripleWindowCard(props: {
   );
   return (
     <Card
-      title={<>Triple-Window-CT</>}
+      title={<>{t("Triple-Window-CT")}</>}
       defaultOpen={false}
       persistKey="triple-window"
       info={
         <>
           <p>
-            Künstlicher CT-Datensatz für den schnellen anatomischen Überblick in <strong>einem</strong> Fenster: Alle Voxel stehen im Weichteilfenster; Voxel
+            Künstlicher CT-Datensatz für den schnellen anatomischen Überblick in <strong>{t("einem")}</strong> Fenster: Alle Voxel stehen im Weichteilfenster; Voxel
             der Lungen (inkl. Trachea) werden so umgerechnet, dass sie wie im Lungenfenster erscheinen, Voxel des Skeletts wie im Knochenfenster.
           </p>
           <p>
@@ -76,7 +77,7 @@ export function TripleWindowCard(props: {
       }
     >
       {props.cts.length === 0 || props.organSets.length === 0 ? (
-        <p className="tool-hint" title="Organkarte: Bereich „Segmentierung & MTV“ → CT-Organsegmentierung">Benötigt CT + Organkarte</p>
+        <p className="tool-hint" title={t("Organkarte: Bereich „Segmentierung & MTV“ → CT-Organsegmentierung")}>{t("Benötigt CT + Organkarte")}</p>
       ) : (
         <>
           <label className="field">
@@ -90,7 +91,7 @@ export function TripleWindowCard(props: {
             </select>
           </label>
           <label className="field">
-            Organkarte
+            {t("Organkarte")}
             <select value={organs?.id ?? ""} disabled={props.busy} onChange={(e) => setOrganId(e.target.value)}>
               {props.organSets.map((o) => (
                 <option key={o.id} value={o.id}>
@@ -100,9 +101,9 @@ export function TripleWindowCard(props: {
             </select>
           </label>
           <div className="triple-row triple-head">
-            <span>Fenster (HU)</span>
-            <span>Zentrum</span>
-            <span>Breite</span>
+            <span>{t("Fenster (HU)")}</span>
+            <span>{t("Zentrum")}</span>
+            <span>{t("Breite")}</span>
           </div>
           {row("soft", "Weichteil (Basis)")}
           {row("lung", "Lunge")}
@@ -135,7 +136,7 @@ export function TripleWindowCard(props: {
               })
             }
           >
-            {props.busy ? "Wird erzeugt …" : "Triple-Window-CT erzeugen"}
+            {props.busy ? t("Wird erzeugt …") : "Triple-Window-CT erzeugen"}
           </button>
         </>
       )}

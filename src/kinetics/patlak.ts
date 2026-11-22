@@ -1,5 +1,6 @@
 import { type FrameTiming, cumulativeIntegral, frameMid } from "./tac";
 
+import { t } from "../i18n";
 /**
  * Reference-tissue Patlak plot (Patlak & Blasberg, J Cereb Blood Flow Metab 1985;5:584–590) for irreversibly
  * trapped tracers: for t ≥ t*,  C(t)/C_ref(t) = Ki_ref · ∫₀ᵗC_ref/C_ref(t) + V.  Slope Ki_ref in 1/min.
@@ -29,7 +30,7 @@ export function patlakSetup(cref: ArrayLike<number>, timing: FrameTiming, tStarM
   const integral = cumulativeIntegral(cref, timing);
   const frames: number[] = [];
   for (let i = 0; i < cref.length; i++) if (frameMid(timing, i) >= tStarMin && cref[i] > 0) frames.push(i);
-  if (frames.length < 2) throw new Error("Patlak: weniger als zwei Frames nach t* – Startzeit verringern.");
+  if (frames.length < 2) throw new Error(t("Patlak: weniger als zwei Frames nach t* – Startzeit verringern."));
   const x = Float64Array.from(frames, (i) => integral[i] / cref[i]);
   const c = Float64Array.from(frames, (i) => cref[i]);
   let sx = 0, sxx = 0;

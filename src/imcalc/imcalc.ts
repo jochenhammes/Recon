@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 /**
  * IMCALC: voxelwise image arithmetic on datasets on the same voxel grid. All inputs are display values
  * (raw · scale, e.g. SUV); results are new volumes on the same grid.
@@ -70,7 +71,7 @@ export async function quotient(x1: ScaledInput, x2: ScaledInput, onProgress?: (f
  * inputs are streamed one by one, memory does not grow with the group size).
  */
 export async function groupMeanSd(xs: ScaledInput[], onProgress?: (f: number) => void): Promise<{ mean: Float32Array; sd: Float32Array }> {
-  if (xs.length < 2) throw new Error("Mittelwert und SD brauchen mindestens 2 Datensätze.");
+  if (xs.length < 2) throw new Error(t("Mittelwert und SD brauchen mindestens 2 Datensätze."));
   checkLength(xs);
   const n = xs[0].data.length;
   const mean = new Float64Array(n);
@@ -125,5 +126,5 @@ export async function zScore(x: ScaledInput, mean: ScaledInput, sd: ScaledInput,
 
 function checkLength(xs: ScaledInput[]) {
   const n = xs[0].data.length;
-  if (xs.some((x) => x.data.length !== n)) throw new Error("Die Datensätze haben unterschiedlich viele Voxel.");
+  if (xs.some((x) => x.data.length !== n)) throw new Error(t("Die Datensätze haben unterschiedlich viele Voxel."));
 }

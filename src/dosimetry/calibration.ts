@@ -1,5 +1,6 @@
 import type { DataSet } from "dicom-parser";
 
+import { t, tk } from "../i18n";
 /** Calibration of one camera configuration (camera + collimator + energy window + reconstruction). */
 export interface CameraProfile {
   id: string;
@@ -23,10 +24,10 @@ export interface CameraProfile {
 export const QUANT_PROFILE: CameraProfile = {
   id: "builtin-bqml",
   name: "Quantitativ (Bq/ml, z. B. xSPECT Quant)",
-  nuclide: "alle",
+  nuclide: tk("alle"),
   cpsPerMBq: 0,
   quantitative: true,
-  note: "Bilder enthalten Aktivitätskonzentration in Bq/ml – kein Kalibrierfaktor",
+  note: tk("Bilder enthalten Aktivitätskonzentration in Bq/ml – kein Kalibrierfaktor"),
 };
 export const isBuiltinProfile = (p: CameraProfile | undefined) => p?.id === QUANT_PROFILE.id;
 
@@ -53,7 +54,7 @@ export function saveProfiles(list: CameraProfile[]): void {
 export function parseProfiles(text: string): CameraProfile[] {
   const data = JSON.parse(text) as unknown;
   const list = Array.isArray(data) ? data : (data as { profiles?: unknown }).profiles;
-  if (!Array.isArray(list)) throw new Error("Keine Kamera-Profile in der Datei.");
+  if (!Array.isArray(list)) throw new Error(t("Keine Kamera-Profile in der Datei."));
   return list.filter((p): p is CameraProfile => !!p && typeof (p as CameraProfile).cpsPerMBq === "number" && typeof (p as CameraProfile).name === "string")
     .map((p, i) => ({ ...p, id: p.id || `cam${Date.now()}_${i}` }));
 }

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { LUT_CHOICES, lutGradient } from "../viewer/volume";
 import type { ColorLut } from "../viewer/volume";
 
+import { t } from "../i18n";
 export interface LayerToggleRow {
   id: string;
   label: string;
@@ -34,7 +35,7 @@ function byTime(rows: LayerToggleRow[]): { row: LayerToggleRow; group?: string }
     if (newGroup) start = r.timeMs!;
     out.push({ row: r, group: newGroup ? fmtTime(r.timeMs!) : undefined });
   }
-  untimed.forEach((r, i) => out.push({ row: r, group: i === 0 ? "ohne Datum" : undefined }));
+  untimed.forEach((r, i) => out.push({ row: r, group: i === 0 ? t("ohne Datum") : undefined }));
   return out;
 }
 
@@ -88,7 +89,7 @@ export function LayerToggle({
         <input type="checkbox" checked={r.visible && r.role !== "hidden"} disabled={r.locked} onChange={(e) => onVisibleChange(r.id, e.target.checked)} />
         <i className="lut-swatch" style={{ background: lutGradient(r.lut) }} aria-hidden="true" />
         <span className="layer-toggle-name">{r.label}</span>
-        {r.role === "base" && <em>Basis</em>}
+        {r.role === "base" && <em>{t("Basis")}</em>}
       </label>
       {r.opacity !== undefined && r.role === "overlay" && (
         <input
@@ -98,16 +99,16 @@ export function LayerToggle({
           step={0.05}
           value={r.opacity}
           disabled={!r.visible}
-          aria-label={`Deckkraft ${r.label}`}
-          title={`Deckkraft ${Math.round(r.opacity * 100)} %`}
+          aria-label={t("Deckkraft {label}", { label: r.label })}
+          title={t("Deckkraft {v} %", { v: Math.round(r.opacity * 100) })}
           onChange={(e) => onOpacityChange(r.id, Number(e.target.value))}
         />
       )}
       {onRemove && (
         <button
           className={`layer-trash${armed === r.id ? " armed" : ""}`}
-          title={armed === r.id ? "Nochmals klicken: Datensatz entfernen" : `${r.title ?? r.label} entfernen`}
-          aria-label={armed === r.id ? `Entfernen von ${r.label} bestätigen` : `${r.label} entfernen`}
+          title={armed === r.id ? t("Nochmals klicken: Datensatz entfernen") : t("{v} entfernen", { v: r.title ?? r.label })}
+          aria-label={armed === r.id ? t("Entfernen von {label} bestätigen", { label: r.label }) : t("{label} entfernen", { label: r.label })}
           onClick={() => {
             if (armed === r.id) {
               setArmed(null);
@@ -116,7 +117,7 @@ export function LayerToggle({
           }}
         >
           <Trash2 size={12} />
-          {armed === r.id && <span>Löschen?</span>}
+          {armed === r.id && <span>{t("Löschen?")}</span>}
         </button>
       )}
     </li>
@@ -133,11 +134,11 @@ export function LayerToggle({
       row(r),
     ]);
   return (
-    <div className="layer-toggle" role="dialog" aria-label="Ebenen">
+    <div className="layer-toggle" role="dialog" aria-label={t("Ebenen")}>
       <ul>{grouped(shown)}</ul>
       {hidden.length > 0 && (
         <>
-          <div className="layer-toggle-sep">nicht eingeblendet</div>
+          <div className="layer-toggle-sep">{t("nicht eingeblendet")}</div>
           <ul>{grouped(hidden)}</ul>
         </>
       )}
@@ -145,7 +146,7 @@ export function LayerToggle({
         <>
           <div className="layer-toggle-sep">MIP</div>
           <div className="layer-mip">
-            <select value={mip.value ?? ""} aria-label="Datensatz der MIP" onChange={(e) => mip.onChange(e.target.value || null)}>
+            <select value={mip.value ?? ""} aria-label={t("Datensatz der MIP")} onChange={(e) => mip.onChange(e.target.value || null)}>
               <option value="">automatisch ({mip.autoLabel})</option>
               {mip.options.map((o) => (
                 <option key={o.id} value={o.id} title={o.title}>
@@ -153,8 +154,8 @@ export function LayerToggle({
                 </option>
               ))}
             </select>
-            <select value={mip.lut ?? ""} aria-label="Farbtabelle der MIP" onChange={(e) => mip.onLutChange((e.target.value || null) as ColorLut | null)}>
-              <option value="">LUT wie Datensatz</option>
+            <select value={mip.lut ?? ""} aria-label={t("Farbtabelle der MIP")} onChange={(e) => mip.onLutChange((e.target.value || null) as ColorLut | null)}>
+              <option value="">{t("LUT wie Datensatz")}</option>
               {LUT_CHOICES.filter((l) => l.value !== "labels").map((l) => (
                 <option key={l.value} value={l.value}>
                   {l.label}
@@ -179,21 +180,21 @@ function MipWindow({ mip }: { mip: MipSettings }) {
   const set = (a: number, b: number) => mip.onWindowChange([Math.min(a, b - step), Math.max(b, a + step)]);
   return (
     <div className="mip-window">
-      <label title="Untergrenze des MIP-Fensters">
-        <span>Min</span>
-        <input type="range" min={r0} max={r1} step={step} value={Math.max(r0, Math.min(r1, lo))} onChange={(e) => set(Number(e.target.value), hi)} aria-label="MIP-Fenster Minimum" />
+      <label title={t("Untergrenze des MIP-Fensters")}>
+        <span>{t("Min")}</span>
+        <input type="range" min={r0} max={r1} step={step} value={Math.max(r0, Math.min(r1, lo))} onChange={(e) => set(Number(e.target.value), hi)} aria-label={t("MIP-Fenster Minimum")} />
         <em>{fmt(lo)}</em>
       </label>
-      <label title="Obergrenze des MIP-Fensters">
-        <span>Max</span>
-        <input type="range" min={r0} max={r1} step={step} value={Math.max(r0, Math.min(r1, hi))} onChange={(e) => set(lo, Number(e.target.value))} aria-label="MIP-Fenster Maximum" />
+      <label title={t("Obergrenze des MIP-Fensters")}>
+        <span>{t("Max")}</span>
+        <input type="range" min={r0} max={r1} step={step} value={Math.max(r0, Math.min(r1, hi))} onChange={(e) => set(lo, Number(e.target.value))} aria-label={t("MIP-Fenster Maximum")} />
         <em>{fmt(hi)}</em>
       </label>
       <div className="mip-window-foot">
-        <span>{mip.window ? "eigenes Fenster" : "Fenster wie Datensatz"}{mip.unit ? ` · ${mip.unit}` : ""}</span>
+        <span>{mip.window ? t("eigenes Fenster") : t("Fenster wie Datensatz")}{mip.unit ? ` · ${mip.unit}` : ""}</span>
         {mip.window && (
           <button className="link-btn" onClick={() => mip.onWindowChange(null)}>
-            wie Datensatz
+            {t("wie Datensatz")}
           </button>
         )}
       </div>

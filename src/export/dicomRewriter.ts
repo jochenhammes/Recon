@@ -1,6 +1,7 @@
 import type { DataSet, Element } from "dicom-parser";
 import { concatBytes } from "./bytes";
 
+import { t } from "../i18n";
 export const IMPLICIT_VR_LE = "1.2.840.10008.1.2";
 export const EXPLICIT_VR_LE = "1.2.840.10008.1.2.1";
 
@@ -58,7 +59,7 @@ export function rewriteDicom(input: RewriteInput, overrides: TagOverrides): Uint
   const elements = Object.values(dataSet.elements)
     .map((el) => ({ el, start: el.dataOffset - headerLength(el, datasetExplicit) }))
     .sort((a, b) => a.start - b.start);
-  if (elements.length === 0) throw new Error("DICOM-Datensatz enthält keine Elemente.");
+  if (elements.length === 0) throw new Error(t("DICOM-Datensatz enthält keine Elemente."));
 
   const touchedGroups = new Set([...overrides.keys()].map(groupOf));
   const pendingInserts = [...overrides.entries()]
@@ -100,7 +101,7 @@ export function rewriteDicom(input: RewriteInput, overrides: TagOverrides): Uint
       } else {
         const copy = bytes.slice(start, end);
         for (const p of ov.patches) {
-          if (p.offset < start || p.offset + p.bytes.length > end) throw new Error(`Patch außerhalb von ${tag}.`);
+          if (p.offset < start || p.offset + p.bytes.length > end) throw new Error(t("Patch außerhalb von {tag}.", { tag }));
           copy.set(p.bytes, p.offset - start);
         }
         chunksFor(tag).push(copy);
@@ -130,7 +131,7 @@ function encodeElement(tag: string, ov: ValueOverride, explicit: boolean): Uint8
   if (!explicit) return concatBytes([u16le(group), u16le(elem), u32le(value.length), value]);
   const vrBytes = Uint8Array.of(ov.vr.charCodeAt(0), ov.vr.charCodeAt(1));
   if (LONG_VR.has(ov.vr)) return concatBytes([u16le(group), u16le(elem), vrBytes, u16le(0), u32le(value.length), value]);
-  if (value.length > 0xffff) throw new Error(`Wert für ${tag} (${ov.vr}) ist zu lang.`);
+  if (value.length > 0xffff) throw new Error(t("Wert für {tag} ({vr}) ist zu lang.", { tag, vr: ov.vr }));
   return concatBytes([u16le(group), u16le(elem), vrBytes, u16le(value.length), value]);
 }
 

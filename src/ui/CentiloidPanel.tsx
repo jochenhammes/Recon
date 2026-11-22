@@ -6,6 +6,7 @@ import { CALIBRATIONS, type CentiloidCalibration, type CentiloidResult } from ".
 import { VOI_LABELS, VOI_NAMES, type VoiName } from "../centiloid/vois";
 import type { Option } from "./NormalizationPanel";
 
+import { t } from "../i18n";
 export interface CentiloidOutcome {
   result: CentiloidResult;
   datasetLabel: string;
@@ -52,12 +53,12 @@ export function CentiloidPanel(props: CentiloidPanelProps) {
       ? {
           id: "custom",
           tracer: "custom",
-          label: "Eigene Gleichung",
+          label: t("Eigene Gleichung"),
           reference: custom.reference,
           slope: parseFloat(custom.slope.replace(",", ".")),
           intercept: parseFloat(custom.intercept.replace(",", ".")),
           window: [0, 1e6],
-          source: "manuell eingegeben",
+          source: t("manuell eingegeben"),
         }
       : CALIBRATIONS.find((c) => c.id === calId)!;
   const calOk = Number.isFinite(calibration.slope) && Number.isFinite(calibration.intercept);
@@ -68,7 +69,7 @@ export function CentiloidPanel(props: CentiloidPanelProps) {
   const o = props.outcome;
 
   return (
-    <Card title={<>Centiloid</>} info="Amyloid-Last auf der Centiloid-Skala (0 = junge Gesunde, 100 = typische Alzheimer-Demenz): SUVR der Standard-Kortex-VOI zur Referenzregion im MNI-Raum, umgerechnet mit der Kalibrierung des Tracers." status={props.running ? { text: "läuft", tone: "run" } : o ? { text: `${Math.round(o.result.centiloid)} CL`, tone: "ok" } : null}>
+    <Card title={<>{t("Centiloid")}</>} info={t("Amyloid-Last auf der Centiloid-Skala (0 = junge Gesunde, 100 = typische Alzheimer-Demenz): SUVR der Standard-Kortex-VOI zur Referenzregion im MNI-Raum, umgerechnet mit der Kalibrierung des Tracers.")} status={props.running ? { text: t("läuft"), tone: "run" } : o ? { text: `${Math.round(o.result.centiloid)} CL`, tone: "ok" } : null}>
 
       <input
         ref={fileInput}
@@ -88,7 +89,7 @@ export function CentiloidPanel(props: CentiloidPanelProps) {
         </button>
         {props.voisLoaded && (
           <button className="secondary-btn" onClick={props.onShowVois}>
-            VOIs anzeigen
+            {t("VOIs anzeigen")}
           </button>
         )}
       </div>
@@ -100,7 +101,7 @@ export function CentiloidPanel(props: CentiloidPanelProps) {
             <>
               Die VOIs werden nicht mitgeliefert (GAAIN-Nutzungsbedingungen: persönliche, nicht-kommerzielle Nutzung) – siehe{" "}
               <a href="https://www.gaain.org/centiloid-project" target="_blank" rel="noreferrer">
-                Centiloid Project
+                {t("Centiloid Project")}
               </a>
               . Die heruntergeladene ZIP-Datei direkt hier auswählen.
             </>
@@ -108,39 +109,39 @@ export function CentiloidPanel(props: CentiloidPanelProps) {
         >
           VOIs:{" "}
           <a href="https://www.gaaindata.org/data/centiloid/Centiloid_Std_VOI.zip" target="_blank" rel="noreferrer" download>
-            Centiloid_Std_VOI.zip
+            {t("Centiloid_Std_VOI.zip")}
           </a>{" "}
           herunterladen und hier auswählen.
         </InfoText>
       )}
 
       <label className="field">
-        Kalibrierung
+        {t("Kalibrierung")}
         <select value={calId} onChange={(e) => setCalId(e.target.value)}>
           {CALIBRATIONS.map((c) => (
             <option key={c.id} value={c.id}>
               {c.label}
             </option>
           ))}
-          <option value="custom">Eigene Gleichung …</option>
+          <option value="custom">{t("Eigene Gleichung …")}</option>
         </select>
       </label>
       {calId === "custom" ? (
         <div className="inline-fields">
           <label className="field">
-            Steigung
+            {t("Steigung")}
             <input value={custom.slope} onChange={(e) => setCustom({ ...custom, slope: e.target.value })} />
           </label>
           <label className="field">
-            Achsenabschnitt
+            {t("Achsenabschnitt")}
             <input value={custom.intercept} onChange={(e) => setCustom({ ...custom, intercept: e.target.value })} />
           </label>
           <label className="field">
-            Referenz
+            {t("Referenz")}
             <select value={custom.reference} onChange={(e) => setCustom({ ...custom, reference: e.target.value as VoiName })}>
               {VOI_NAMES.filter((n) => n !== "ctx").map((n) => (
                 <option key={n} value={n}>
-                  {VOI_LABELS[n]}
+                  {t(VOI_LABELS[n])}
                 </option>
               ))}
             </select>
@@ -149,11 +150,11 @@ export function CentiloidPanel(props: CentiloidPanelProps) {
       ) : (
         <p className="tool-hint">
           CL = {fmt(calibration.slope, 2)} × SUVR {calibration.intercept < 0 ? "−" : "+"} {fmt(Math.abs(calibration.intercept), 2)}; Referenz:{" "}
-          {VOI_LABELS[calibration.reference]}; {calibration.window[0]}–{calibration.window[1]} min p. i. – {calibration.source}
+          {t(VOI_LABELS[calibration.reference])}; {calibration.window[0]}–{calibration.window[1]} min p. i. – {calibration.source}
         </p>
       )}
 
-      <h4 className="subheading">Automatisch</h4>
+      <h4 className="subheading">{t("Automatisch")}</h4>
       <label className="field">
         PET
         <select value={pet?.id ?? ""} disabled={props.running} onChange={(e) => setPetId(e.target.value)}>
@@ -172,32 +173,32 @@ export function CentiloidPanel(props: CentiloidPanelProps) {
               {p.label}
             </option>
           ))}
-          <option value="">ohne MRT (PET-only{props.petTemplateLabel ? `: ${props.petTemplateLabel}` : " – PET-Vorlage nötig"})</option>
+          <option value="">ohne MRT (PET-only{props.petTemplateLabel ? `: ${props.petTemplateLabel}` : t(" – PET-Vorlage nötig")})</option>
         </select>
       </label>
       <p className="tool-hint">
         {t1
-          ? "PET → T1 rigide (NMI), T1 → MNI affin, PET über beide Schritte in den MNI-Raum, dann VOI-Auswertung – an GAAIN-Referenzdaten kalibriert."
+          ? t("PET → T1 rigide (NMI), T1 → MNI affin, PET über beide Schritte in den MNI-Raum, dann VOI-Auswertung – an GAAIN-Referenzdaten kalibriert.")
           : props.petTemplateLabel
-            ? "PET direkt affin + nichtlinear auf die PET-Vorlage, dann VOI-Auswertung (nicht an GAAIN validiert)."
-            : "Für PET-only zuerst eine Florbetaben-Vorlage laden (Panel „Daten“ → Vorlagen & Atlanten → Eigene PET-Vorlage)."}
+            ? t("PET direkt affin + nichtlinear auf die PET-Vorlage, dann VOI-Auswertung (nicht an GAAIN validiert).")
+            : t("Für PET-only zuerst eine Florbetaben-Vorlage laden (Panel „Daten“ → Vorlagen & Atlanten → Eigene PET-Vorlage).")}
       </p>
       {!props.running ? (
         <button className="primary-btn" disabled={!canRun} onClick={() => pet && props.onRun(pet.id, t1?.id ?? null, calibration)}>
-          Centiloid bestimmen
+          {t("Centiloid bestimmen")}
         </button>
       ) : (
         <button className="secondary-btn" onClick={props.onCancel}>
-          Abbrechen
+          {t("Abbrechen")}
         </button>
       )}
       {props.status && <p className="tool-hint">{props.status}</p>}
 
       {props.standardTargets.length > 0 && (
         <>
-          <h4 className="subheading">Vorhandenen Datensatz im MNI-Raum auswerten</h4>
+          <h4 className="subheading">{t("Vorhandenen Datensatz im MNI-Raum auswerten")}</h4>
           <label className="field">
-            Datensatz
+            {t("Datensatz")}
             <select value={std?.id ?? ""} disabled={props.running} onChange={(e) => setStdId(e.target.value)}>
               {props.standardTargets.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -207,7 +208,7 @@ export function CentiloidPanel(props: CentiloidPanelProps) {
             </select>
           </label>
           <button className="secondary-btn" disabled={!props.voisLoaded || !std || !calOk || props.running} onClick={() => std && props.onEvaluate(std.id, calibration)}>
-            Auswerten
+            {t("Auswerten")}
           </button>
         </>
       )}
@@ -228,19 +229,19 @@ export function CentiloidPanel(props: CentiloidPanelProps) {
               {w}
             </div>
           ))}
-          <BigTable title={`Centiloid – ${o.datasetLabel}`}><table className="region-table">
+          <BigTable title={t("Centiloid – {datasetLabel}", { datasetLabel: o.datasetLabel })}><table className="region-table">
             <thead>
               <tr>
                 <th>VOI</th>
                 <th>ml</th>
-                <th>Mittel</th>
+                <th>{t("Mittel")}</th>
                 <th>SUVR</th>
               </tr>
             </thead>
             <tbody>
               {o.result.means.map((m) => (
                 <tr key={m.name} className={m.name === o.result.calibration.reference ? "reference-row" : undefined}>
-                  <td>{VOI_LABELS[m.name]}</td>
+                  <td>{t(VOI_LABELS[m.name])}</td>
                   <td>{fmt(m.volumeMl, 0)}</td>
                   <td>{fmt(m.mean, Math.abs(m.mean) >= 100 ? 0 : 3)}</td>
                   <td>{m.name === "ctx" ? "" : fmt(o.result.suvr[m.name] ?? NaN)}</td>

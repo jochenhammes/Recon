@@ -3,6 +3,7 @@ import type { RampFilterType } from "../recon/fft";
 import type { ReconParams } from "../recon/volume";
 import type { SpectProjectionSet } from "../dicom/types";
 
+import { t, tk } from "../i18n";
 export interface ReconControlsProps {
   projectionSet: SpectProjectionSet;
   busy: boolean;
@@ -12,13 +13,13 @@ export interface ReconControlsProps {
 }
 
 const FILTERS: { value: RampFilterType; label: string }[] = [
-  { value: "ramp", label: "Ram-Lak (scharf, rauschreich)" },
-  { value: "shepp-logan", label: "Shepp-Logan" },
-  { value: "cosine", label: "Cosine" },
-  { value: "hamming", label: "Hamming" },
-  { value: "hann", label: "Hann (glatt)" },
-  { value: "hann-half", label: "Hann ×0,5 (sehr weich)" },
-  { value: "butterworth", label: "Butterworth (extra weich)" },
+  { value: "ramp", label: tk("Ram-Lak (scharf, rauschreich)") },
+  { value: "shepp-logan", label: tk("Shepp-Logan") },
+  { value: "cosine", label: tk("Cosine") },
+  { value: "hamming", label: tk("Hamming") },
+  { value: "hann", label: tk("Hann (glatt)") },
+  { value: "hann-half", label: tk("Hann ×0,5 (sehr weich)") },
+  { value: "butterworth", label: tk("Butterworth (extra weich)") },
 ];
 
 export function ReconControls({ projectionSet, busy, progress, onStart, onCancel }: ReconControlsProps) {
@@ -46,19 +47,19 @@ export function ReconControls({ projectionSet, busy, progress, onStart, onCancel
 
   return (
     <div className="recon-controls">
-      <h3>Akquisition</h3>
+      <h3>{t("Akquisition")}</h3>
       <dl className="summary-list">
-        <dt>Datei(en)</dt>
+        <dt>{t("Datei(en)")}</dt>
         <dd>{projectionSet.meta.sourceFileName}</dd>
-        <dt>Detektorköpfe</dt>
+        <dt>{t("Detektorköpfe")}</dt>
         <dd>{projectionSet.numDetectors}</dd>
-        <dt>Projektionen</dt>
+        <dt>{t("Projektionen")}</dt>
         <dd>{numFrames}</dd>
-        <dt>Winkelbereich</dt>
+        <dt>{t("Winkelbereich")}</dt>
         <dd>
           {minAngle.toFixed(1)}° – {maxAngle.toFixed(1)}°
         </dd>
-        <dt>Winkel je Kopf</dt>
+        <dt>{t("Winkel je Kopf")}</dt>
         <dd>
           {detectorSummaries.map((s) => (
             <div key={s.d}>
@@ -67,41 +68,41 @@ export function ReconControls({ projectionSet, busy, progress, onStart, onCancel
             </div>
           ))}
         </dd>
-        <dt>Bildgröße</dt>
+        <dt>{t("Bildgröße")}</dt>
         <dd>
           {projectionSet.cols} x {projectionSet.cols} x {projectionSet.rows} (x · y · z)
         </dd>
-        <dt>Pixelabstand</dt>
+        <dt>{t("Pixelabstand")}</dt>
         <dd>
           {projectionSet.pixelSpacingMm[1].toFixed(2)} x {projectionSet.pixelSpacingMm[1].toFixed(2)} x{" "}
           {projectionSet.pixelSpacingMm[0].toFixed(2)} mm
         </dd>
         {projectionSet.meta.manufacturer && (
           <>
-            <dt>Hersteller</dt>
+            <dt>{t("Hersteller")}</dt>
             <dd>{projectionSet.meta.manufacturer}</dd>
           </>
         )}
         {projectionSet.meta.radionuclide && (
           <>
-            <dt>Radionuklid</dt>
+            <dt>{t("Radionuklid")}</dt>
             <dd>{projectionSet.meta.radionuclide}</dd>
           </>
         )}
       </dl>
 
-      <h3>Rekonstruktion</h3>
+      <h3>{t("Rekonstruktion")}</h3>
       <label className="field">
-        Algorithmus
+        {t("Algorithmus")}
         <select value={algorithm} onChange={(e) => setAlgorithm(e.target.value as "fbp" | "osem")} disabled={busy}>
-          <option value="fbp">Gefilterte Rückprojektion (FBP)</option>
-          <option value="osem">Iterativ (OSEM)</option>
+          <option value="fbp">{t("Gefilterte Rückprojektion (FBP)")}</option>
+          <option value="osem">{t("Iterativ (OSEM)")}</option>
         </select>
       </label>
 
       {algorithm === "fbp" && (
         <label className="field">
-          Filter
+          {t("Filter")}
           <select value={filterType} onChange={(e) => setFilterType(e.target.value as RampFilterType)} disabled={busy}>
             {FILTERS.map((f) => (
               <option key={f.value} value={f.value}>
@@ -115,7 +116,7 @@ export function ReconControls({ projectionSet, busy, progress, onStart, onCancel
       {algorithm === "osem" && (
         <>
           <label className="field">
-            Subsets
+            {t("Subsets")}
             <input
               type="number"
               min={1}
@@ -126,7 +127,7 @@ export function ReconControls({ projectionSet, busy, progress, onStart, onCancel
             />
           </label>
           <label className="field">
-            Iterationen
+            {t("Iterationen")}
             <input
               type="number"
               min={1}
@@ -150,7 +151,7 @@ export function ReconControls({ projectionSet, busy, progress, onStart, onCancel
             )
           }
         >
-          Rekonstruieren
+          {t("Rekonstruieren")}
         </button>
       ) : (
         <>
@@ -159,7 +160,7 @@ export function ReconControls({ projectionSet, busy, progress, onStart, onCancel
           </div>
           <div className="progress-label">{Math.round((progress ?? 0) * 100)}%</div>
           <button className="secondary-btn" onClick={onCancel}>
-            Abbrechen
+            {t("Abbrechen")}
           </button>
         </>
       )}

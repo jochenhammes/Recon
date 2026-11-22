@@ -3,6 +3,7 @@ import type { LayerDisplay } from "../viewer/types";
 import { type ColorLut, LUT_CHOICES } from "../viewer/volume";
 import { useEffect, useState } from "react";
 
+import { t } from "../i18n";
 const LUT_OPTIONS = LUT_CHOICES;
 
 export interface WindowPreset {
@@ -35,12 +36,12 @@ export function LayerSettings({ title, display, onChange, scale, unitLabel, pres
         {showVisibility && (
           <label className="checkbox-field">
             <input type="checkbox" checked={display.visible} onChange={(e) => onChange({ ...display, visible: e.target.checked })} />
-            anzeigen
+            {t("anzeigen")}
           </label>
         )}
       </div>
       <label className="field">
-        Farbtabelle
+        {t("Farbtabelle")}
         <select value={display.lut} onChange={(e) => onChange({ ...display, lut: e.target.value as ColorLut })}>
           {LUT_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>

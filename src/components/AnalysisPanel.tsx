@@ -5,6 +5,7 @@ import { Histogram } from "./Histogram";
 import { InfoText } from "../ui/Info";
 import { type UnitMode, formatCount, formatValue } from "./format";
 
+import { t } from "../i18n";
 export interface AnalysisPanelProps {
   volume: Volume3D;
   stats: VolumeStats;
@@ -28,49 +29,49 @@ export function AnalysisPanel({ volume, stats, marker, scale, unitLabel, unitMod
           <label>
             Einheit{" "}
             <select value={unitMode} onChange={(e) => onUnitModeChange(e.target.value as UnitMode)} disabled={!suv.ok}>
-              <option value="raw">Originalwerte</option>
-              <option value="suv">SUV (Körpergewicht)</option>
+              <option value="raw">{t("Originalwerte")}</option>
+              <option value="suv">{t("SUV (Körpergewicht)")}</option>
             </select>
           </label>
           {suv.ok ? (
             <InfoText
               details={
-                `SUV 1 ≙ ${formatValue(1 / suv.info.factor)} Bq/ml · Körpergewicht ${formatValue(suv.info.weightKg)} kg · ` +
-                `${formatValue(suv.info.injectedDoseBq / 1e6)} MBq injiziert, ` +
+                t("SUV 1 ≙ {v} Bq/ml · Körpergewicht {v2} kg · ", { v: formatValue(1 / suv.info.factor), v2: formatValue(suv.info.weightKg) }) +
+                t("{v} MBq injiziert, ", { v: formatValue(suv.info.injectedDoseBq / 1e6) }) +
                 (suv.info.decayCorrection === "START"
-                  ? `${formatValue(suv.info.doseAtReferenceBq / 1e6)} MBq bei Serienstart (+${formatValue(Math.round(suv.info.minutesToReference))} min).`
-                  : "Zerfallskorrektur auf Injektionszeit.")
+                  ? t("{v} MBq bei Serienstart (+{v2} min).", { v: formatValue(suv.info.doseAtReferenceBq / 1e6), v2: formatValue(Math.round(suv.info.minutesToReference)) })
+                  : t("Zerfallskorrektur auf Injektionszeit."))
               }
             >
-              SUV verfügbar
+              {t("SUV verfügbar")}
             </InfoText>
           ) : (
-            <InfoText details={`SUV nicht verfügbar: ${suv.reason}`}>SUV nicht verfügbar</InfoText>
+            <InfoText details={t("SUV nicht verfügbar: {reason}", { reason: suv.reason })}>{t("SUV nicht verfügbar")}</InfoText>
           )}
         </div>
       )}
       <dl className="summary-list">
-        <dt>Bildpunkte</dt>
+        <dt>{t("Bildpunkte")}</dt>
         <dd>{formatCount(stats.count)}</dd>
-        <dt>Matrix (x×y×z)</dt>
+        <dt>{t("Matrix (x×y×z)")}</dt>
         <dd>
           {volume.nx}×{volume.ny}×{volume.nz}
         </dd>
-        <dt>Minimum</dt>
+        <dt>{t("Minimum")}</dt>
         <dd>{v(stats.min)}</dd>
-        <dt>Mittelwert</dt>
+        <dt>{t("Mittelwert")}</dt>
         <dd>{v(stats.mean)}</dd>
-        <dt>Median</dt>
+        <dt>{t("Median")}</dt>
         <dd>{v(stats.median)}</dd>
-        <dt>Maximum</dt>
+        <dt>{t("Maximum")}</dt>
         <dd>{v(stats.max)}</dd>
-        <dt>Standardabweichung</dt>
+        <dt>{t("Standardabweichung")}</dt>
         <dd>{v(stats.sd)}</dd>
-        <dt>Varianz</dt>
+        <dt>{t("Varianz")}</dt>
         <dd>{formatValue(stats.variance * scale * scale) + (unitLabel ? ` ${unitLabel}²` : "")}</dd>
         {stats.nonFinite > 0 && (
           <>
-            <dt>Ungültig (NaN/∞)</dt>
+            <dt>{t("Ungültig (NaN/∞)")}</dt>
             <dd>{formatCount(stats.nonFinite)}</dd>
           </>
         )}

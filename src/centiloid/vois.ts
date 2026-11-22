@@ -3,6 +3,7 @@ import { listZip } from "../core/unzip";
 import type { Volume3D } from "../viewer/volume";
 import { decompressGzip, parseNifti1 } from "../viewer/volumeLoader";
 
+import { t, tk } from "../i18n";
 /**
  * Standard Centiloid VOIs (Klunk et al. 2015, GAAIN): cortical target region and reference regions in
  * MNI space (SPM8 avg152T1, 1 or 2 mm). They overlap (CerebGry ⊂ WhlCbl ⊂ WhlCblBrnStm), so each is
@@ -13,10 +14,10 @@ export const VOI_NAMES = ["ctx", "WhlCbl", "CerebGry", "WhlCblBrnStm", "Pons"] a
 export type VoiName = (typeof VOI_NAMES)[number];
 
 export const VOI_LABELS: Record<VoiName, string> = {
-  ctx: "Kortex (Ziel-VOI)",
-  WhlCbl: "Kleinhirn gesamt",
-  CerebGry: "Kleinhirnrinde",
-  WhlCblBrnStm: "Kleinhirn + Hirnstamm",
+  ctx: tk("Kortex (Ziel-VOI)"),
+  WhlCbl: tk("Kleinhirn gesamt"),
+  CerebGry: tk("Kleinhirnrinde"),
+  WhlCblBrnStm: tk("Kleinhirn + Hirnstamm"),
   Pons: "Pons",
 };
 
@@ -67,13 +68,13 @@ export async function loadVois(files: { name: string; bytes: Uint8Array<ArrayBuf
       if (id) candidates.push({ ...id, file: f.name, read: async () => f.bytes });
     }
   }
-  if (!candidates.length) throw new VoiError("Keine Centiloid-VOIs gefunden (erwartet: Centiloid_Std_VOI.zip oder voi_*_2mm.nii).");
+  if (!candidates.length) throw new VoiError(t("Keine Centiloid-VOIs gefunden (erwartet: Centiloid_Std_VOI.zip oder voi_*_2mm.nii)."));
   const resolutions = [...new Set(candidates.map((c) => c.mm))];
   const mm = resolutions.includes(preferMm) ? preferMm : resolutions[0];
   const volumes: Partial<Record<VoiName, Volume3D>> = {};
   for (const c of candidates.filter((x) => x.mm === mm)) volumes[c.name] = await niftiVolume(await c.read(), c.file);
-  if (!volumes.ctx) throw new VoiError("Die Kortex-VOI (voi_ctx) fehlt.");
-  if (!volumes.WhlCbl && !volumes.CerebGry && !volumes.WhlCblBrnStm && !volumes.Pons) throw new VoiError("Keine Referenz-VOI gefunden.");
+  if (!volumes.ctx) throw new VoiError(t("Die Kortex-VOI (voi_ctx) fehlt."));
+  if (!volumes.WhlCbl && !volumes.CerebGry && !volumes.WhlCblBrnStm && !volumes.Pons) throw new VoiError(t("Keine Referenz-VOI gefunden."));
   return { resolutionMm: mm, volumes, source: files.map((f) => f.name).join(", ") };
 }
 

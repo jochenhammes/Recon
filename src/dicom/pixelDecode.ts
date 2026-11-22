@@ -2,6 +2,7 @@ import * as dicomParser from "dicom-parser";
 import type { DataSet } from "dicom-parser";
 import { Decoder as JpegLosslessDecoder } from "jpeg-lossless-decoder-js";
 
+import { t } from "../i18n";
 /** Transfer syntaxes whose encapsulated (compressed) PixelData can be decoded. */
 export const JPEG_LOSSLESS_TRANSFER_SYNTAXES = new Set([
   "1.2.840.10008.1.2.4.57", // JPEG Lossless, Non-Hierarchical (Process 14)
@@ -51,10 +52,10 @@ export function decodeJpegLosslessFrame(fragment: Uint8Array): ArrayBuffer {
  */
 export function decodePixelFrames(dataSet: DataSet, layout: PixelLayout): Float32Array[] {
   const pixelDataElement = dataSet.elements["x7fe00010"];
-  if (!pixelDataElement) throw new PixelDecodeError("DICOM-Datei enthält keine PixelData (7FE0,0010).");
+  if (!pixelDataElement) throw new PixelDecodeError(t("DICOM-Datei enthält keine PixelData (7FE0,0010)."));
   const { numberOfFrames, rows, cols, bitsAllocated, pixelRepresentation } = layout;
   if (bitsAllocated !== 8 && bitsAllocated !== 16 && bitsAllocated !== 32) {
-    throw new PixelDecodeError(`${bitsAllocated}-bit-Pixel werden nicht unterstützt.`);
+    throw new PixelDecodeError(t("{bitsAllocated}-bit-Pixel werden nicht unterstützt.", { bitsAllocated }));
   }
   const bytesPerPixel = bitsAllocated / 8;
   const pixelsPerFrame = rows * cols;
@@ -66,8 +67,8 @@ export function decodePixelFrames(dataSet: DataSet, layout: PixelLayout): Float3
   const frameByteLength = pixelsPerFrame * bytesPerPixel;
   if (frameByteLength * numberOfFrames > pixelDataElement.length) {
     throw new PixelDecodeError(
-      `PixelData zu kurz für ${numberOfFrames} Frames à ${rows}x${cols} (${bitsAllocated} bit): ` +
-        `erwartet ${frameByteLength * numberOfFrames} Bytes, gefunden ${pixelDataElement.length}.`,
+      t("PixelData zu kurz für {numberOfFrames} Frames à {rows}x{cols} ({bitsAllocated} bit): ", { numberOfFrames, rows, cols, bitsAllocated }) +
+        t("erwartet {v} Bytes, gefunden {length}.", { v: frameByteLength * numberOfFrames, length: pixelDataElement.length }),
     );
   }
   const byteArray = dataSet.byteArray;
@@ -102,8 +103,8 @@ function decodeEncapsulatedFrames(
   const transferSyntax = dataSet.string("x00020010");
   if (!transferSyntax || !JPEG_LOSSLESS_TRANSFER_SYNTAXES.has(transferSyntax)) {
     throw new PixelDecodeError(
-      `Komprimierte PixelData mit Transfer Syntax "${transferSyntax ?? "unbekannt"}" wird nicht unterstützt. ` +
-        "Unterstützt werden unkomprimierte Dateien sowie JPEG Lossless " +
+      t("Komprimierte PixelData mit Transfer Syntax \"{v}\" wird nicht unterstützt. ", { v: transferSyntax ?? "unbekannt" }) +
+        t("Unterstützt werden unkomprimierte Dateien sowie JPEG Lossless ") +
         "(1.2.840.10008.1.2.4.57 / 1.2.840.10008.1.2.4.70).",
     );
   }
@@ -119,12 +120,12 @@ function decodeEncapsulatedFrames(
     try {
       decoded = decodeJpegLosslessFrame(fragment);
     } catch (e) {
-      throw new PixelDecodeError(`JPEG-Lossless-Dekodierung von Frame ${f} fehlgeschlagen: ${describeParseError(e)}`);
+      throw new PixelDecodeError(t("JPEG-Lossless-Dekodierung von Frame {f} fehlgeschlagen: {v}", { f, v: describeParseError(e) }));
     }
     if (decoded.byteLength < pixelsPerFrame * bytesPerPixel) {
       throw new PixelDecodeError(
-        `Dekodierter Frame ${f} ist zu kurz: erwartet ${pixelsPerFrame * bytesPerPixel} Bytes, ` +
-          `gefunden ${decoded.byteLength}.`,
+        t("Dekodierter Frame {f} ist zu kurz: erwartet {v} Bytes, ", { f, v: pixelsPerFrame * bytesPerPixel }) +
+          t("gefunden {byteLength}.", { byteLength: decoded.byteLength }),
       );
     }
     frames.push(readSamples(new DataView(decoded), 0, pixelsPerFrame, bytesPerPixel, pixelRepresentation));

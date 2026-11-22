@@ -1,3 +1,4 @@
+import { tk } from "../i18n";
 import type { Vec3, VolumeGeometry } from "../core/geometry";
 import { IDENTITY_MAT4, type Mat4, applyMat4, invert4, multiply4, transformGeometry } from "../core/transform";
 
@@ -8,8 +9,8 @@ export interface Landmark {
 }
 
 /** The two landmarks set in every dataset (pairs are formed by name). */
-export const LANDMARK_1 = "Landmarke 1";
-export const LANDMARK_2 = "Landmarke 2";
+export const LANDMARK_1 = tk("Landmarke 1");
+export const LANDMARK_2 = tk("Landmarke 2");
 
 export const translation = (t: Vec3): Mat4 => [1, 0, 0, t[0], 0, 1, 0, t[1], 0, 0, 1, t[2], 0, 0, 0, 1];
 

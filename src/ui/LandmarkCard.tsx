@@ -2,6 +2,7 @@ import type { Vec3 } from "../core/geometry";
 import { LANDMARK_1, LANDMARK_2, type Landmark } from "../registration/landmarks";
 import { InfoText } from "./Info";
 
+import { t } from "../i18n";
 export type LandmarkSide = "base" | "moving";
 
 export interface LandmarkPanelProps {
@@ -41,21 +42,21 @@ export function LandmarkPanel(props: LandmarkPanelProps) {
       <thead>
         <tr>
           <th />
-          <th>Basis</th>
-          <th>Datensatz</th>
+          <th>{t("Basis")}</th>
+          <th>{t("Datensatz")}</th>
         </tr>
       </thead>
       <tbody>
         {NAMES.map((n) => (
           <tr key={n}>
-            <td>{n}</td>
+            <td>{t(n)}</td>
             {(["base", "moving"] as LandmarkSide[]).map((side) => {
               const l = find(side, n);
               return (
                 <td key={side}>
                   {l ? (
-                    <button className="link-btn" title={`Fadenkreuz auf ${n} (${fmt(l.p)} mm)`} onClick={() => props.onGoTo(side, n)}>
-                      ✓ zeigen
+                    <button className="link-btn" title={t("Fadenkreuz auf {n} ({v} mm)", { n: t(n), v: fmt(l.p) })} onClick={() => props.onGoTo(side, n)}>
+                      {t("✓ zeigen")}
                     </button>
                   ) : (
                     "–"
@@ -71,21 +72,21 @@ export function LandmarkPanel(props: LandmarkPanelProps) {
 
   return (
     <>
-      <InfoText details="Optional, aber hilfreich vor der automatischen Registrierung – vor allem, wenn die Koordinatensysteme nicht zusammenpassen oder der Datensatz stark verdreht ist. In Basis und Datensatz dieselben zwei Punkte markieren, z. B. Landmarke 1 = Nasenspitze, Landmarke 2 = Scheitel (Hirn: vordere und hintere Kommissur). „Ursprung setzen auf Landmarke 1“ verschiebt, „Mit Landmarke 2 ausrichten“ dreht zusätzlich um Landmarke 1; eine Restdrehung um diese Achse im Reiter „Manuell“ korrigieren.">
-        Zwei gleiche Punkte in Basis und Datensatz
+      <InfoText details={t("Optional, aber hilfreich vor der automatischen Registrierung – vor allem, wenn die Koordinatensysteme nicht zusammenpassen oder der Datensatz stark verdreht ist. In Basis und Datensatz dieselben zwei Punkte markieren, z. B. Landmarke 1 = Nasenspitze, Landmarke 2 = Scheitel (Hirn: vordere und hintere Kommissur). „Ursprung setzen auf Landmarke 1“ verschiebt, „Mit Landmarke 2 ausrichten“ dreht zusätzlich um Landmarke 1; eine Restdrehung um diese Achse im Reiter „Manuell“ korrigieren.")}>
+        {t("Zwei gleiche Punkte in Basis und Datensatz")}
       </InfoText>
 
       {!props.mode ? (
         <>
           {overview}
           <button className={both(LANDMARK_1) ? "secondary-btn" : "primary-btn"} disabled={disabled} onClick={() => props.onModeChange(true)}>
-            Landmarken setzen …
+            {t("Landmarken setzen …")}
           </button>
         </>
       ) : (
         <div className="landmark-mode">
-          <InfoText details="Der Viewer zeigt nur den gewählten Datensatz. Im Viewer auf den Punkt klicken (Fadenkreuz), dann „Landmarke … hier setzen“. Markierungen: B1/B2 Basis (orange), D1/D2 Datensatz (türkis).">Punkt anklicken, dann setzen</InfoText>
-          <div className="segmented-control" role="group" aria-label="Angezeigter Datensatz">
+          <InfoText details={t("Der Viewer zeigt nur den gewählten Datensatz. Im Viewer auf den Punkt klicken (Fadenkreuz), dann „Landmarke … hier setzen“. Markierungen: B1/B2 Basis (orange), D1/D2 Datensatz (türkis).")}>{t("Punkt anklicken, dann setzen")}</InfoText>
+          <div className="segmented-control" role="group" aria-label={t("Angezeigter Datensatz")}>
             {(["base", "moving"] as LandmarkSide[]).map((side) => (
               <button key={side} className={props.view === side ? "active" : ""} onClick={() => props.onViewChange(side)} title={side === "base" ? props.baseLabel : props.movingLabel}>
                 {side === "base" ? "Basis" : "Datensatz"}
@@ -97,17 +98,17 @@ export function LandmarkPanel(props: LandmarkPanelProps) {
             return (
               <div key={n} className="landmark-row">
                 <button className={l ? "secondary-btn" : "primary-btn"} disabled={disabled} onClick={() => props.onSet(n)}>
-                  {n} hier setzen
+                  {t("{n} hier setzen", { n: t(n) })}
                 </button>
                 {l ? (
                   <span className="tool-hint">
                     ✓ ·{" "}
                     <button className="link-btn" onClick={() => props.onGoTo(props.view, n)}>
-                      zeigen
+                      {t("zeigen")}
                     </button>{" "}
                     ·{" "}
                     <button className="link-btn" disabled={disabled} onClick={() => props.onRemove(props.view, n)}>
-                      löschen
+                      {t("löschen")}
                     </button>
                   </span>
                 ) : (
@@ -118,7 +119,7 @@ export function LandmarkPanel(props: LandmarkPanelProps) {
           })}
           {overview}
           <button className="secondary-btn" onClick={() => props.onModeChange(false)}>
-            Fertig – beide Datensätze zeigen
+            {t("Fertig – beide Datensätze zeigen")}
           </button>
         </div>
       )}
@@ -128,17 +129,17 @@ export function LandmarkPanel(props: LandmarkPanelProps) {
           className={both(LANDMARK_1) && props.step === 0 ? "primary-btn" : "secondary-btn"}
           disabled={disabled || !both(LANDMARK_1)}
           onClick={props.onOriginToLandmark1}
-          title="Verschiebt den Datensatz so, dass seine Landmarke 1 auf der Landmarke 1 der Basis liegt"
+          title={t("Verschiebt den Datensatz so, dass seine Landmarke 1 auf der Landmarke 1 der Basis liegt")}
         >
-          Ursprung setzen auf Landmarke 1
+          {t("Ursprung setzen auf Landmarke 1")}
         </button>
         <button
           className={props.step === 1 && both(LANDMARK_2) ? "primary-btn" : "secondary-btn"}
           disabled={disabled || !both(LANDMARK_1) || !both(LANDMARK_2)}
           onClick={props.onAlignWithLandmark2}
-          title="Zusätzlich um Landmarke 1 drehen, bis die Richtung zur Landmarke 2 übereinstimmt"
+          title={t("Zusätzlich um Landmarke 1 drehen, bis die Richtung zur Landmarke 2 übereinstimmt")}
         >
-          Mit Landmarke 2 ausrichten
+          {t("Mit Landmarke 2 ausrichten")}
         </button>
       </div>
       {props.step > 0 && (

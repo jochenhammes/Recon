@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { Card } from "./Card";
 
+import { t } from "../i18n";
 export interface DeformationFieldCardProps {
   subjectLabel: string | null;
   canExport: boolean;
@@ -14,7 +15,7 @@ export interface DeformationFieldCardProps {
 export function DeformationFieldCard(props: DeformationFieldCardProps) {
   const input = useRef<HTMLInputElement>(null);
   return (
-    <Card title={<>SPM / CAT12-Verformungsfeld</>} info={
+    <Card title={<>{t("SPM / CAT12-Verformungsfeld")}</>} info={
           <>
             Ein in SPM (Segment/Normalise) oder CAT12 berechnetes Feld <code>y_*.nii</code> des Subjekts übernehmen – anschließend lassen sich das T1 und
             alle dazu coregistrierten Datensätze (z. B. das PET) darüber in den Standardraum übertragen. Das Subjekt muss das Bild sein, auf dem SPM/CAT12
@@ -37,10 +38,10 @@ export function DeformationFieldCard(props: DeformationFieldCardProps) {
       />
       <div className="button-row">
         <button className="secondary-btn" disabled={props.busy || !props.subjectLabel} onClick={() => input.current?.click()}>
-          y_*.nii laden{props.subjectLabel ? ` (für ${props.subjectLabel})` : ""}
+          y_*.nii laden{props.subjectLabel ? t(" (für {subjectLabel})", { subjectLabel: props.subjectLabel }) : ""}
         </button>
         <button className="secondary-btn" disabled={props.busy || !props.canExport} onClick={props.onExport}>
-          Als y_*.nii speichern
+          {t("Als y_*.nii speichern")}
         </button>
       </div>
       {props.status && <p className="tool-hint">{props.status}</p>}

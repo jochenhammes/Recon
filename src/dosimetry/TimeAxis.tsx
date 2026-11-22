@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 /** A point on the time axis: a measurement session (used as time point or not). */
 export interface AxisPoint {
   key: string;
@@ -29,7 +30,7 @@ export function TimeAxis({ points, relative, onSelect }: { points: AxisPoint[]; 
   const above = new Map<string, boolean>();
   sorted.forEach((p, i) => above.set(p.key, i % 2 === 0 || x(p.h) - x(sorted[i - 1].h) > 52));
   return (
-    <svg className="dos-axis" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Zeitachse der Messzeitpunkte">
+    <svg className="dos-axis" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={t("Zeitachse der Messzeitpunkte")}>
       <line x1={L} x2={W - R} y1={Y} y2={Y} className="dos-axis-line" />
       {ticks.map((t) => (
         <g key={t}>

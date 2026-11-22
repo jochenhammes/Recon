@@ -6,6 +6,7 @@ import { InfoText } from "../ui/Info";
 import { type AxisPoint, TimeAxis } from "./TimeAxis";
 import { fmtDateTime } from "./sessions";
 
+import { t } from "../i18n";
 /** A selectable dataset of one role. */
 export interface TpOption {
   id: string;
@@ -128,14 +129,14 @@ export function TimePointsCard(p: TimePointsCardProps) {
     }),
     ...p.spare.flatMap((s): AxisPoint[] => {
       const h = s.h ?? axisH(undefined, s.acqMs);
-      return h === undefined ? [] : [{ key: s.key, h, label: "–", title: `${s.label} (nicht verwendet)\n${fmtDateTime(s.acqMs)}`, state: "unused" }];
+      return h === undefined ? [] : [{ key: s.key, h, label: "–", title: t("{label} (nicht verwendet)\n{v}", { label: s.label, v: fmtDateTime(s.acqMs) }), state: "unused" }];
     }),
   ];
   const usable = p.views.filter((v) => v.ctId).length;
 
   return (
     <Card
-      title={<>Zeitpunkte</>}
+      title={<>{t("Zeitpunkte")}</>}
       persistKey="dos-tp"
       status={p.views.length ? { text: `${p.views.length}`, tone: p.views.every((v) => !v.warnings.length) ? "info" : "warn" } : null}
       info={
@@ -154,7 +155,7 @@ export function TimePointsCard(p: TimePointsCardProps) {
     >
       <div className="field-row">
         <label className="field">
-          Injektion{p.injection.fromHeader ? " (Header)" : ""}
+          {t("Injektion")}{p.injection.fromHeader ? " (Header)" : ""}
           <input type="datetime-local" value={p.injection.ms ? toLocalInput(p.injection.ms) : ""} onChange={(e) => p.onInjection({ timeMs: e.target.value ? new Date(e.target.value).getTime() : null })} />
         </label>
         <label className="field">
@@ -171,16 +172,16 @@ export function TimePointsCard(p: TimePointsCardProps) {
           else if (p.spare.some((s) => s.key === key)) p.onAddSession(key);
         }}
       />
-      {relative && points.length > 0 && <InfoText warn details="Injektionszeit fehlt (Header oder Eingabe oben): Die Achse zeigt Stunden ab der ersten Aufnahme, die Dosimetrie braucht die Zeit nach Injektion.">Injektionszeit fehlt</InfoText>}
+      {relative && points.length > 0 && <InfoText warn details={t("Injektionszeit fehlt (Header oder Eingabe oben): Die Achse zeigt Stunden ab der ersten Aufnahme, die Dosimetrie braucht die Zeit nach Injektion.")}>{t("Injektionszeit fehlt")}</InfoText>}
       {p.suggestionDiffers && (
         <div className="button-row">
           <button className="secondary-btn" disabled={p.busy} onClick={p.onApplySuggestion}>
-            Zuordnung aus den Aufnahmen übernehmen
+            {t("Zuordnung aus den Aufnahmen übernehmen")}
           </button>
-          <InfoText details="Setzt die Zeitpunkte neu aus der automatischen Gruppierung (FrameOfReference, Studie, Aufnahmezeit): je Aufnahme mit Funktionsbild ein Zeitpunkt mit CT, Organkarte und Läsionsbild. Manuelle Zeit- und Dauerangaben bleiben erhalten.">Vorschlag</InfoText>
+          <InfoText details={t("Setzt die Zeitpunkte neu aus der automatischen Gruppierung (FrameOfReference, Studie, Aufnahmezeit): je Aufnahme mit Funktionsbild ein Zeitpunkt mit CT, Organkarte und Läsionsbild. Manuelle Zeit- und Dauerangaben bleiben erhalten.")}>{t("Vorschlag")}</InfoText>
         </div>
       )}
-      {!p.views.length && !p.spare.length && <p className="tool-hint">Erst SPECT- oder PET-Daten der Therapie mit den zugehörigen CTs laden.</p>}
+      {!p.views.length && !p.spare.length && <p className="tool-hint">{t("Erst SPECT- oder PET-Daten der Therapie mit den zugehörigen CTs laden.")}</p>}
 
       {p.views.map((v, n) => {
         const expanded = open === v.spectId;
@@ -200,54 +201,54 @@ export function TimePointsCard(p: TimePointsCardProps) {
                 <select
                   className="dos-unit"
                   value={v.unitSource === "manuell" ? v.unit : ""}
-                  title={`Einheit des Bildes: ${v.unit} (${v.unitSource === "manuell" ? "von Hand" : v.unitSource === "Header" ? "aus dem DICOM-Header" : "nach dem Kamera-Profil"}). ${v.unit === "Bq/ml" ? "Quantitativ – kein Kalibrierfaktor nötig." : "Counts – Kalibrierfaktor (Kamera-Profil) nötig."}`}
+                  title={t("Einheit des Bildes: {unit} ({v}). {v2}", { unit: v.unit, v: v.unitSource === "manuell" ? t("von Hand") : v.unitSource === "Header" ? t("aus dem DICOM-Header") : t("nach dem Kamera-Profil"), v2: v.unit === "Bq/ml" ? t("Quantitativ – kein Kalibrierfaktor nötig.") : t("Counts – Kalibrierfaktor (Kamera-Profil) nötig.") })}
                   onChange={(e) => p.onUpdate(v.spectId, { unitOverride: (e.target.value || undefined) as "Counts" | "Bq/ml" | undefined })}
                 >
                   <option value="">{v.unitSource === "manuell" ? "automatisch" : `${v.unit} (${v.unitSource})`}</option>
-                  <option value="Counts">Counts</option>
+                  <option value="Counts">{t("Counts")}</option>
                   <option value="Bq/ml">Bq/ml</option>
                 </select>
               </dd>
               <dt>CT</dt>
               <dd>
-                <RoleSelect value={v.ctId} options={p.options.cts} near={v.acqMs} empty="– keins –" onChange={(id) => p.onUpdate(v.spectId, { ctId: id })} />
+                <RoleSelect value={v.ctId} options={p.options.cts} near={v.acqMs} empty={t("– keins –")} onChange={(id) => p.onUpdate(v.spectId, { ctId: id })} />
               </dd>
-              <dt>Organe</dt>
+              <dt>{t("Organe")}</dt>
               <dd>
                 {v.organSetId || !v.ctId ? (
-                  <RoleSelect value={v.organSetId} options={p.options.organs} near={v.acqMs} empty="– keine –" onChange={(id) => p.onUpdate(v.spectId, { organSetId: id })} />
+                  <RoleSelect value={v.organSetId} options={p.options.organs} near={v.acqMs} empty={t("– keine –")} onChange={(id) => p.onUpdate(v.spectId, { organSetId: id })} />
                 ) : (
                   <span className="dos-seg">
-                    <select className="inline-select" value={model} onChange={(e) => setModel(e.target.value)} title="Modell der CT-Organsegmentierung">
+                    <select className="inline-select" value={model} onChange={(e) => setModel(e.target.value)} title={t("Modell der CT-Organsegmentierung")}>
                       {CT_MODELS.map((m) => (
-                        <option key={m.id} value={m.id} title={m.label}>
-                          {m.label.replace("TotalSegmentator", "TS").replace(" total", "").replace(" Organe", "").replace(/[()]/g, "")}
+                        <option key={m.id} value={m.id} title={t(m.label)}>
+                          {t(m.label).replace("TotalSegmentator", "TS").replace(" total", "").replace(/ Organe| organs/, "").replace(/[()]/g, "")}
                         </option>
                       ))}
                     </select>
                     <button className="chip-btn" disabled={p.segRunning} onClick={() => p.onSegment(v.ctId!, model)}>
-                      {p.segRunning ? "läuft …" : "segmentieren"}
+                      {p.segRunning ? t("läuft …") : "segmentieren"}
                     </button>
                   </span>
                 )}
               </dd>
-              <dt>Läsionen</dt>
+              <dt>{t("Läsionen")}</dt>
               <dd>
-                <RoleSelect value={v.lesionSetId} options={p.options.lesions} near={v.acqMs} empty="– keine –" onChange={(id) => p.onUpdate(v.spectId, { lesionSetId: id })} />
+                <RoleSelect value={v.lesionSetId} options={p.options.lesions} near={v.acqMs} empty={t("– keine –")} onChange={(id) => p.onUpdate(v.spectId, { lesionSetId: id })} />
               </dd>
             </dl>
             <div className="chip-row">
-              <Chip ok={v.tH !== undefined} title="Zeit nach Injektion">
+              <Chip ok={v.tH !== undefined} title={t("Zeit nach Injektion")}>
                 t p.i.
               </Chip>
-              <Chip ok={v.unit === "Bq/ml" ? "na" : v.durationSec !== undefined} title="Aufnahmedauer (nur für Counts nötig)">
-                Dauer
+              <Chip ok={v.unit === "Bq/ml" ? "na" : v.durationSec !== undefined} title={t("Aufnahmedauer (nur für Counts nötig)")}>
+                {t("Dauer")}
               </Chip>
-              <Chip ok={v.calibrated} title={v.unit === "Bq/ml" ? "Quantitatives Bild" : "Kamera-Profil (Nuklid und Kalibrierung)"}>
+              <Chip ok={v.calibrated} title={v.unit === "Bq/ml" ? t("Quantitatives Bild") : t("Kamera-Profil (Nuklid und Kalibrierung)")}>
                 {v.unit === "Bq/ml" ? "Bq/ml" : "Kalibrierung"}
               </Chip>
               {p.views.length > 1 && (
-                <Chip ok={n === 0 ? "na" : v.registered} title={n === 0 ? "Referenz der Registrierung" : "Auf das CT von T1 registriert"}>
+                <Chip ok={n === 0 ? "na" : v.registered} title={n === 0 ? t("Referenz der Registrierung") : t("Auf das CT von T1 registriert")}>
                   {n === 0 ? "Referenz" : "registriert"}
                 </Chip>
               )}
@@ -268,21 +269,21 @@ export function TimePointsCard(p: TimePointsCardProps) {
                     Dauer (s)
                     <input type="text" inputMode="decimal" placeholder={v.durationSec !== undefined && v.durationSecManual === undefined ? String(Math.round(v.durationSec)) : "fehlt"} value={v.durationSecManual ?? ""} onChange={(e) => p.onUpdate(v.spectId, { durationSecManual: numOrUndef(e.target.value) })} />
                   </label>
-                  <label className="checkbox-field" title="Bild bereits auf den Aufnahmebeginn zerfallskorrigiert">
+                  <label className="checkbox-field" title={t("Bild bereits auf den Aufnahmebeginn zerfallskorrigiert")}>
                     <input type="checkbox" checked={v.decayCorrected} onChange={(e) => p.onUpdate(v.spectId, { decayCorrected: e.target.checked })} />
                     <span>zerfallskorr.</span>
                   </label>
                 </div>
                 <p className="tool-hint">
-                  Sichtfeld {fmt(v.fovMBq)} MBq{v.pctInjected !== undefined ? ` (${fmt(v.pctInjected)} % der injizierten Aktivität)` : ""}
+                  Sichtfeld {fmt(v.fovMBq)} MBq{v.pctInjected !== undefined ? t(" ({v} % der injizierten Aktivität)", { v: fmt(v.pctInjected) }) : ""}
                   {v.notes.length ? ` · ${v.notes.join(" · ")}` : ""}
                 </p>
                 <div className="button-row">
                   <button className="secondary-btn" onClick={() => p.onShow(v.spectId)}>
-                    Im Viewer zeigen
+                    {t("Im Viewer zeigen")}
                   </button>
                   <button className="link-btn" onClick={() => p.onRemove(v.spectId)}>
-                    Zeitpunkt entfernen
+                    {t("Zeitpunkt entfernen")}
                   </button>
                 </div>
               </div>
@@ -293,9 +294,9 @@ export function TimePointsCard(p: TimePointsCardProps) {
 
       {p.spare.length > 0 && (
         <div className="dos-spare">
-          <span className="tool-hint">Weitere Aufnahmen:</span>
+          <span className="tool-hint">{t("Weitere Aufnahmen:")}</span>
           {p.spare.map((s) => (
-            <button key={s.key} className="chip-btn" onClick={() => p.onAddSession(s.key)} title="Als Zeitpunkt hinzufügen">
+            <button key={s.key} className="chip-btn" onClick={() => p.onAddSession(s.key)} title={t("Als Zeitpunkt hinzufügen")}>
               + {s.label} · {fmtDateTime(s.acqMs)}
             </button>
           ))}
@@ -305,7 +306,7 @@ export function TimePointsCard(p: TimePointsCardProps) {
       {p.unassigned.length > 0 && (
         <details className="dos-unassigned">
           <summary>Nicht zugeordnet ({p.unassigned.length})</summary>
-          <p className="tool-hint">Ohne Datum oder Bezug zu einer Aufnahme (z. B. NIfTI). Einem Zeitpunkt zuordnen:</p>
+          <p className="tool-hint">{t("Ohne Datum oder Bezug zu einer Aufnahme (z. B. NIfTI). Einem Zeitpunkt zuordnen:")}</p>
           {p.unassigned.map((u) => (
             <div key={u.id} className="dos-unassigned-row">
               <span className="export-item-name" title={u.label}>
@@ -320,11 +321,11 @@ export function TimePointsCard(p: TimePointsCardProps) {
                   else if (t) p.onAssign(u.id, u.role, t);
                 }}
               >
-                <option value="">{u.role === "functional" ? "zuordnen …" : u.role === "ct" ? "als CT von …" : "als Labelbild von …"}</option>
-                {u.role === "functional" && <option value="new">neuer Zeitpunkt</option>}
+                <option value="">{u.role === "functional" ? t("zuordnen …") : u.role === "ct" ? t("als CT von …") : t("als Labelbild von …")}</option>
+                {u.role === "functional" && <option value="new">{t("neuer Zeitpunkt")}</option>}
                 {p.views.map((v, n) => (
                   <option key={v.spectId} value={v.spectId}>
-                    {u.role === "functional" ? "Funktionsbild von " : ""}T{n + 1} ({fmtH(v.tH)})
+                    {u.role === "functional" ? t("Funktionsbild von ") : ""}T{n + 1} ({fmtH(v.tH)})
                   </option>
                 ))}
               </select>
@@ -338,8 +339,8 @@ export function TimePointsCard(p: TimePointsCardProps) {
           <button className="secondary-btn" disabled={p.busy || !p.views[0].ctId || usable < 2} onClick={p.onRegister}>
             Zeitpunkte registrieren (CT → CT von T1)
           </button>
-          <InfoText details="Rigide CT-CT-Registrierung aller Zeitpunkte auf T1; Funktionsbild und Labelbilder eines Zeitpunkts werden mitbewegt. Gleichwertig: im Bereich „Koregistrierung“ mit dem CT von T1 als Basis die CTs der übrigen Zeitpunkte starr registrieren (SPECT, Organkarte und Läsionsbild derselben Aufnahme folgen) – der Status „registriert“ wird hier erkannt. Nötig für die Voxel-Dosiskarte, für Labelbilder, die für alle Zeitpunkte gelten, und für die Zuordnung der Läsionen.">
-            Für Voxelkarte und Läsionen nötig
+          <InfoText details={t("Rigide CT-CT-Registrierung aller Zeitpunkte auf T1; Funktionsbild und Labelbilder eines Zeitpunkts werden mitbewegt. Gleichwertig: im Bereich „Koregistrierung“ mit dem CT von T1 als Basis die CTs der übrigen Zeitpunkte starr registrieren (SPECT, Organkarte und Läsionsbild derselben Aufnahme folgen) – der Status „registriert“ wird hier erkannt. Nötig für die Voxel-Dosiskarte, für Labelbilder, die für alle Zeitpunkte gelten, und für die Zuordnung der Läsionen.")}>
+            {t("Für Voxelkarte und Läsionen nötig")}
           </InfoText>
         </>
       )}

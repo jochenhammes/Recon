@@ -1,10 +1,13 @@
 import type { Vec3 } from "../core/geometry";
 import { accumulateTile, accumulateTopKTile, bodyBox, createTopK, extractPatch, gaussianMap, tileStarts, topKLabels } from "./preprocess";
 
+import { t } from "../i18n";
 export interface SegmentProgress {
   done: number;
   total: number;
   stage: string;
+  /** True while tiles are inferred (the "Kachel n/N" progress). */
+  inference?: boolean;
   /** Seconds since the inference started and estimated remaining seconds (after the first tile). */
   elapsed?: number;
   remaining?: number;
@@ -58,13 +61,13 @@ export async function slidingWindow(
         if (opts.shouldStop?.()) throw new DOMException("Segmentierung abgebrochen.", "AbortError");
         const start: Vec3 = [x, y, z];
         // Report before the tile so a slow first tile (shader compilation) is visible.
-        opts.onProgress?.({ done, total, stage: "Inferenz", elapsed: seconds(), remaining: done ? (seconds() / done) * (total - done) : undefined });
+        opts.onProgress?.({ done, total, stage: t("Inferenz"), elapsed: seconds(), remaining: done ? (seconds() / done) * (total - done) : undefined });
         const input = extractPatch(data, dims, start, patch, 0);
         const out = await runPatch(input);
         if (opts.topkOutput) accumulateTopKTile(out, opts.topkOutput, gauss, start, patch, dims, topk);
         else accumulateTile(out, classes, gauss, start, patch, dims, topk);
         done++;
-        opts.onProgress?.({ done, total, stage: "Inferenz", elapsed: seconds(), remaining: (seconds() / done) * (total - done) });
+        opts.onProgress?.({ done, total, stage: t("Inferenz"), elapsed: seconds(), remaining: (seconds() / done) * (total - done) });
       }
   return topKLabels(topk, data.length);
 }

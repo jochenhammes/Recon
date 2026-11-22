@@ -4,6 +4,7 @@ import { gaussianSmooth } from "./filters";
 import { cropVolume, flipVolume, resampleVolume, rotateVolume90 } from "./geometryOps";
 import { type VoiShape, voiMask } from "./voi";
 
+import { t } from "../i18n";
 /** Per-voxel value rule (raw units). */
 export type ValueRule =
   | { kind: "ge"; threshold: number; value: number }
@@ -164,39 +165,39 @@ export function describeEdit(op: EditOp, unit: DisplayUnit = { scale: 1, label: 
   if (rule) {
     switch (rule.kind) {
       case "ge":
-        return `Werte ≥ ${d(rule.threshold)} auf ${d(rule.value)} gesetzt`;
+        return t("Werte ≥ {v} auf {v2} gesetzt", { v: d(rule.threshold), v2: d(rule.value) });
       case "le":
-        return `Werte ≤ ${d(rule.threshold)} auf ${d(rule.value)} gesetzt`;
+        return t("Werte ≤ {v} auf {v2} gesetzt", { v: d(rule.threshold), v2: d(rule.value) });
       case "range":
-        return `Werte in [${d(rule.min)}, ${d(rule.max)}] auf ${d(rule.value)} gesetzt`;
+        return t("Werte in [{v}, {v2}] auf {v3} gesetzt", { v: d(rule.min), v2: d(rule.max), v3: d(rule.value) });
       case "clip":
-        return `Werte auf [${d(rule.min)}, ${d(rule.max)}] begrenzt`;
+        return t("Werte auf [{v}, {v2}] begrenzt", { v: d(rule.min), v2: d(rule.max) });
       case "linear":
-        return `Werte × ${fmt(rule.a)} + ${d(rule.b)}`;
+        return t("Werte × {v} + {v2}", { v: fmt(rule.a), v2: d(rule.b) });
     }
   }
   switch (op.type) {
     case "voi": {
-      const where = op.region === "inside" ? "innerhalb" : "außerhalb";
+      const where = op.region === "inside" ? "innerhalb" : t("außerhalb");
       const shape =
         op.voi.kind === "sphere"
-          ? `Kugel r = ${fmt(op.voi.radius)} mm`
+          ? t("Kugel r = {v} mm", { v: fmt(op.voi.radius) })
           : op.voi.kind === "box"
-            ? `Quader ${op.voi.size.map(fmt).join(" × ")} mm`
+            ? t("Quader {v} mm", { v: op.voi.size.map(fmt).join(" × ") })
             : "gezeichnete VOI";
-      const action = op.action.kind === "set" ? `auf ${d(op.action.value)} gesetzt` : `× ${fmt(op.action.factor)}`;
-      return `${shape}: Werte ${where} ${action}`;
+      const action = op.action.kind === "set" ? t("auf {v} gesetzt", { v: d(op.action.value) }) : `× ${fmt(op.action.factor)}`;
+      return t("{shape}: Werte {where} {action}", { shape, where, action });
     }
     case "gaussian":
-      return `Gauß-Glättung, FWHM ${fmt(op.fwhmMm)} mm`;
+      return t("Gauß-Glättung, FWHM {v} mm", { v: fmt(op.fwhmMm) });
     case "crop":
-      return `Zugeschnitten auf ${op.max[0] - op.min[0] + 1} × ${op.max[1] - op.min[1] + 1} × ${op.max[2] - op.min[2] + 1} Voxel`;
+      return t("Zugeschnitten auf {v} × {v2} × {v3} Voxel", { v: op.max[0] - op.min[0] + 1, v2: op.max[1] - op.min[1] + 1, v3: op.max[2] - op.min[2] + 1 });
     case "flip":
-      return `Gespiegelt (${["Rechts↔Links", "Anterior↔Posterior", "Kopf↔Fuß"][op.patientAxis ?? op.axis]})`;
+      return t("Gespiegelt ({v})", { v: [t("Rechts↔Links"), "Anterior↔Posterior", t("Kopf↔Fuß")][op.patientAxis ?? op.axis] });
     case "rotate90":
-      return `Um ${(((op.turns % 4) + 4) % 4) * 90}° gedreht (axial)`;
+      return t("Um {v}° gedreht (axial)", { v: (((op.turns % 4) + 4) % 4) * 90 });
     case "resample":
-      return `Resampling auf ${op.spacing.map(fmt).join(" × ")} mm`;
+      return t("Resampling auf {v} mm", { v: op.spacing.map(fmt).join(" × ") });
     default:
       return "Bearbeitung";
   }

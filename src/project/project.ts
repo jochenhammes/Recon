@@ -4,6 +4,7 @@ import { listZip } from "../core/unzip";
 import { Volume3D } from "../viewer/volume";
 import { parseDicomBytes } from "../viewer/volumeLoader";
 
+import { t } from "../i18n";
 /**
  * Project file (.recon): a ZIP (stored) with `project.json` – the session state as JSON – and one binary entry
  * per typed array (voxel data, frames, DICOM file bytes, masks …). Volumes, typed arrays, Maps/Sets and DICOM data
@@ -83,9 +84,9 @@ export function decode(encoded: { root: unknown; volumes: { nz: number; ny: numb
     let a = arrays.get(key);
     if (!a) {
       const T = TYPED[type];
-      if (!T) throw new ProjectError(`Unbekannter Datentyp ${type}.`);
+      if (!T) throw new ProjectError(t("Unbekannter Datentyp {type}.", { type }));
       const b = blobs[i];
-      if (!b) throw new ProjectError(`Binärdaten ${i} fehlen.`);
+      if (!b) throw new ProjectError(t("Binärdaten {i} fehlen.", { i }));
       // Entries read from the ZIP are fresh copies (offset 0): use their buffer directly, else copy (alignment).
       const whole = b.byteOffset === 0 && b.byteLength === b.buffer.byteLength;
       a = new T((whole ? b.buffer : b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength)) as ArrayBuffer);
@@ -132,7 +133,7 @@ function zipBlob(entries: { name: string; bytes: Uint8Array }[], date = new Date
     const name = enc.encode(e.name);
     const crc = crc32(e.bytes);
     const size = e.bytes.length;
-    if (offset + size > 0xfffffff0) throw new ProjectError("Projekt größer als 4 GB – bitte weniger Datensätze speichern.");
+    if (offset + size > 0xfffffff0) throw new ProjectError(t("Projekt größer als 4 GB – bitte weniger Datensätze speichern."));
     const lh = new DataView(new ArrayBuffer(30));
     lh.setUint32(0, 0x04034b50, true);
     lh.setUint16(4, 20, true);
@@ -184,14 +185,14 @@ export async function loadProject(buffer: ArrayBuffer): Promise<{ state: unknown
   try {
     entries = listZip(buffer);
   } catch {
-    throw new ProjectError("Keine Recon-Studio-Projektdatei.");
+    throw new ProjectError(t("Keine Recon-Studio-Projektdatei."));
   }
   const main = entries.find((e) => e.name === "project.json");
-  if (!main) throw new ProjectError("Keine Recon-Studio-Projektdatei (project.json fehlt).");
+  if (!main) throw new ProjectError(t("Keine Recon-Studio-Projektdatei (project.json fehlt)."));
   const doc = JSON.parse(new TextDecoder().decode(await main.read())) as { format?: string; version?: number; state: Parameters<typeof decode>[0] } & Record<string, unknown>;
-  if (doc.format !== PROJECT_FORMAT) throw new ProjectError("Keine Recon-Studio-Projektdatei.");
+  if (doc.format !== PROJECT_FORMAT) throw new ProjectError(t("Keine Recon-Studio-Projektdatei."));
   if (typeof doc.version !== "number" || doc.version > PROJECT_VERSION)
-    throw new ProjectError(`Projektdatei Version ${doc.version} ist neuer als diese App (Version ${PROJECT_VERSION}) – bitte die App aktualisieren.`);
+    throw new ProjectError(t("Projektdatei Version {version} ist neuer als diese App (Version {PROJECT_VERSION}) – bitte die App aktualisieren.", { version: doc.version, PROJECT_VERSION }));
   const blobs: Uint8Array[] = [];
   for (const e of entries) {
     const m = e.name.match(/^bin\/(\d+)\.bin$/);

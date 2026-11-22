@@ -2,6 +2,7 @@ import { Download, Printer, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 
+import { t } from "../i18n";
 /**
  * Dosimetry report shown large over the viewer (like the enlarged tables): the self-contained HTML in a sandboxed
  * frame, with print/PDF, download and close (Esc).
@@ -19,13 +20,13 @@ export function ReportOverlay({ html, title, onDownload, onClose }: { html: stri
     <div className="table-overlay report-overlay" role="dialog" aria-label={title}>
       <div className="table-overlay-head">
         <h3>{title}</h3>
-        <button className="secondary-btn" onClick={() => frame.current?.contentWindow?.print()} title="Drucken oder als PDF speichern">
+        <button className="secondary-btn" onClick={() => frame.current?.contentWindow?.print()} title={t("Drucken oder als PDF speichern")}>
           <Printer size={13} /> Drucken / PDF
         </button>
         <button className="secondary-btn" onClick={onDownload}>
           <Download size={13} /> HTML
         </button>
-        <button className="icon-btn small" title="Schließen (Esc)" aria-label="Schließen" onClick={onClose}>
+        <button className="icon-btn small" title={t("Schließen (Esc)")} aria-label={t("Schließen")} onClick={onClose}>
           <X size={14} />
         </button>
       </div>

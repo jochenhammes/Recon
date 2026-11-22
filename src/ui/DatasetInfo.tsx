@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import type { LoadedDataset } from "../dataset/types";
 import { MODALITIES, acquisitionTime, autoModality, formatAcquisitionTime, modalityLabel, modalityName, seriesDescription, shortName } from "../dataset/describe";
 
+import { t } from "../i18n";
 /** Details of a loaded dataset (modality, source, matrix, voxel size, geometry); shown when a list row is expanded. */
 export interface DatasetDetailsProps {
   dataset: LoadedDataset;
@@ -26,7 +27,7 @@ export function DatasetDetails({ dataset, onModalityChange, onNameChange, origin
   return (
     <div className="dataset-details">
       <dl className="summary-list">
-        <dt>Bezeichnung</dt>
+        <dt>{t("Bezeichnung")}</dt>
         <dd>
           {onNameChange ? (
             <NameField value={dataset.displayName} original={originalName} onCommit={onNameChange} />
@@ -34,13 +35,13 @@ export function DatasetDetails({ dataset, onModalityChange, onNameChange, origin
             <span title={dataset.displayName}>{shortName(dataset.displayName)}</span>
           )}
         </dd>
-        <dt>Modalität</dt>
+        <dt>{t("Modalität")}</dt>
         <dd>
           {onModalityChange && !dataset.atlas && !dataset.template ? (
             <select
               className="inline-select"
               value={src.modality ?? ""}
-              title="Modalität für Anzeige, Auswertung und Export – automatisch aus DICOM-Header bzw. Erkennung, oder hier wählen."
+              title={t("Modalität für Anzeige, Auswertung und Export – automatisch aus DICOM-Header bzw. Erkennung, oder hier wählen.")}
               onChange={(e) => onModalityChange(e.target.value || undefined)}
             >
               <option value="">automatisch ({modalityName(autoModality(src))})</option>
@@ -57,38 +58,38 @@ export function DatasetDetails({ dataset, onModalityChange, onNameChange, origin
         </dd>
         {seriesDescription(src) && (
           <>
-            <dt>Serie</dt>
+            <dt>{t("Serie")}</dt>
             <dd>{seriesDescription(src)}</dd>
           </>
         )}
         {acq && (
           <>
-            <dt>Aufnahme</dt>
-            <dd className="wrap" title={acq.field === "Acquisition" ? "Aufnahmedatum/-zeit aus dem DICOM-Header" : `Kein Aufnahmezeitpunkt im Header – ${{ Series: "Seriendatum/-zeit", Content: "Erstellungsdatum/-zeit", Study: "Studiendatum/-zeit" }[acq.field]} angezeigt`}>
+            <dt>{t("Aufnahme")}</dt>
+            <dd className="wrap" title={acq.field === "Acquisition" ? t("Aufnahmedatum/-zeit aus dem DICOM-Header") : t("Kein Aufnahmezeitpunkt im Header – {v} angezeigt", { v: { Series: "Seriendatum/-zeit", Content: "Erstellungsdatum/-zeit", Study: "Studiendatum/-zeit" }[acq.field] })}>
               {formatAcquisitionTime(acq)}
               {acq.field !== "Acquisition" && <span className="row-note"> ({{ Series: "Serie", Content: "Erstellung", Study: "Studie" }[acq.field]})</span>}
             </dd>
           </>
         )}
-        <dt>Umfang</dt>
+        <dt>{t("Umfang")}</dt>
         <dd>{files}</dd>
-        <dt>Matrix</dt>
+        <dt>{t("Matrix")}</dt>
         <dd>
           {v.nx} × {v.ny} × {v.nz}
         </dd>
-        <dt>Voxel</dt>
+        <dt>{t("Voxel")}</dt>
         <dd>
           {sx.toFixed(2)} × {sy.toFixed(2)} × {sz.toFixed(2)} mm
         </dd>
-        <dt>Patientenkoordinaten</dt>
-        <dd>{src.kind === "nifti" ? niftiPlacement(src.nifti.headerBytes, src.nifti.littleEndian) : v.hasPatientGeometry ? "vorhanden" : "nicht bekannt"}</dd>
-        <dt>Ursprung</dt>
-        <dd title="Weltkoordinaten (LPS, mm) des ersten Voxels">
-          {v.geometry.origin.map((c) => c.toFixed(1)).join(" / ")} mm{dataset.reoriented ? " · neu gesetzt (Landmarke)" : ""}
+        <dt>{t("Patientenkoordinaten")}</dt>
+        <dd>{src.kind === "nifti" ? niftiPlacement(src.nifti.headerBytes, src.nifti.littleEndian) : v.hasPatientGeometry ? "vorhanden" : t("nicht bekannt")}</dd>
+        <dt>{t("Ursprung")}</dt>
+        <dd title={t("Weltkoordinaten (LPS, mm) des ersten Voxels")}>
+          {v.geometry.origin.map((c) => c.toFixed(1)).join(" / ")} mm{dataset.reoriented ? t(" · neu gesetzt (Landmarke)") : ""}
         </dd>
         {dataset.dynamic && (
           <>
-            <dt>Dynamisch</dt>
+            <dt>{t("Dynamisch")}</dt>
             <dd>
               {dataset.dynamic.frames.length} Frames · {Math.round((dataset.dynamic.start.at(-1)! + dataset.dynamic.duration.at(-1)!) / 60)} min (angezeigt: Mittelbild)
             </dd>
@@ -96,14 +97,14 @@ export function DatasetDetails({ dataset, onModalityChange, onNameChange, origin
         )}
         {dataset.edits.length > 0 && (
           <>
-            <dt>Bearbeitungen</dt>
+            <dt>{t("Bearbeitungen")}</dt>
             <dd>{dataset.edits.length}</dd>
           </>
         )}
       </dl>
       {onMakeBase && (
-        <button className="secondary-btn" disabled={isBase} onClick={onMakeBase} title="Die Basis definiert den Raum der Ansicht; die anderen Datensätze werden darüber gezeigt.">
-          {isBase ? "Ist Basis der Ansicht" : "Als Basis der Ansicht"}
+        <button className="secondary-btn" disabled={isBase} onClick={onMakeBase} title={t("Die Basis definiert den Raum der Ansicht; die anderen Datensätze werden darüber gezeigt.")}>
+          {isBase ? t("Ist Basis der Ansicht") : t("Als Basis der Ansicht")}
         </button>
       )}
       {children}
@@ -113,13 +114,13 @@ export function DatasetDetails({ dataset, onModalityChange, onNameChange, origin
 
 /** Placement information of a NIfTI header: sform/qform codes (0 = not set → only voxel size, origin 0). */
 function niftiPlacement(header: Uint8Array, le: boolean): string {
-  if (header.length < 256) return "nicht bekannt";
+  if (header.length < 256) return t("nicht bekannt");
   const view = new DataView(header.buffer, header.byteOffset, header.byteLength);
   const q = view.getInt16(252, le), s = view.getInt16(254, le);
   const code = (c: number) => ["unbekannt", "Scanner", "ausgerichtet", "Talairach", "MNI"][c] ?? String(c);
   if (s > 0) return `sform (${code(s)})${q > 0 ? `, qform (${code(q)})` : ""}`;
   if (q > 0) return `qform (${code(q)})`;
-  return "keine Lageangaben im NIfTI – nur Voxelgröße, Ursprung 0 (Landmarken setzen)";
+  return t("keine Lageangaben im NIfTI – nur Voxelgröße, Ursprung 0 (Landmarken setzen)");
 }
 
 /** Name field: applied on Enter or when leaving the field; empty → original name. */
@@ -135,7 +136,7 @@ function NameField({ value, original, onCommit }: { value: string; original?: st
       <input
         type="text"
         value={text}
-        title="Wird Teil der Exportdateinamen. Leer = Originalname."
+        title={t("Wird Teil der Exportdateinamen. Leer = Originalname.")}
         onChange={(e) => setText(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => {

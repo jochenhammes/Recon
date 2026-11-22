@@ -5,6 +5,7 @@ import type { VoxelGrid } from "../viewer/types";
 import type { Lesion } from "./segment";
 import { canonicalName } from "../segmentation/labelMap";
 
+import { t } from "../i18n";
 /**
  * Coupling of CT organ labels (TotalSegmentator names) with the PET lesion segmentation: physiological
  * uptake, anatomical location, liver reference.
@@ -77,7 +78,7 @@ export function annotateLesions(
       organ,
       bone: bone / total > fraction,
       included: isExcluded ? false : l.included,
-      note: isExcluded ? `physiologisch (${organ || "Ausschlussorgan"})` : l.note,
+      note: isExcluded ? t("physiologisch ({v})", { v: organ || "Ausschlussorgan" }) : l.note,
     };
   });
 }

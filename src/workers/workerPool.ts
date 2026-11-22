@@ -3,6 +3,7 @@ import { sliceSinogramRows, type Sinogram } from "../recon/sinogram";
 import type { ReconstructRequestMessage, WorkerResponseMessage } from "./types";
 
 import { workerOptions } from "../i18n/lang";
+import { t } from "../i18n";
 export interface ReconstructedVolumeData {
   data: Float32Array;
   rows: number;
@@ -88,7 +89,7 @@ export function reconstructVolume(
       };
       worker.onerror = (ev) => {
         cleanup();
-        reject(new Error(`Worker-Fehler: ${ev.message}`));
+        reject(new Error(t("Worker-Fehler: {message}", { message: ev.message })));
       };
 
       const request: ReconstructRequestMessage = { type: "reconstruct", sino: chunkSino, zOffset: chunk.zStart, params };

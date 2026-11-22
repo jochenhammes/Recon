@@ -20,6 +20,7 @@ import { encodePixels } from "./pixelEncode";
 import { generateUid } from "./uid";
 import { type HeaderEdit, applyHeaderEdits } from "../header/headerModel";
 
+import { t } from "../i18n";
 export interface TemplateSeriesOptions {
   seriesDescription?: string;
   derivationDescription?: string;
@@ -61,7 +62,7 @@ const ds = (values: number[]) => values.map((v) => formatDS(Number(v.toFixed(6))
 export function buildTemplateSeries(volume: Volume3D, template: DicomSourceFile, opts: TemplateSeriesOptions = {}): { files: ExportedFile[]; warnings: string[] } {
   const { dataSet } = template;
   if (dataSet.elements[G.PerFrameFunctionalGroups])
-    throw new Error("Enhanced-Multiframe-DICOM kann nicht als Vorlage für ein neues Voxelraster dienen.");
+    throw new Error(t("Enhanced-Multiframe-DICOM kann nicht als Vorlage für ein neues Voxelraster dienen."));
 
   const g = volume.geometry;
   const { nx, ny, nz } = volume;
@@ -128,10 +129,10 @@ export function buildTemplateSeries(volume: Volume3D, template: DicomSourceFile,
       parts[0] = "DERIVED";
       overrides.set(T.ImageType, stringValue("CS", parts.join("\\")));
     }
-    const desc = anon ? `ANONYMISIERT ${opts.seriesDescription ?? ""}`.trim() : (opts.seriesDescription ?? dataSet.string(T.SeriesDescription) ?? "");
+    const desc = anon ? t("ANONYMISIERT {v}", { v: opts.seriesDescription ?? "" }).trim() : (opts.seriesDescription ?? dataSet.string(T.SeriesDescription) ?? "");
     overrides.set(T.SeriesDescription, stringValue("LO", desc.slice(0, 64)));
     if (opts.derivationDescription) overrides.set(T.DerivationDescription, stringValue("ST", opts.derivationDescription.slice(0, 1024)));
-    if (encoded.rescaled) warnings.push(`Skalierung angepasst (Slope ${formatDS(enc.slope)}, Intercept ${formatDS(enc.intercept)})`);
+    if (encoded.rescaled) warnings.push(t("Skalierung angepasst (Slope {v}, Intercept {v2})", { v: formatDS(enc.slope), v2: formatDS(enc.intercept) }));
   };
 
   const newOverrides = (): TagOverrides => {
@@ -167,7 +168,7 @@ export function buildTemplateSeries(volume: Volume3D, template: DicomSourceFile,
     if (dataSet.elements[G.ImageIndex]) overrides.set(G.ImageIndex, usValue(k + 1));
     if (dataSet.elements[G.NumberOfSlices]) overrides.set(G.NumberOfSlices, usValue(nz));
     applyHeaderEdits(overrides, opts.headerEdits?.filter((e) => e.scope === "all" || e.scope === 0), 0, template);
-    files.push({ name: `IM${String(k + 1).padStart(5, "0")}.dcm`, bytes: rewriteDicom(template, overrides) });
+    files.push({ name: t("IM{v}.dcm", { v: String(k + 1).padStart(5, "0") }), bytes: rewriteDicom(template, overrides) });
   }
   return { files, warnings: dedupe(warnings) };
 }
@@ -184,5 +185,5 @@ function concat(parts: Uint8Array[]): Uint8Array {
 
 function dedupe(warnings: string[]): string[] {
   if (warnings.length <= 1) return warnings;
-  return [`${warnings.length} Schichten neu skaliert (Werte außerhalb des Vorlagen-Wertebereichs).`];
+  return [t("{length} Schichten neu skaliert (Werte außerhalb des Vorlagen-Wertebereichs).", { length: warnings.length })];
 }

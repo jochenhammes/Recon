@@ -1,5 +1,6 @@
 import { COST_LABELS, type CostName } from "../registration/cost";
 
+import { t, tk } from "../i18n";
 export type CostChoice = CostName | "auto";
 
 export interface CoregSettings {
@@ -12,9 +13,9 @@ export interface CoregSettings {
 }
 
 const LEVEL_PRESETS: { label: string; levels: number[] }[] = [
-  { label: "Standard (8 → 4 → 2 mm)", levels: [8, 4, 2] },
-  { label: "Schnell (8 → 4 mm)", levels: [8, 4] },
-  { label: "Fein (8 → 4 → 2 → 1 mm)", levels: [8, 4, 2, 1] },
+  { label: tk("Standard (8 → 4 → 2 mm)"), levels: [8, 4, 2] },
+  { label: tk("Schnell (8 → 4 mm)"), levels: [8, 4] },
+  { label: tk("Fein (8 → 4 → 2 → 1 mm)"), levels: [8, 4, 2, 1] },
 ];
 
 export interface CoregSettingsFormProps {
@@ -32,7 +33,7 @@ export function CoregSettingsForm(props: CoregSettingsFormProps) {
   const preset = LEVEL_PRESETS.findIndex((p) => p.levels.join() === settings.levels.join());
   return (
     <>
-      <div className="segmented-control" role="group" aria-label="Freiheitsgrade">
+      <div className="segmented-control" role="group" aria-label={t("Freiheitsgrade")}>
         <button className={settings.dof === 6 ? "active" : ""} disabled={running} onClick={() => set({ dof: 6 })}>
           Rigide (6)
         </button>
@@ -42,18 +43,18 @@ export function CoregSettingsForm(props: CoregSettingsFormProps) {
       </div>
       <div className="field-row">
         <label className="field">
-          Kostenfunktion
+          {t("Kostenfunktion")}
           <select value={settings.cost} disabled={running} onChange={(e) => set({ cost: e.target.value as CostChoice })}>
-            <option value="auto">Automatisch ({COST_LABELS[props.autoCost].split(" (")[0]})</option>
+            <option value="auto">{t("Automatisch ({cost})", { cost: t(COST_LABELS[props.autoCost]).split(" (")[0] })}</option>
             {(Object.keys(COST_LABELS) as CostName[]).map((c) => (
               <option key={c} value={c}>
-                {COST_LABELS[c]}
+                {t(COST_LABELS[c])}
               </option>
             ))}
           </select>
         </label>
         <label className="field">
-          Auflösungsstufen
+          {t("Auflösungsstufen")}
           <select value={preset} disabled={running} onChange={(e) => set({ levels: LEVEL_PRESETS[Number(e.target.value)].levels })}>
             {LEVEL_PRESETS.map((p, i) => (
               <option key={p.label} value={i}>
@@ -65,12 +66,12 @@ export function CoregSettingsForm(props: CoregSettingsFormProps) {
       </div>
       <label className="checkbox-field">
         <input type="checkbox" checked={settings.coarseSearch} disabled={running} onChange={(e) => set({ coarseSearch: e.target.checked })} />
-        <span title="Schwerpunkt-Ausrichtung plus Rotationsraster ±30° auf der gröbsten Stufe – für Daten aus verschiedenen Untersuchungen">Grobsuche</span>
+        <span title={t("Schwerpunkt-Ausrichtung plus Rotationsraster ±30° auf der gröbsten Stufe – für Daten aus verschiedenen Untersuchungen")}>{t("Grobsuche")}</span>
       </label>
       {settings.coarseSearch && (
         <label className="checkbox-field">
           <input type="checkbox" checked={!!settings.keepStart} disabled={running} onChange={(e) => set({ keepStart: e.target.checked })} />
-          <span title="Nach Landmarken-Ausrichtung: nur ±10° / ±10 mm um die aktuelle Lage suchen, kein Sprung auf den Schwerpunkt">Startlage beibehalten</span>
+          <span title={t("Nach Landmarken-Ausrichtung: nur ±10° / ±10 mm um die aktuelle Lage suchen, kein Sprung auf den Schwerpunkt")}>{t("Startlage beibehalten")}</span>
         </label>
       )}
     </>

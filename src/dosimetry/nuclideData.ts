@@ -1,5 +1,6 @@
 import { NUCLIDES, type Nuclide } from "../header/radionuclide";
 
+import { tk } from "../i18n";
 /**
  * Mean energy emitted per nuclear transformation for absorbed-dose calculation (ICRP Publication 107,
  * summed values from the MIRDspecs data sets).
@@ -20,7 +21,7 @@ export interface NuclideEnergy {
 
 export const THERAPY_NUCLIDES = ["Lu-177", "Tb-161", "I-131", "Y-90"] as const;
 
-const ICRP107 = "ICRP Publication 107 (Eckerman & Endo 2008), Summen nach MIRDspecs";
+const ICRP107 = tk("ICRP Publication 107 (Eckerman & Endo 2008), Summen nach MIRDspecs");
 
 export const DEFAULT_ENERGIES: Record<string, NuclideEnergy> = {
   "Lu-177": { id: "Lu-177", electronKeV: 147.92, betaKeV: 133.3, photonKeV: 35.09, verified: true, source: ICRP107 },

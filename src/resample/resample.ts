@@ -1,12 +1,13 @@
 import { type Vec3, type VolumeGeometry, type WorldToVoxel, add, applyWorldToVoxel, scale, voxelToWorld } from "../core/geometry";
 import type { VoxelGrid } from "../viewer/types";
 
+import { tk } from "../i18n";
 export type Interpolation = "nearest" | "linear" | "bspline";
 
 export const INTERPOLATION_LABELS: Record<Interpolation, string> = {
-  nearest: "Nächster Nachbar (Masken/Labels)",
-  linear: "Trilinear (Standard)",
-  bspline: "Kubischer B-Spline (schärfer)",
+  nearest: tk("Nächster Nachbar (Masken/Labels)"),
+  linear: tk("Trilinear (Standard)"),
+  bspline: tk("Kubischer B-Spline (schärfer)"),
 };
 
 /** Target voxel grid: dimensions and patient geometry. */

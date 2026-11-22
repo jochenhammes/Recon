@@ -1,6 +1,7 @@
 import { quickselect } from "../analysis/stats";
 import { type VolumeGeometry, identityGeometry } from "../core/geometry";
 
+import { tk } from "../i18n";
 /**
  * 3D volume, slice-major: data[(z * ny + y) * nx + x], with its position in patient space.
  * Index axes: x = column, y = row, z = slice (see VolumeGeometry).
@@ -118,14 +119,14 @@ export type ColorLut = "gray" | "inverted" | "hot" | "dat" | "blue" | "diverging
 
 /** Color tables offered in the UI (label and VOI tables are special-purpose). */
 export const LUT_CHOICES: { value: ColorLut; label: string }[] = [
-  { value: "gray", label: "Graustufen" },
-  { value: "inverted", label: "Invertiert" },
-  { value: "hot", label: "Hot (Schwarz–Rot–Gelb–Weiß)" },
-  { value: "dat", label: "DaT (Schwarz–Grün–Gelb–Hellrot)" },
-  { value: "blue", label: "Blau (Schwarz–Blau–Hellblau–Weiß)" },
-  { value: "diverging", label: "Blau–Weiß–Rot (Z-Werte)" },
-  { value: "rainbow", label: "Regenbogen" },
-  { value: "labels", label: "Atlas-Regionen (Farbtabelle)" },
+  { value: "gray", label: tk("Graustufen") },
+  { value: "inverted", label: tk("Invertiert") },
+  { value: "hot", label: tk("Hot (Schwarz–Rot–Gelb–Weiß)") },
+  { value: "dat", label: tk("DaT (Schwarz–Grün–Gelb–Hellrot)") },
+  { value: "blue", label: tk("Blau (Schwarz–Blau–Hellblau–Weiß)") },
+  { value: "diverging", label: tk("Blau–Weiß–Rot (Z-Werte)") },
+  { value: "rainbow", label: tk("Regenbogen") },
+  { value: "labels", label: tk("Atlas-Regionen (Farbtabelle)") },
 ];
 
 /** Old names: "kidney" was the hot-body table (project version 1), then briefly the DaT table (version 2). */

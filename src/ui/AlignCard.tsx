@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Card } from "./Card";
 import { shortLabel } from "../core/shortLabel";
 
+import { tr, tk } from "../i18n";
 export type AlignTab = "landmarks" | "auto" | "manual";
 
 export interface AlignCardProps {
@@ -22,9 +23,9 @@ export interface AlignCardProps {
 }
 
 const TABS: { id: AlignTab; label: string; sub?: string; title: string }[] = [
-  { id: "landmarks", label: "① Landmarken", sub: "optional", title: "Grob ausrichten über zwei anatomische Punkte – vor der automatischen Registrierung" },
-  { id: "auto", label: "② Automatisch", title: "Intensitätsbasierte Registrierung auf die Basis" },
-  { id: "manual", label: "Manuell", title: "Verschieben und Drehen von Hand (Nachkorrektur)" },
+  { id: "landmarks", label: tk("① Landmarken"), sub: "optional", title: tk("Grob ausrichten über zwei anatomische Punkte – vor der automatischen Registrierung") },
+  { id: "auto", label: tk("② Automatisch"), title: tk("Intensitätsbasierte Registrierung auf die Basis") },
+  { id: "manual", label: tk("Manuell"), title: tk("Verschieben und Drehen von Hand (Nachkorrektur)") },
 ];
 
 /** One card for aligning one dataset to the base: landmarks → automatic → manual. */
@@ -32,25 +33,25 @@ export function AlignCard(props: AlignCardProps) {
   const target = props.targets.find((t) => t.id === props.targetId);
   return (
     <Card
-      title={<>3 · Ausrichten</>}
+      title={<>{tr("3 · Ausrichten")}</>}
       persistKey="coreg-align"
-      status={props.mismatch ? { text: "⚠ Koordinaten", tone: "warn" } : (props.status ?? null)}
-      info="Richtet einen Datensatz auf die Basis aus: zuerst optional grob über Landmarken, dann automatisch, bei Bedarf von Hand. Datensätze derselben Aufnahme folgen automatisch."
+      status={props.mismatch ? { text: tr("⚠ Koordinaten"), tone: "warn" } : (props.status ?? null)}
+      info={tr("Richtet einen Datensatz auf die Basis aus: zuerst optional grob über Landmarken, dann automatisch, bei Bedarf von Hand. Datensätze derselben Aufnahme folgen automatisch.")}
     >
       <label className="field">
-        Datensatz
+        {tr("Datensatz")}
         <select value={props.targetId} onChange={(e) => props.onTargetChange(e.target.value)} title={target?.label}>
           {props.targets.map((t) => (
             <option key={t.id} value={t.id} title={t.label}>
               {shortLabel(t.label)}
-              {t.single ? " (einzeln, ohne seine Aufnahme)" : ""}
+              {t.single ? tr(" (einzeln, ohne seine Aufnahme)") : ""}
             </option>
           ))}
         </select>
       </label>
       {props.mismatch && (
-        <p className="tool-hint tool-warning" title="Basis und Datensatz überlappen kaum – die Koordinatensysteme passen nicht zusammen. Zuerst über Landmarken ausrichten.">
-          Koordinaten passen nicht → Landmarken
+        <p className="tool-hint tool-warning" title={tr("Basis und Datensatz überlappen kaum – die Koordinatensysteme passen nicht zusammen. Zuerst über Landmarken ausrichten.")}>
+          {tr("Koordinaten passen nicht → Landmarken")}
         </p>
       )}
       <div className="segmented-control align-tabs" role="tablist">
@@ -63,7 +64,7 @@ export function AlignCard(props: AlignCardProps) {
       </div>
       <div role="tabpanel">{props.tab === "landmarks" ? props.landmarks : props.tab === "auto" ? props.auto : props.manual}</div>
       <details className="compact-details">
-        <summary>Erweitert</summary>
+        <summary>{tr("Erweitert")}</summary>
         {props.advanced}
       </details>
     </Card>

@@ -60,7 +60,7 @@ import { loadBundledEntry } from "./brain/load";
 import { cacheUserFiles, cachedEntryIds, cachedUserFiles, removeCachedEntry } from "./brain/userCache";
 import { BrainCatalog } from "./ui/BrainCatalog";
 import { LangToggle } from "./ui/LangToggle";
-import { useLang } from "./i18n";
+import { tx, useLang, tBoth } from "./i18n";
 import { parseXmlLabelTable } from "./atlas/labelNifti";
 import { LabelAnalysis, type LabelAnalysisResult } from "./ui/LabelAnalysis";
 import { listZip } from "./core/unzip";
@@ -93,7 +93,7 @@ import { runEdits } from "./edit/runner";
 import { type VoiShape, maskBounds, paintDisc, voiMask, voiStats } from "./edit/voi";
 import { computeStats } from "./analysis/stats";
 import type { SuvResult } from "./analysis/suv";
-import { type UnitMode, formatInput, formatValue, parseInput } from "./components/format";
+import { type UnitMode, fmtFixed, formatInput, formatValue, parseInput } from "./components/format";
 import { type LoadedDataset, type VolumeSource, createDataset } from "./dataset/types";
 import { type EditOp, type VoiAction, changesGrid, countAffected, describeEdit } from "./edit/operations";
 import { type LoadedVolume, decompressGzip, loadVolumeFromFiles } from "./viewer/volumeLoader";
@@ -683,14 +683,14 @@ function App() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = withPatientId(`Recon-Projekt_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}${PROJECT_EXTENSION}`, { project: true });
+      a.download = withPatientId(tx("Recon-Projekt_{v}{PROJECT_EXTENSION}", { v: new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-"), PROJECT_EXTENSION }), { project: true });
       document.body.appendChild(a);
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 60000);
-      setNotice(`Projekt gespeichert (${(blob.size / 1e6).toLocaleString("de-DE", { maximumFractionDigits: 1 })} MB).`);
+      setNotice(tx("Projekt gespeichert ({v} MB).", { v: (blob.size / 1e6).toLocaleString("de-DE", { maximumFractionDigits: 1 }) }));
     } catch (e) {
-      setProjectError(`Speichern fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
+      setProjectError(tx("Speichern fehlgeschlagen: {v}", { v: e instanceof Error ? e.message : String(e) }));
     } finally {
       setProjectBusy(null);
     }
@@ -698,20 +698,20 @@ function App() {
 
   async function openProjectFile(file: File) {
     if (projectBusy) return;
-    if (entries.length && !window.confirm("Projekt öffnen: Die aktuell geladenen Datensätze und Ergebnisse werden ersetzt. Fortfahren?")) return;
+    if (entries.length && !window.confirm(tx("Projekt öffnen: Die aktuell geladenen Datensätze und Ergebnisse werden ersetzt. Fortfahren?"))) return;
     setProjectBusy("open");
     setProjectError(null);
     try {
       const { state, meta } = await loadProject(await file.arrayBuffer());
       const st = state as ReturnType<typeof sessionState>;
-      if (!Array.isArray(st.entries)) throw new Error("Projekt enthält keine Datensätze.");
+      if (!Array.isArray(st.entries)) throw new Error(tx("Projekt enthält keine Datensätze."));
       // Bundled templates/atlases saved by reference: load them from the app again.
       st.entries = await Promise.all(
         st.entries.map(async (e) => {
           const ref = (e.dataset as unknown as { catalogRef?: string }).catalogRef;
           if (!ref) return e;
           const b = bundledEntry(ref);
-          if (!b) throw new Error(`Vorlage/Atlas „${ref}“ ist in dieser Version der App nicht enthalten.`);
+          if (!b) throw new Error(tx("Vorlage/Atlas „{ref}“ ist in dieser Version der App nicht enthalten.", { ref }));
           return { ...e, dataset: { ...(await loadBundledEntry(b)), displayName: e.dataset.displayName } };
         }),
       );
@@ -745,30 +745,28 @@ function App() {
       setCoregResults({});
       setProjectionSet(null);
       live.current = { entries: st.entries, referenceId: st.referenceId, activeId: st.activeId, overlayIds: st.overlayIds ?? [] };
-      setNotice(`Projekt „${file.name}“ geöffnet: ${st.entries.length} ${st.entries.length === 1 ? "Datensatz" : "Datensätze"}.`);
+      setNotice(tx("Projekt „{name}“ geöffnet: {length} {v}.", { name: file.name, length: st.entries.length, v: st.entries.length === 1 ? "Datensatz" : tx("Datensätze") }));
     } catch (e) {
-      setProjectError(e instanceof ProjectError ? e.message : `Öffnen fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
+      setProjectError(e instanceof ProjectError ? e.message : tx("Öffnen fehlgeschlagen: {v}", { v: e instanceof Error ? e.message : String(e) }));
     } finally {
       setProjectBusy(null);
     }
   }
 
   const projectCard = (
-    <Card title="Projekt" persistKey="project">
+    <Card title={tx("Projekt")} persistKey="project">
       <div className="button-row">
         <button className="secondary-btn" disabled={!entries.length || !!projectBusy} onClick={() => void saveProjectFile()}>
-          {projectBusy === "save" ? "Wird gespeichert …" : "Projekt speichern"}
+          {projectBusy === "save" ? tx("Wird gespeichert …") : tx("Projekt speichern")}
         </button>
         <button className="secondary-btn" disabled={!!projectBusy} onClick={() => projectInput.current?.click()}>
-          {projectBusy === "open" ? "Wird geöffnet …" : "Projekt öffnen …"}
+          {projectBusy === "open" ? tx("Wird geöffnet …") : tx("Projekt öffnen …")}
         </button>
       </div>
       <InfoText
         details={
           <>
-            Gespeichert werden alle Datensätze (DICOM-Originaldateien, NIfTI-Volumen, Bearbeitungen, dynamische Frames), Registrierungen,
-            Schlagworte, Anzeige, Normalisierung sowie Centiloid- und Tumorlast-Ergebnisse. Kinetik-Tabellen und Label-Analysen werden nach dem
-            Öffnen neu berechnet. Die Datei enthält die Patientendaten der geladenen Bilder – vertraulich behandeln.
+            {tx("Gespeichert werden alle Datensätze (DICOM-Originaldateien, NIfTI-Volumen, Bearbeitungen, dynamische Frames), Registrierungen, Schlagworte, Anzeige, Normalisierung sowie Centiloid- und Tumorlast-Ergebnisse. Kinetik-Tabellen und Label-Analysen werden nach dem Öffnen neu berechnet. Die Datei enthält die Patientendaten der geladenen Bilder – vertraulich behandeln.")}
           </>
         }
       >
@@ -858,7 +856,7 @@ function App() {
       if (ops.some(changesGrid) || (from === "original" && base.edits.some(changesGrid))) setVoi(null);
       return affected;
     } catch (e) {
-      setError(`Bearbeitung fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
+      setError(tx("Bearbeitung fehlgeschlagen: {v}", { v: e instanceof Error ? e.message : String(e) }));
       return null;
     } finally {
       setEditBusy(false);
@@ -871,7 +869,7 @@ function App() {
     const affected = await commit(target.id, dataset, "current", [op], [...dataset.edits, op]);
     // Feedback: which dataset changed and how many voxels (value and VOI operations can look subtle in a wide window).
     if (affected !== null && (op.type === "voi" || op.type === "value" || op.type === "thresholdReplace"))
-      setNotice(`${describeEdit(op, unitFor(target))} – ${affected.toLocaleString("de-DE")} Voxel in ${entryShort(target, 30)} geändert.`);
+      setNotice(tx("{v} – {v2} Voxel in {v3} geändert.", { v: describeEdit(op, unitFor(target)), v2: affected.toLocaleString("de-DE"), v3: entryShort(target, 30) }));
   }
 
   /** Space a dataset lives in: common mirror/rotation center only within the same space. */
@@ -885,8 +883,8 @@ function App() {
     id: e.id,
     label: entryLabel(e),
     defaultOn: !e.dataset.template,
-    disabledReason: e.dataset.dynamic ? "dynamisch – nicht möglich" : undefined,
-    note: e.dataset.template ? "Vorlage" : active && spaceOf(e) !== spaceOf(active) ? "anderer Raum: eigene Mitte" : undefined,
+    disabledReason: e.dataset.dynamic ? tx("dynamisch – nicht möglich") : undefined,
+    note: e.dataset.template ? "Vorlage" : active && spaceOf(e) !== spaceOf(active) ? tx("anderer Raum: eigene Mitte") : undefined,
   }));
 
   /** Flip / rotate / resample several datasets together (one undo step per dataset, linked by a group id). */
@@ -911,9 +909,9 @@ function App() {
         updateEntry(id, { dataset: { ...e.dataset, current: next, edits: [...e.dataset.edits, op] } });
       }
       setVoi(null);
-      if (skipped.length) setError(`Nicht gedreht (Schichten nicht axial): ${skipped.join(", ")}`);
+      if (skipped.length) setError(tx("Nicht gedreht (Schichten nicht axial): {v}", { v: skipped.join(", ") }));
     } catch (err) {
-      setError(`Bearbeitung fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`);
+      setError(tx("Bearbeitung fehlgeschlagen: {v}", { v: err instanceof Error ? err.message : String(err) }));
     } finally {
       setEditBusy(false);
     }
@@ -941,7 +939,7 @@ function App() {
       }
       setVoi(null);
     } catch (err) {
-      setError(`Rückgängig fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`);
+      setError(tx("Rückgängig fehlgeschlagen: {v}", { v: err instanceof Error ? err.message : String(err) }));
     } finally {
       setEditBusy(false);
     }
@@ -1013,7 +1011,7 @@ function App() {
       addDataset(createDataset(vol, { kind: "reconstruction", reconParams: params }, projectionSet.meta.sourceFileName));
     } catch (e) {
       if (!(e instanceof DOMException && e.name === "AbortError")) {
-        setError(`Rekonstruktion fehlgeschlagen: ${String(e instanceof Error ? e.message : e)}`);
+        setError(tx("Rekonstruktion fehlgeschlagen: {v}", { v: String(e instanceof Error ? e.message : e) }));
       }
     } finally {
       setBusy(false);
@@ -1045,8 +1043,8 @@ function App() {
     const src = entries.find(
       (x) =>
         x.id !== e.id &&
-        (e.dataset.displayName === `CT-Organe · ${x.dataset.displayName}` ||
-          e.dataset.displayName === `Läsionen · ${x.dataset.displayName}` ||
+        (tBoth("CT-Organe · {displayName}", { displayName: x.dataset.displayName }).includes(e.dataset.displayName) ||
+          tBoth("Läsionen · {displayName}", { displayName: x.dataset.displayName }).includes(e.dataset.displayName) ||
           (!!e.dataset.atlas && !x.dataset.atlas && norm(x.dataset.displayName).length >= 6 && norm(e.dataset.displayName).includes(norm(x.dataset.displayName)))),
     );
     return src ? (frameOf(src) ? `for:${frameOf(src)}` : `id:${src.id}`) : `id:${e.id}`;
@@ -1114,7 +1112,7 @@ function App() {
         setCoregResults((r) => ({ ...r, [id]: { previous, result, accepted: false } }));
       }
     } catch (err) {
-      if (!(err instanceof DOMException && err.name === "AbortError")) setCoregError(`Coregistrierung fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`);
+      if (!(err instanceof DOMException && err.name === "AbortError")) setCoregError(tx("Coregistrierung fehlgeschlagen: {v}", { v: err instanceof Error ? err.message : String(err) }));
     } finally {
       setCoregRunning(false);
       setRegQueue({ running: null, waiting: [] });
@@ -1161,7 +1159,7 @@ function App() {
       center,
       moving: { name: moving.dataset.displayName, frameOfReferenceUid: moving.dataset.current.geometry.frameOfReferenceUid },
       reference: { name: reference.dataset.displayName, frameOfReferenceUid: reference.dataset.current.geometry.frameOfReferenceUid },
-      method: coregResults[moving.id] ? `${coregSettings.dof === 6 ? "rigide" : "affin"}, ${coregResults[moving.id].result.cost}` : undefined,
+      method: coregResults[moving.id] ? `${coregSettings.dof === 6 ? tx("rigide") : tx("affin")}, ${coregResults[moving.id].result.cost}` : undefined,
       cost: coregResults[moving.id] ? { name: coregResults[moving.id].result.cost, before: coregResults[moving.id].result.before, after: coregResults[moving.id].result.after } : undefined,
       created: new Date().toISOString(),
     };
@@ -1204,8 +1202,8 @@ function App() {
   const defaultBundled = defaultTemplateId({ kind: subjectKind, modality: subjectModality, tracerHint: normSubject ? tracerHint(normSubject.dataset) : undefined });
   const defaultName = bundledTemplates.find((b) => b.id === defaultBundled)!.name;
   const templateOptions = [
-    ...templateEntries.map((e) => ({ id: e.id, label: e.dataset.template!.name, kind: e.dataset.template!.kind })),
-    ...bundledTemplates.filter((b) => !templateEntries.some((e) => e.dataset.template?.name === b.name)).map((b) => ({ id: `bundled:${b.id}`, label: `${b.name} · ${b.space} (wird geladen)`, kind: b.kind })),
+    ...templateEntries.map((e) => ({ id: e.id, label: tx(e.dataset.template!.name), kind: e.dataset.template!.kind })),
+    ...bundledTemplates.filter((b) => !templateEntries.some((e) => e.dataset.template?.name === b.name)).map((b) => ({ id: `bundled:${b.id}`, label: tx("{name} · {space} (wird geladen)", { name: tx(b.name), space: b.space }), kind: b.kind })),
   ];
   const autoTemplateId =
     templateEntries.find((e) => e.dataset.template?.name === defaultName)?.id ??
@@ -1233,7 +1231,7 @@ function App() {
       T.dataset.current,
       S.dataset.current,
       { dof: 12, cost: "nmi", levels: [8, 4], coarseSearch: true, initial: IDENTITY_MAT4 },
-      (p) => setNormProgress({ ...describeCoregProgress(p, affineShare / 2), stage: `Affin grob · Stufe ${p.level}/${p.levels}` }),
+      (p) => setNormProgress({ ...describeCoregProgress(p, affineShare / 2), stage: tx("Affin grob · Stufe {level}/{levels}", { level: p.level, levels: p.levels }) }),
     );
     normRun.current = rough;
     const r0 = await rough.promise;
@@ -1241,7 +1239,7 @@ function App() {
       T.dataset.current,
       S.dataset.current,
       { dof: 12, cost: opts.cost, levels: [4, 2], coarseSearch: false, initial: r0.matrix, fixedMask: opts.mask },
-      (p) => setNormProgress({ ...describeCoregProgress(p, affineShare / 2), fraction: affineShare / 2 + describeCoregProgress(p, affineShare / 2).fraction, stage: `Affin fein · Stufe ${p.level}/${p.levels}` }),
+      (p) => setNormProgress({ ...describeCoregProgress(p, affineShare / 2), fraction: affineShare / 2 + describeCoregProgress(p, affineShare / 2).fraction, stage: tx("Affin fein · Stufe {level}/{levels}", { level: p.level, levels: p.levels }) }),
     );
     normRun.current = run;
     const r = { ...(await run.promise), before: r0.before };
@@ -1258,7 +1256,7 @@ function App() {
     if (opts.nonlinear) {
       const t = T.dataset.current;
       const s = S.dataset.current;
-      setNormProgress({ stage: "Nichtlinear", detail: "Vorbereitung", fraction: affineShare });
+      setNormProgress({ stage: tx("Nichtlinear"), detail: tx("Vorbereitung"), fraction: affineShare });
       const warp = runWarp(
         {
           template: { data: t.data, dims: [t.nx, t.ny, t.nz], geometry: t.geometry },
@@ -1287,7 +1285,7 @@ function App() {
     const existing = byId(choice);
     if (existing?.dataset.template) return existing;
     const id = choice.replace(/^bundled:/, "");
-    setNormProgress({ stage: "Vorlage", detail: "wird geladen", fraction: 0.01 });
+    setNormProgress({ stage: tx("Vorlage"), detail: tx("wird geladen"), fraction: 0.01 });
     const b = bundledEntry(id === "mni" ? "mni-t1-2" : id);
     if (!b) return undefined;
     const e = addDataset(await loadBundledEntry(b));
@@ -1309,7 +1307,7 @@ function App() {
     const nonlinear = sameContrast && normMethod === "nonlinear";
     (async () => {
       const T0 = await resolveTemplate(normTemplateChoice);
-      if (!T0) throw new Error("Keine Vorlage.");
+      if (!T0) throw new Error(tx("Keine Vorlage."));
       // A 1 mm template is matched on a 2 mm block average (speed, memory); the result is put back on the chosen grid.
       const tpl0 = T0.dataset.template!;
       const coarse = tpl0.components?.length ? { volume: T0.dataset.current, mask: tpl0.mask } : coarseTemplate(T0.dataset.current, tpl0.mask);
@@ -1320,9 +1318,9 @@ function App() {
       let n = await estimateNormalization(T, subject, { nonlinear, cost: normCost, mask, regularization: normRegularization });
       let outTemplate = T0;
       if (normOutput === "1mm") {
-        setNormProgress({ stage: "Ausgabe 1 mm", detail: "MNI 2009c 1 mm wird geladen", fraction: 0.97 });
+        setNormProgress({ stage: tx("Ausgabe 1 mm"), detail: tx("MNI 2009c 1 mm wird geladen"), fraction: 0.97 });
         const ref = await addCatalogEntry("mni-t1-1");
-        if (!ref) throw new Error("Die 1-mm-Vorlage konnte nicht geladen werden.");
+        if (!ref) throw new Error(tx("Die 1-mm-Vorlage konnte nicht geladen werden."));
         outTemplate = ref;
       }
       const og = outTemplate.dataset.current;
@@ -1331,7 +1329,7 @@ function App() {
       await transferToStandardSpace(n, transferIds, "linear", outTemplate);
     })()
       .catch((e) => {
-        if (!(e instanceof DOMException && e.name === "AbortError")) setNormError(`Normalisierung fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
+        if (!(e instanceof DOMException && e.name === "AbortError")) setNormError(tx("Normalisierung fehlgeschlagen: {v}", { v: e instanceof Error ? e.message : String(e) }));
       })
       .finally(() => {
         setNormRunning(false);
@@ -1343,7 +1341,7 @@ function App() {
   async function exportFusion(format: FusionFormat, gridMode: FusionGridMode, anonymize: boolean) {
     if (!reference) return;
     setFusionBusy(true);
-    setFusionStatus("Wird berechnet …");
+    setFusionStatus(tx("Wird berechnet …"));
     try {
       await new Promise((r) => setTimeout(r, 0));
       const base = reference.dataset.current;
@@ -1355,7 +1353,7 @@ function App() {
         return w2v ? [{ volume: e.dataset.current, w2v, display: e.id === reference.id ? { ...e.display, opacity: 1 } : e.display }] : [];
       });
       const rgb = renderFusion(fusionLayers, grid);
-      const name = `Fusion_${stack.map((e) => datasetModality(e.dataset)).join("_")}`.replace(/[äöüÄÖÜß]/g, umlaut).replace(/[^A-Za-z0-9_.-]+/g, "_");
+      const name = tx("Fusion_{v}", { v: stack.map((e) => datasetModality(e.dataset)).join("_") }).replace(/[äöüÄÖÜß]/g, umlaut).replace(/[^A-Za-z0-9_.-]+/g, "_");
       let bytes: Uint8Array<ArrayBuffer>;
       let fileName: string;
       if (format === "nifti") {
@@ -1363,7 +1361,7 @@ function App() {
         fileName = `${name}.nii`;
       } else {
         const src = reference.dataset.source.kind === "dicom" ? reference.dataset.source.files[0].dataSet : undefined;
-        const files = buildFusionDicomSeries(rgb, grid, { seriesDescription: `Fusion ${stack.map((e) => datasetModality(e.dataset)).join("+")}`, source: src, anonymize });
+        const files = buildFusionDicomSeries(rgb, grid, { seriesDescription: tx("Fusion {v}", { v: stack.map((e) => datasetModality(e.dataset)).join("+") }), source: src, anonymize });
         bytes = buildZip(files.map((f) => ({ name: `${name}/${f.name}`, bytes: f.bytes })));
         fileName = `${name}.zip`;
       }
@@ -1375,7 +1373,7 @@ function App() {
       URL.revokeObjectURL(url);
       setFusionStatus(`${fileName}: ${grid.nx} × ${grid.ny} × ${grid.nz}, ${grid.geometry.spacing.map((v) => v.toFixed(2)).join(" × ")} mm.`);
     } catch (e) {
-      setFusionStatus(`Export fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
+      setFusionStatus(tx("Export fehlgeschlagen: {v}", { v: e instanceof Error ? e.message : String(e) }));
     } finally {
       setFusionBusy(false);
     }
@@ -1414,10 +1412,10 @@ function App() {
     const data = new Float32Array(tumor.labels.length);
     for (let i = 0; i < data.length; i++) if (inc.has(tumor.labels[i])) data[i] = tumor.labels[i];
     const labels = new Map(
-      [...inc.values()].sort((a, b) => a.id - b.id).map((l) => [l.id, `Läsion ${l.id}${l.organ ? ` · ${l.organ.replace(/_/g, " ")}` : ""}${l.bone ? " · Knochen" : ""}`] as [number, string]),
+      [...inc.values()].sort((a, b) => a.id - b.id).map((l) => [l.id, `${tx("Läsion {id}", { id: l.id })}${l.organ ? ` · ${l.organ.replace(/_/g, " ")}` : ""}${l.bone ? ` · ${tx("Knochen")}` : ""}`] as [number, string]),
     );
-    const name = `Läsionen · ${lesionPet.dataset.displayName}`;
-    const atlas = { name: `Läsionen (${tumor.description}) · ${lesionPet.dataset.displayName}`, labels };
+    const name = tx("Läsionen · {displayName}", { displayName: lesionPet.dataset.displayName });
+    const atlas = { name: tx("Läsionen ({description}) · {displayName}", { description: tumor.description, displayName: lesionPet.dataset.displayName }), labels };
     const vol = lesionPet.dataset.current.withData(data);
     const existing = tumor.datasetId ? entries.find((x) => x.id === tumor.datasetId) : undefined;
     if (existing) {
@@ -1431,7 +1429,7 @@ function App() {
     }
   }, [tumor?.labels, tumor?.lesions, tumor?.version, lesionPet?.matrix, lesionPet?.dataset.current]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const organEntry = tumorOrganId === null ? undefined : (byId(tumorOrganId ?? null) ?? organEntries.findLast((e) => e.dataset.displayName.startsWith("CT-Organe")));
+  const organEntry = tumorOrganId === null ? undefined : (byId(tumorOrganId ?? null) ?? organEntries.findLast((e) => /^CT[- ]organ/i.test(e.dataset.displayName)));
 
   /** Organ labels on the tumor PET grid (through both placements). */
   function organLabelsFor(pet: Entry, organs: Entry): Uint8Array | null {
@@ -1450,15 +1448,15 @@ function App() {
     if (!ct || !organs?.dataset.atlas || tripleBusy) return;
     setTripleBusy(true);
     setTripleError(null);
-    setTripleStatus("Organkarte auf das CT-Raster …");
+    setTripleStatus(tx("Organkarte auf das CT-Raster …"));
     try {
       await new Promise((res) => setTimeout(res, 20));
       const ow2v = w2vById.get(organs.id);
-      if (!ow2v) throw new Error("Organkarte und CT liegen nicht im selben Raum.");
+      if (!ow2v) throw new Error(tx("Organkarte und CT liegen nicht im selben Raum."));
       const v = ct.dataset.current;
       // Soft lung/bone masks: smoothed on the coarse organ grid, sampled trilinearly per CT voxel (no staircase,
       // no full-resolution mask in memory).
-      setTripleStatus("Fenster werden umgerechnet …");
+      setTripleStatus(tx("Fenster werden umgerechnet …"));
       const organVol = organs.dataset.current;
       const res = await smoothTripleWindow(
         v,
@@ -1467,14 +1465,14 @@ function App() {
         regionTable(organs.dataset.atlas.labels),
         (ind, fwhm) => gaussianSmooth(organVol.withData(ind), fwhm),
         { windows: r.windows, smoothMm: r.smoothMm, rimLungMm: r.marginMm.lung, rimBoneMm: r.marginMm.bone },
-        (f) => setTripleStatus(`Fenster werden umgerechnet … ${Math.round(f * 100)} %`),
+        (f) => setTripleStatus(tx("Fenster werden umgerechnet … {v} %", { v: Math.round(f * 100) })),
       );
       const data = res.data;
       const vol = v.withData(data);
       // Replacing the CT as base: free its GPU texture before the new volume is uploaded (two CT-sized
       // float textures at once can exhaust the GPU memory of weaker graphics cards).
       if (reference?.id === ct.id) GlRenderer.get()?.retain(layers.filter((l) => l.id !== ct.id).map((l) => l.volume));
-      const name = `Triple-Window · ${ct.dataset.displayName}`;
+      const name = tx("Triple-Window · {displayName}", { displayName: ct.dataset.displayName });
       const c = (w: [number, number]) => [(w[0] + w[1]) / 2, w[1] - w[0]].map((x) => String(Math.round(x)));
       const [wc, ww] = c(r.windows.soft);
       const d = createDataset(vol, ct.dataset.source, name);
@@ -1485,7 +1483,7 @@ function App() {
         // DICOM export: marked as artificial, soft-tissue window preset.
         headerEdits: [
           ...ct.dataset.headerEdits,
-          { tag: "x0008103e", vr: "LO", value: "Triple-Window (kuenstlich, nicht diagnostisch)", scope: "all" },
+          { tag: "x0008103e", vr: "LO", value: tx("Triple-Window (kuenstlich, nicht diagnostisch)"), scope: "all" },
           { tag: "x00281050", vr: "DS", value: wc, scope: "all" },
           { tag: "x00281051", vr: "DS", value: ww, scope: "all" },
         ],
@@ -1496,7 +1494,7 @@ function App() {
       // Shown instead of the CT when the CT is the base of the view (same grid and placement).
       if (reference?.id === ct.id) setReferenceId(id);
       const l = (ml: number) => (ml / 1000).toFixed(1);
-      setTripleStatus(`Angelegt: Lunge ${l(res.lungMl)} l, Skelett ${l(res.boneMl)} l im eigenen Fenster${reference?.id === ct.id ? " – als Basis der Ansicht eingesetzt" : " – über „Ebenen“ einblenden"}.`);
+      setTripleStatus(tx("Angelegt: Lunge {v} l, Skelett {v2} l im eigenen Fenster{v3}.", { v: l(res.lungMl), v2: l(res.boneMl), v3: reference?.id === ct.id ? tx(" – als Basis der Ansicht eingesetzt") : tx(" – über „Ebenen“ einblenden") }));
     } catch (e) {
       setTripleStatus(null);
       setTripleError(e instanceof Error ? e.message : String(e));
@@ -1519,7 +1517,7 @@ function App() {
         if (organs) {
           const excluded = new Set(tumorAutoExclude ? EXCLUSION_PRESETS[tumorIndication] : []);
           lesions = annotateLesions(lesions, r.labels, organs, organEntry.dataset.atlas.labels, excluded);
-          if (tumorAutoExclude) description += `; automatisch ausgeschlossen: ${EXCLUSION_PRESETS[tumorIndication].map((n) => n.replace(/_/g, " ")).join(", ")}`;
+          if (tumorAutoExclude) description += tx("; automatisch ausgeschlossen: {v}", { v: EXCLUSION_PRESETS[tumorIndication].map((n) => n.replace(/_/g, " ")).join(", ") });
         }
       }
       setTumor({ entryId: e.id, labels: r.labels, lesions, description, version: 0, datasetId: tumor?.entryId === e.id ? tumor.datasetId : undefined });
@@ -1562,12 +1560,12 @@ function App() {
     if (!pet || !organs || !atlas) return;
     const liverId = [...atlas.labels].find(([, n]) => canonicalName(n) === "liver")?.[0];
     if (liverId === undefined) {
-      setTumorError("Keine Leber in den Organmasken.");
+      setTumorError(tx("Keine Leber in den Organmasken."));
       return;
     }
     const c = autoLiverCenter(organs.dataset.current, liverId, 15);
     if (!c) {
-      setTumorError("Leber zu klein für eine 3-cm-Referenzkugel.");
+      setTumorError(tx("Leber zu klein für eine 3-cm-Referenzkugel."));
       return;
     }
     const center = applyMat4(invert4(pet.matrix), applyMat4(organs.matrix, c));
@@ -1626,7 +1624,7 @@ function App() {
     if (!tumor) return;
     const removed = tumor.lesions.filter((l) => !l.included).length;
     if (!removed) return;
-    if (!window.confirm(`${removed} ausgeschlossene Läsion(en) endgültig entfernen und die übrigen nach SUVmax neu nummerieren (1 = höchster SUVmax)?`)) return;
+    if (!window.confirm(tx("{removed} ausgeschlossene Läsion(en) endgültig entfernen und die übrigen nach SUVmax neu nummerieren (1 = höchster SUVmax)?", { removed }))) return;
     const r = cleanupLesions(tumor.labels, tumor.lesions, lesionOrder);
     setTumor({ ...tumor, labels: r.labels, lesions: r.lesions, version: tumor.version + 1 });
     setFocusLesionId(null);
@@ -1692,22 +1690,22 @@ function App() {
     const w2v = e && w2vById.get(e.id);
     setTumorError(null);
     if (!e || !w2v) return;
-    if (!cursor) return setTumorError("Erst das Fadenkreuz in die Läsion setzen (Klick in den Viewer).");
+    if (!cursor) return setTumorError(tx("Erst das Fadenkreuz in die Läsion setzen (Klick in den Viewer)."));
     const v = e.dataset.current;
     const seed = applyWorldToVoxel(w2v, cursor).map(Math.round) as [number, number, number];
-    if (seed.some((x, a) => x < 0 || x >= [v.nx, v.ny, v.nz][a])) return setTumorError("Das Fadenkreuz liegt außerhalb dieses Datensatzes.");
+    if (seed.some((x, a) => x < 0 || x >= [v.nx, v.ny, v.nz][a])) return setTumorError(tx("Das Fadenkreuz liegt außerhalb dieses Datensatzes."));
     const same = tumor && tumor.entryId === e.id;
     const labels = same ? tumor.labels : new Int32Array(v.data.length);
     const r = growLesion(v, seed, { fraction, occupied: labels });
-    if (!r || !r.voxels.length) return setTumorError("Keine Aktivität in der Nähe des Fadenkreuzes (10 mm) – oder dort ist schon eine Läsion.");
+    if (!r || !r.voxels.length) return setTumorError(tx("Keine Aktivität in der Nähe des Fadenkreuzes (10 mm) – oder dort ist schon eine Läsion."));
     const id = (same ? tumor.lesions.reduce((m, l) => Math.max(m, l.id), 0) : 0) + 1;
     const next = same ? labels.slice() : labels;
     for (const p of r.voxels) next[p] = id;
     const prev = same ? tumor.lesions : [];
     const lesions = lesionStats(v, next, tumorFactor, prev).map((l) =>
-      l.id === id ? { ...l, included: true, reviewed: true, note: `manuell, Grenze ${Math.round(fraction * 100)} % des Maximums` } : l,
+      l.id === id ? { ...l, included: true, reviewed: true, note: tx("manuell, Grenze {v} % des Maximums", { v: Math.round(fraction * 100) }) } : l,
     );
-    const pctText = `manuell: Region Growing ab Fadenkreuz, ${Math.round(fraction * 100)} % des Läsionsmaximums`;
+    const pctText = tx("manuell: Region Growing ab Fadenkreuz, {v} % des Läsionsmaximums", { v: Math.round(fraction * 100) });
     setTumor(
       same
         ? { ...tumor, labels: next, lesions, version: tumor.version + 1, description: tumor.description.includes("manuell") ? tumor.description : `${tumor.description}; ${pctText}` }
@@ -1738,7 +1736,7 @@ function App() {
     const e = tumor && byId(tumor.entryId);
     if (!tumor || !e) return;
     const csv = burdenCsv(tumorBurden(tumor.lesions), tumor.lesions, { dataset: e.dataset.displayName, method: tumor.description, tlgLabel: tumorIndication === "psma" ? "TL-PSMA" : "TLG" });
-    downloadBytes(new TextEncoder().encode("\ufeff" + csv) as Uint8Array<ArrayBuffer>, `Tumorlast_${e.dataset.displayName.replace(/[äöüÄÖÜß]/g, umlaut).replace(/[^A-Za-z0-9_.-]+/g, "_")}.csv`, "text/csv;charset=utf-8");
+    downloadBytes(new TextEncoder().encode("\ufeff" + csv) as Uint8Array<ArrayBuffer>, tx("Tumorlast_{v}.csv", { v: e.dataset.displayName.replace(/[äöüÄÖÜß]/g, umlaut).replace(/[^A-Za-z0-9_.-]+/g, "_") }), "text/csv;charset=utf-8");
   }
 
   function exportTumorNifti() {
@@ -1747,8 +1745,8 @@ function App() {
     const inc = new Set(tumor.lesions.filter((l) => l.included).map((l) => l.id));
     const data = new Float32Array(tumor.labels.length);
     for (let i = 0; i < data.length; i++) if (inc.has(tumor.labels[i])) data[i] = tumor.labels[i];
-    const atlas = { name: `Läsionen · ${e.dataset.displayName}`, labels: new Map([...inc].sort((a, b) => a - b).map((id) => [id, `Läsion ${id}`] as [number, string])) };
-    downloadBytes(buildNiftiFile(e.dataset.current.withData(data), { atlas }), `Laesionen_${e.dataset.displayName.replace(/\.nii(\.gz)?$/i, "").replace(/[äöüÄÖÜß]/g, umlaut).replace(/[^A-Za-z0-9_.-]+/g, "_")}.nii`);
+    const atlas = { name: tx("Läsionen · {displayName}", { displayName: e.dataset.displayName }), labels: new Map([...inc].sort((a, b) => a - b).map((id) => [id, tx("Läsion {id}", { id })] as [number, string])) };
+    downloadBytes(buildNiftiFile(e.dataset.current.withData(data), { atlas }), tx("Laesionen_{v}.nii", { v: e.dataset.displayName.replace(/\.nii(\.gz)?$/i, "").replace(/[äöüÄÖÜß]/g, umlaut).replace(/[^A-Za-z0-9_.-]+/g, "_") }));
   }
 
   // ── CT organ segmentation (browser, ONNX) ──
@@ -1757,8 +1755,8 @@ function App() {
     const g = r.grid.geometry;
     const vol = new Volume3D(Float32Array.from(r.labels), r.grid.nz, r.grid.ny, r.grid.nx, [g.spacing[2], g.spacing[1], g.spacing[0]], { ...g, frameOfReferenceUid: ct.dataset.current.geometry.frameOfReferenceUid });
     const labels = new Map(Object.entries(r.meta.labels).filter(([k]) => k !== "0").map(([k, v]) => [Number(k), v.replace(/_/g, " ")]));
-    const d = createDataset(vol, { kind: "reconstruction" }, `CT-Organe · ${ct.dataset.displayName}`);
-    const entry = addDataset({ ...d, atlas: { name: `CT-Organe (${model.short}) · ${ct.dataset.displayName}`, labels, attribution: model.attribution } });
+    const d = createDataset(vol, { kind: "reconstruction" }, tx("CT-Organe · {displayName}", { displayName: ct.dataset.displayName }));
+    const entry = addDataset({ ...d, atlas: { name: tx("CT-Organe ({short}) · {displayName}", { short: tx(model.short), displayName: ct.dataset.displayName }), labels, attribution: model.attribution } });
     updateEntry(entry.id, { matrix: ct.matrix });
     addOverlay(entry.id);
   }
@@ -1779,14 +1777,14 @@ function App() {
         const model = CT_MODELS.find((m) => m.id === id)!;
         const t0 = performance.now();
         const run = runCtSegmentation(ct.dataset.current, backend, (p) =>
-          setBenchProgress(`${model.label}: ${p.stage}${p.total > 0 && p.stage.startsWith("Inferenz") ? ` · Kachel ${Math.min(p.done + 1, p.total)}/${p.total}` : ""}`), id);
+          setBenchProgress(`${tx(model.label)}: ${p.stage}${p.total > 0 && p.inference ? ` · ${tx("Kachel {n}/{total}", { n: Math.min(p.done + 1, p.total), total: p.total })}` : ""}`), id);
         ctSegRun.current = run;
         let res: SegBenchmarkResult;
         try {
           const r = await run.promise;
           res = { modelId: id, seconds: (performance.now() - t0) / 1000, backend: r.backend === "webgpu" ? "WebGPU" : "CPU", structures: new Set(r.labels).size - 1 };
           if (ref?.dataset.atlas) {
-            setBenchProgress(`${model.label}: Vergleich mit der Referenz …`);
+            setBenchProgress(tx("{label}: Vergleich mit der Referenz …", { label: tx(model.label) }));
             await new Promise((ok) => setTimeout(ok, 0));
             const rv = ref.dataset.current;
             const pred = resampleInto({ ...r.grid, data: r.labels }, worldToVoxelTransform(r.grid.geometry), rv, "nearest");
@@ -1827,12 +1825,12 @@ function App() {
         let n = 0;
         for (const v of r.labels) if (v) n++;
         setCtSegStatus(
-          `${model.short}: fertig in ${((performance.now() - t0) / 1000).toFixed(0)} s (${r.backend === "webgpu" ? "WebGPU" : "CPU"}): ${new Set(r.labels).size - 1} Strukturen, ${((n * g.spacing[0] * g.spacing[1] * g.spacing[2]) / 1e6).toFixed(1).replace(".", ",")} l segmentiert.${r.note ? ` ${r.note}.` : ""}`,
+          tx("{short}: fertig in {s} s ({backend}): {n} Strukturen, {l} l segmentiert.", { short: tx(model.short), s: ((performance.now() - t0) / 1000).toFixed(0), backend: r.backend === "webgpu" ? "WebGPU" : "CPU", n: new Set(r.labels).size - 1, l: fmtFixed((n * g.spacing[0] * g.spacing[1] * g.spacing[2]) / 1e6, 1) }) + (r.note ? ` ${tx(r.note)}.` : ""),
         );
         return true;
       })
       .catch((e) => {
-        if (!(e instanceof DOMException && e.name === "AbortError")) setCtSegError(`CT-Segmentierung fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
+        if (!(e instanceof DOMException && e.name === "AbortError")) setCtSegError(tx("CT-Segmentierung fehlgeschlagen: {v}", { v: e instanceof Error ? e.message : String(e) }));
         return false;
       })
       .finally(() => {
@@ -1864,30 +1862,30 @@ function App() {
       if (!v || v.data.length !== labels.length) continue;
       for (let i = 0; i < labels.length; i++) if (v.data[i] > 0.5) labels[i] = value;
     }
-    const table = new Map([[1, VOI_LABELS.ctx], [2, VOI_LABELS.WhlCbl], [3, VOI_LABELS.Pons], [4, "Hirnstamm (WhlCblBrnStm ohne Kleinhirn)"]]);
+    const table = new Map([[1, tx(VOI_LABELS.ctx)], [2, tx(VOI_LABELS.WhlCbl)], [3, VOI_LABELS.Pons], [4, tx("Hirnstamm (WhlCblBrnStm ohne Kleinhirn)")]]);
     const d = createDataset(base.withData(labels), { kind: "reconstruction" }, "Centiloid-VOIs");
-    addDataset({ ...d, atlas: { name: "Centiloid-VOIs (GAAIN)", labels: table } });
+    addDataset({ ...d, atlas: { name: tx("Centiloid-VOIs (GAAIN)"), labels: table } });
   }
 
   /** VOI means, SUVR, CL and plausibility warnings for a dataset in MNI space. */
   function evaluateCentiloid(target: Entry, calibration: CentiloidCalibration, pipeline: string, extraWarnings: string[] = []): CentiloidOutcome {
-    if (!centiloidVois) throw new Error("Zuerst die Centiloid-VOIs laden.");
+    if (!centiloidVois) throw new Error(tx("Zuerst die Centiloid-VOIs laden."));
     const means = voiMeans(target.dataset.current, centiloidVois);
     const result = centiloidFromMeans(means, calibration);
     const warnings = [...extraWarnings];
     const ctx = means.find((m) => m.name === "ctx");
     const ctxMl = centiloidVois.volumes.ctx ? voiVolumeMl(centiloidVois.volumes.ctx) : 0;
-    if (ctx && ctxMl > 0 && ctx.volumeMl < 0.9 * ctxMl) warnings.push(`Nur ${Math.round((100 * ctx.volumeMl) / ctxMl)} % der Kortex-VOI liegen im Datensatz – liegt er im MNI-Raum?`);
-    if (!Number.isFinite(result.centiloid)) warnings.push("Referenzregion ohne Daten – Centiloid nicht berechenbar.");
+    if (ctx && ctxMl > 0 && ctx.volumeMl < 0.9 * ctxMl) warnings.push(tx("Nur {v} % der Kortex-VOI liegen im Datensatz – liegt er im MNI-Raum?", { v: Math.round((100 * ctx.volumeMl) / ctxMl) }));
+    if (!Number.isFinite(result.centiloid)) warnings.push(tx("Referenzregion ohne Daten – Centiloid nicht berechenbar."));
     const src = unitSource(target.dataset);
     if (src.kind === "dicom") {
       const w = acquisitionWindow(src.files[0].dataSet);
-      if ("reason" in w) warnings.push(`Aufnahmezeitfenster nicht prüfbar: ${w.reason}`);
+      if ("reason" in w) warnings.push(tx("Aufnahmezeitfenster nicht prüfbar: {reason}", { reason: w.reason }));
       else {
         const msg = windowWarning(w, calibration);
         if (msg) warnings.push(msg);
         const tracer = guessTracer(w.tracerName);
-        if (tracer && calibration.tracer !== "custom" && tracer !== calibration.tracer) warnings.push(`Header nennt „${w.tracerName}“, Kalibrierung ist für ${calibration.tracer}.`);
+        if (tracer && calibration.tracer !== "custom" && tracer !== calibration.tracer) warnings.push(tx("Header nennt „{tracerName}“, Kalibrierung ist für {tracer}.", { tracerName: w.tracerName, tracer: calibration.tracer }));
       }
     }
     return { result, datasetLabel: target.dataset.derivedFrom?.name ?? target.dataset.displayName, pipeline, warnings };
@@ -1902,8 +1900,8 @@ function App() {
         evaluateCentiloid(
           e,
           calibration,
-          "vorhandener Datensatz im MNI-Raum",
-          calibration.pipeline === "recon" ? ["GAAIN-kalibrierte Gleichung: gilt nur, wenn der Datensatz mit der affinen Recon-Studio-Normalisierung (T1 → MNI) erstellt wurde – sonst die Standardgleichung wählen."] : [],
+          tx("vorhandener Datensatz im MNI-Raum"),
+          calibration.pipeline === "recon" ? [tx("GAAIN-kalibrierte Gleichung: gilt nur, wenn der Datensatz mit der affinen Recon-Studio-Normalisierung (T1 → MNI) erstellt wurde – sonst die Standardgleichung wählen.")] : [],
         ),
       );
     } catch (err) {
@@ -1930,7 +1928,7 @@ function App() {
       let template: Entry;
       let pipeline: string;
       if (t1) {
-        template = templateEntries.find((e) => e.dataset.template?.kind === "T1") ?? (setCentiloidStatus("MNI-Vorlage wird geladen …"), addDataset(await loadBundledMni()));
+        template = templateEntries.find((e) => e.dataset.template?.kind === "T1") ?? (setCentiloidStatus(tx("MNI-Vorlage wird geladen …")), addDataset(await loadBundledMni()));
         setCentiloidStatus("1/4 PET → T1 coregistrieren …");
         // Coarse search always: PET and MRI often come from different sessions/scanners, and the Frame of
         // Reference UID is not a reliable indicator (anonymization, missing tags).
@@ -1950,34 +1948,34 @@ function App() {
         // Centiloid standard method (R² 0.990, slope 0.93) than with the additional nonlinear warp (R² 0.92, slope 0.78).
         setCentiloidStatus("2/4 T1 → MNI (affin) …");
         n = await estimateNormalization(template, t1, { nonlinear: false, cost: "ncc", mask: template.dataset.template?.mask ?? undefined, regularization: normRegularization });
-        pipeline = "MRT-Pipeline (affin)";
+        pipeline = tx("MRT-Pipeline (affin)");
         if (calibration.pipeline === "standard")
-          warnings.push("Die gewählte Standardgleichung gilt für die SPM8-Standardmethode – für diese Pipeline die GAAIN-kalibrierte Gleichung wählen.");
+          warnings.push(tx("Die gewählte Standardgleichung gilt für die SPM8-Standardmethode – für diese Pipeline die GAAIN-kalibrierte Gleichung wählen."));
       } else {
         const tpl = templateEntries.find((e) => e.dataset.template?.kind === "PET");
-        if (!tpl) throw new Error("Für PET-only wird eine PET-Vorlage benötigt.");
+        if (!tpl) throw new Error(tx("Für PET-only wird eine PET-Vorlage benötigt."));
         template = tpl;
-        setCentiloidStatus("1/3 PET → PET-Vorlage (affin + nichtlinear) …");
+        setCentiloidStatus(tx("1/3 PET → PET-Vorlage (affin + nichtlinear) …"));
         n = await estimateNormalization(template, pet, { nonlinear: true, cost: "ncc", mask: template.dataset.template?.mask ?? undefined, regularization: normRegularization });
         pipeline = "PET-only";
-        warnings.push("PET-only ist nicht an den GAAIN-Daten validiert – Werte nur orientierend; bei Atrophie oder vaskulären Läsionen Normalisierung besonders prüfen.");
+        warnings.push(tx("PET-only ist nicht an den GAAIN-Daten validiert – Werte nur orientierend; bei Atrophie oder vaskulären Läsionen Normalisierung besonders prüfen."));
       }
       if (centiloidCancelled.current) return;
-      if (n.warp && n.warp.foldedFraction > 0) warnings.push(`Verformung faltet sich in ${(100 * n.warp.foldedFraction).toFixed(2)} % der Hirnvoxel.`);
+      if (n.warp && n.warp.foldedFraction > 0) warnings.push(tx("Verformung faltet sich in {v} % der Hirnvoxel.", { v: (100 * n.warp.foldedFraction).toFixed(2) }));
       setNormalization(n);
       setNormSubjectId(n.subjectId);
       setNormTemplateId(template.id);
-      setCentiloidStatus(`${t1 ? "3/4" : "2/3"} In den MNI-Raum übertragen …`);
+      setCentiloidStatus(tx("{v} In den MNI-Raum übertragen …", { v: t1 ? "3/4" : "2/3" }));
       const ids = t1 ? [t1.id, pet.id] : [pet.id];
       const created = await transferToStandardSpace(n, ids, "linear", template, overrides);
       const petStd = created.at(-1);
-      if (!petStd) throw new Error("Übertragung in den MNI-Raum fehlgeschlagen.");
-      setCentiloidStatus(`${t1 ? "4/4" : "3/3"} VOIs auswerten …`);
+      if (!petStd) throw new Error(tx("Übertragung in den MNI-Raum fehlgeschlagen."));
+      setCentiloidStatus(tx("{v} VOIs auswerten …", { v: t1 ? "4/4" : "3/3" }));
       setCentiloidOutcome(evaluateCentiloid(petStd, calibration, pipeline, warnings));
       setCentiloidStatus(null);
     } catch (e) {
       setCentiloidStatus(null);
-      if (!(e instanceof DOMException && e.name === "AbortError")) setCentiloidError(`Centiloid-Bestimmung fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
+      if (!(e instanceof DOMException && e.name === "AbortError")) setCentiloidError(tx("Centiloid-Bestimmung fehlgeschlagen: {v}", { v: e instanceof Error ? e.message : String(e) }));
     } finally {
       setCentiloidRunning(false);
       normRun.current = null;
@@ -2009,7 +2007,7 @@ function App() {
   async function loadCachedCatalog(id: string) {
     const files = await cachedUserFiles(id);
     if (!files) {
-      setCatalogError("Die gespeicherten Dateien sind nicht mehr vorhanden.");
+      setCatalogError(tx("Die gespeicherten Dateien sind nicht mehr vorhanden."));
       setCachedCatalog(await cachedEntryIds());
       return;
     }
@@ -2035,7 +2033,7 @@ function App() {
       // e.g. the AAL3 download: label image + table inside the archive.
       try {
         const picked = pickAtlasEntries(listZip(await zip.arrayBuffer()));
-        if (!picked) throw new Error(`In „${zip.name}“ wurde kein NIfTI-Labelbild gefunden.`);
+        if (!picked) throw new Error(tx("In „{name}“ wurde kein NIfTI-Labelbild gefunden.", { name: zip.name }));
         const toFile = async (e: { name: string; read: () => Promise<Uint8Array<ArrayBuffer>> }) => new File([await e.read()], e.name.split("/").pop()!);
         files = [await toFile(picked.image), ...(picked.table ? [await toFile(picked.table)] : [])];
       } catch (e) {
@@ -2047,21 +2045,21 @@ function App() {
     const image = known ? files.find((f) => f.name === known.image)! : files.find((f) => /\.nii(\.gz)?$/i.test(f.name));
     const table = known ? files.find((f) => f.name === known.table) : files.find((f) => f !== image);
     if (!image) {
-      setAtlasError("Bitte das Labelbild (NIfTI) mit auswählen.");
+      setAtlasError(tx("Bitte das Labelbild (NIfTI) mit auswählen."));
       return undefined;
     }
     if (known?.entry.table && !table) {
-      setAtlasError(`${known.entry.name}: bitte die Labeltabelle mit auswählen (${known.entry.instructions})`);
+      setAtlasError(tx("{name}: bitte die Labeltabelle mit auswählen ({instructions})", { name: known.entry.name, instructions: known.entry.instructions }));
       return undefined;
     }
     try {
       const loaded = await loadVolumeFromFiles([image]);
       const text = table ? await table.text() : undefined;
       const labels = text === undefined ? undefined : known?.entry.tableFormat === "fsl-xml" || /\.xml$/i.test(table!.name) ? parseFslAtlasXml(text) : parseLabelTable(text);
-      if (table && !labels?.size) throw new Error(`In „${table.name}“ wurden keine Labels erkannt.`);
+      if (table && !labels?.size) throw new Error(tx("In „{name}“ wurden keine Labels erkannt.", { name: table.name }));
       const d = createDataset(loaded.volume, loaded.source, known ? known.entry.name : image.name);
       const atlas = labels || !loaded.atlas ? atlasFromLabels(loaded.volume.data, known ? known.entry.name : image.name.replace(/\.nii(\.gz)?$/i, ""), labels) : loaded.atlas;
-      if (known) atlas.attribution = `${known.entry.attribution} Lizenz: ${known.entry.license.name}.`;
+      if (known) atlas.attribution = tx("{attribution} Lizenz: {name}.", { attribution: known.entry.attribution, name: known.entry.license.name });
       addDataset({ ...d, atlas, catalogId: known?.entry.id });
       return { catalogId: known?.entry.id, files: [image, ...(table ? [table] : [])] };
     } catch (e) {
@@ -2076,7 +2074,7 @@ function App() {
     const v = target.dataset.current;
     if (sameGrid({ nx: a.nx, ny: a.ny, nz: a.nz, geometry: a.geometry }, v) && atlasEntry.matrix.every((x, i) => Math.abs(x - target.matrix[i]) < 1e-9)) return a.data;
     const w2v = w2vById.get(atlasEntry.id);
-    if (!w2v) throw new Error("Atlas ist nicht im Viewer verfügbar.");
+    if (!w2v) throw new Error(tx("Atlas ist nicht im Viewer verfügbar."));
     // Atlas finer than the dataset (e.g. 1 mm atlas, 2 mm PET): majority of s³ samples per voxel, else nearest neighbour.
     const s = Math.min(3, Math.round(Math.min(...v.geometry.spacing) / Math.max(...a.geometry.spacing)));
     const offsets = s >= 2 ? subVoxelOffsets(s) : [[0, 0, 0] as [number, number, number]];
@@ -2106,19 +2104,19 @@ function App() {
   /** Labels restricted to grey matter (GM probability ≥ 0.5). */
   function restrictToGm(labels: Float32Array, target: Entry): Float32Array {
     const gm = gmOnGrid(target);
-    if (!gm) throw new Error("Die Gewebekarte „Graue Substanz“ ist nicht geladen.");
+    if (!gm) throw new Error(tx("Die Gewebekarte „Graue Substanz“ ist nicht geladen."));
     return Float32Array.from(labels, (l, i) => (gm[i] >= 0.5 ? l : 0));
   }
 
   function computeRegions(atlasId: string, targetId: string, gmOnly = false): RegionResult {
     const A = byId(atlasId);
     const E = byId(targetId);
-    if (!A?.dataset.atlas || !E) throw new Error("Atlas oder Datensatz nicht gefunden.");
+    if (!A?.dataset.atlas || !E) throw new Error(tx("Atlas oder Datensatz nicht gefunden."));
     const v = E.dataset.current;
     const labels = gmOnly ? restrictToGm(atlasLabelsFor(A, E), E) : atlasLabelsFor(A, E);
     const [sx, sy, sz] = v.geometry.spacing;
     const stats = regionStats(v.data, labels, A.dataset.atlas, (sx * sy * sz) / 1000);
-    if (!stats.length) throw new Error("Keine Atlasregion überlappt mit dem Datensatz – liegt er im Standardraum des Atlas?");
+    if (!stats.length) throw new Error(tx("Keine Atlasregion überlappt mit dem Datensatz – liegt er im Standardraum des Atlas?"));
     return { stats, unit: rawUnitLabel(unitSource(E.dataset)), datasetLabel: E.dataset.displayName };
   }
 
@@ -2131,11 +2129,11 @@ function App() {
       if (src === "totalseg") {
         const meta = await loadModelMeta();
         table = new Map(Object.entries(meta.labels).map(([k, v]) => [Number(k), v] as [number, string]).filter(([k]) => k > 0));
-        name = "CT-Organe (TotalSegmentator)";
+        name = tx("CT-Organe (TotalSegmentator)");
       } else {
         const text = await src.text();
         table = /<Label\b/.test(text) ? parseXmlLabelTable(text) : parseLabelTable(text);
-        if (!table.size) throw new Error(`In „${src.name}“ wurden keine Labels erkannt.`);
+        if (!table.size) throw new Error(tx("In „{name}“ wurden keine Labels erkannt.", { name: src.name }));
       }
       const e = live.current.entries.find((x) => x.id === entryId);
       if (!e?.dataset.atlas) return;
@@ -2150,14 +2148,14 @@ function App() {
   function computeLabelAnalysis(atlasId: string, targetId: string): LabelAnalysisResult {
     const A = byId(atlasId);
     const E = byId(targetId);
-    if (!A?.dataset.atlas || !E) throw new Error("Labels oder Datensatz nicht gefunden.");
+    if (!A?.dataset.atlas || !E) throw new Error(tx("Labels oder Datensatz nicht gefunden."));
     const v = E.dataset.current;
     const labels = atlasLabelsFor(A, E);
     const { scale, label } = unitFor(E);
     const values = scale === 1 ? v.data : Float32Array.from(v.data, (x) => x * scale);
     const [sx, sy, sz] = v.geometry.spacing;
     const stats = regionStats(values, labels, A.dataset.atlas, (sx * sy * sz) / 1000);
-    if (!stats.length) throw new Error("Keine Region überlappt mit dem Datensatz – liegen Labels und Datensatz im selben Raum (Registrierung, Standardraum)?");
+    if (!stats.length) throw new Error(tx("Keine Region überlappt mit dem Datensatz – liegen Labels und Datensatz im selben Raum (Registrierung, Standardraum)?"));
     const a = A.dataset.current;
     const resampled = labels !== a.data;
     return {
@@ -2167,7 +2165,7 @@ function App() {
       unit: label,
       datasetLabel: entryLabel(E),
       note: resampled
-        ? `Labels „${entryLabel(A)}“ über die Registrierung auf das Raster von „${entryLabel(E)}“ übertragen (${Math.min(...E.dataset.current.geometry.spacing) / Math.max(...a.geometry.spacing) >= 1.5 ? "Mehrheit der Teilvoxel" : "nächster Nachbar"}).`
+        ? tx("Labels „{v}“ über die Registrierung auf das Raster von „{v2}“ übertragen ({v3}).", { v: entryLabel(A), v2: entryLabel(E), v3: Math.min(...E.dataset.current.geometry.spacing) / Math.max(...a.geometry.spacing) >= 1.5 ? tx("Mehrheit der Teilvoxel") : tx("nächster Nachbar") })
         : undefined,
     };
   }
@@ -2179,7 +2177,7 @@ function App() {
     const data = new Float32Array(v.data.length);
     for (let i = 0; i < data.length; i++) data[i] = v.data[i] / refMean;
     const d = createDataset(v.withData(data), E.dataset.source, `${E.dataset.displayName} · SUVR`);
-    const derived: LoadedDataset = { ...d, derivedFrom: { name: `${E.dataset.displayName} (SUVR, Referenz: ${refLabel})`, source: { kind: "reconstruction" }, space: E.dataset.derivedFrom?.space ?? "nativ", label: "SUVR" } };
+    const derived: LoadedDataset = { ...d, derivedFrom: { name: tx("{displayName} (SUVR, Referenz: {refLabel})", { displayName: E.dataset.displayName, refLabel }), source: { kind: "reconstruction" }, space: E.dataset.derivedFrom?.space ?? "nativ", label: "SUVR" } };
     const id = `ds${nextEntryId++}`;
     setEntries((prev) => [...prev, { id, dataset: derived, display: { window: [0, 3], lut: "hot", opacity: 0.6, visible: true }, matrix: E.matrix }]);
     addOverlay(id);
@@ -2221,14 +2219,14 @@ function App() {
     setImcalcStatus(null);
     const input = (id: string) => {
       const e = byId(id);
-      if (!e) throw new Error("Datensatz nicht gefunden.");
+      if (!e) throw new Error(tx("Datensatz nicht gefunden."));
       return { e, x: { data: e.dataset.current.data, scale: unitFor(e).scale }, unit: unitFor(e).label };
     };
     const check = (list: Entry[]) => {
       const g = list[0].dataset.current;
       const grid = { nx: g.nx, ny: g.ny, nz: g.nz, geometry: g.geometry };
       const bad = list.find((e) => !sameGrid(grid, e.dataset.current));
-      if (bad) throw new Error(`„${entryLabel(bad)}“ liegt auf einem anderen Raster als „${entryLabel(list[0])}“.`);
+      if (bad) throw new Error(tx("„{v}“ liegt auf einem anderen Raster als „{v2}“.", { v: entryLabel(bad), v2: entryLabel(list[0]) }));
     };
     const created: string[] = [];
     try {
@@ -2238,11 +2236,11 @@ function App() {
         const r = await linear(a.x, job.a, job.b);
         created.push(addImcalcResult(a.e, r, job.name, { kind: "IMCALC", unit: a.unit, show: true }));
       } else if (job.kind === "pair") {
-        setImcalcBusy("Zwei Datensätze");
+        setImcalcBusy(tx("Zwei Datensätze"));
         const a = input(job.id1), b = input(job.id2);
         check([a.e, b.e]);
         const r = job.op === "sum" ? await combine(a.x, b.x, job.a, job.b) : job.op === "product" ? await product(a.x, b.x) : await quotient(a.x, b.x);
-        const unit = job.op === "sum" ? (a.unit === b.unit ? a.unit : "") : job.op === "quotient" ? "Verhältnis" : "";
+        const unit = job.op === "sum" ? (a.unit === b.unit ? a.unit : "") : job.op === "quotient" ? tx("Verhältnis") : "";
         // Differences (coefficients of opposite sign): diverging colors, window symmetric around 0.
         const signed = job.op === "sum" && job.a * job.b < 0;
         let sym = 0;
@@ -2255,10 +2253,10 @@ function App() {
       } else if (job.kind === "group") {
         const xs = job.ids.map(input);
         check(xs.map((x) => x.e));
-        setImcalcBusy(`Gruppe (n=${xs.length})`);
+        setImcalcBusy(tx("Gruppe (n={length})", { length: xs.length }));
         const r = await groupMeanSd(
           xs.map((x) => x.x),
-          (f) => setImcalcStatus(`Gruppe: ${Math.round(f * 100)} %`),
+          (f) => setImcalcStatus(tx("Gruppe: {v} %", { v: Math.round(f * 100) })),
         );
         created.push(addImcalcResult(xs[0].e, r.mean, job.nameMean, { kind: "IMCALC", unit: xs[0].unit, show: true }));
         created.push(addImcalcResult(xs[0].e, r.sd, job.nameSd, { kind: "IMCALC", unit: xs[0].unit, lut: "hot", show: false }));
@@ -2267,13 +2265,13 @@ function App() {
         const xs = job.ids.map(input);
         check([m.e, sd.e, ...xs.map((x) => x.e)]);
         for (const [i, x] of xs.entries()) {
-          setImcalcBusy(`Z-Karte ${i + 1}/${xs.length}`);
+          setImcalcBusy(tx("Z-Karte {v}/{length}", { v: i + 1, length: xs.length }));
           const r = await zScore(x.x, m.x, sd.x);
           created.push(addImcalcResult(x.e, r, `${x.e.tag || baseName(x.e)}${job.suffix}`, { kind: "Z", unit: "z", window: [-4, 4], lut: "diverging", show: i === 0 }));
         }
       }
       setImcalcResults((prev) => [...prev, ...created]);
-      setImcalcStatus(`${created.length} ${created.length === 1 ? "Datensatz" : "Datensätze"} angelegt${created.length > 1 ? " – weitere über „Ebenen“ einblenden" : ""}.`);
+      setImcalcStatus(tx("{length} {v} angelegt{v2}.", { length: created.length, v: created.length === 1 ? "Datensatz" : tx("Datensätze"), v2: created.length > 1 ? tx(" – weitere über „Ebenen“ einblenden") : "" }));
     } catch (e) {
       setImcalcError(e instanceof Error ? e.message : String(e));
       setImcalcStatus(null);
@@ -2290,13 +2288,13 @@ function App() {
   async function kineticsToMni(id: string, t1Id: string | null, status: (s: string) => void, window: { fromMin: number; toMin: number }): Promise<string> {
     const D0 = byId(id);
     const dyn = D0?.dataset.dynamic;
-    if (!D0 || !dyn) throw new Error("Dynamischer Datensatz nicht gefunden.");
+    if (!D0 || !dyn) throw new Error(tx("Dynamischer Datensatz nicht gefunden."));
     // Registration image: duration-weighted sum of the frames whose mid time lies in the chosen window.
     const sel = dyn.frames.map((_, i) => i).filter((i) => {
       const mid = (dyn.start[i] + dyn.duration[i] / 2) / 60;
       return mid >= window.fromMin && mid <= window.toMin;
     });
-    if (!sel.length) throw new Error("Im gewählten Zeitfenster liegt kein Frame.");
+    if (!sel.length) throw new Error(tx("Im gewählten Zeitfenster liegt kein Frame."));
     const regImage = D0.dataset.current.withData(meanOfFrames(sel.map((i) => dyn.frames[i]), sel.map((i) => dyn.duration[i])));
     const D: Entry = { ...D0, dataset: { ...D0.dataset, current: regImage } };
     const overrides = new Map<string, Mat4>();
@@ -2305,10 +2303,10 @@ function App() {
     let subject: Entry = D;
     if (t1Id) {
       const t1 = byId(t1Id);
-      if (!t1) throw new Error("T1 nicht gefunden.");
+      if (!t1) throw new Error(tx("T1 nicht gefunden."));
       subject = t1;
-      template = templateEntries.find((e) => e.dataset.template?.kind === "T1") ?? (status("MNI-Vorlage wird geladen"), addDataset(await loadBundledMni()));
-      status("Mittelbild → T1 (rigide)");
+      template = templateEntries.find((e) => e.dataset.template?.kind === "T1") ?? (status(tx("MNI-Vorlage wird geladen")), addDataset(await loadBundledMni()));
+      status(tx("Mittelbild → T1 (rigide)"));
       const run = runCoregistration(t1.dataset.current, D.dataset.current, { dof: 6, cost: "nmi", levels: [8, 4, 2], coarseSearch: true, initial: multiply4(invert4(t1.matrix), D.matrix) });
       normRun.current = run;
       const reg = await run.promise;
@@ -2319,20 +2317,20 @@ function App() {
       n = await estimateNormalization(template, t1, { nonlinear: false, cost: "ncc", mask: template.dataset.template?.mask ?? undefined, regularization: normRegularization });
     } else {
       const spm = BUNDLED_PET_TEMPLATES[0];
-      template = templateEntries.find((e) => e.dataset.template?.name === spm.name) ?? (status("PET-Vorlage wird geladen"), addDataset(await loadBundledPetTemplate(spm.id)));
-      status("Mittelbild → SPM-PET-Vorlage (affin)");
+      template = templateEntries.find((e) => e.dataset.template?.name === spm.name) ?? (status(tx("PET-Vorlage wird geladen")), addDataset(await loadBundledPetTemplate(spm.id)));
+      status(tx("Mittelbild → SPM-PET-Vorlage (affin)"));
       n = await estimateNormalization(template, D, { nonlinear: false, cost: "ncc", mask: template.dataset.template?.mask ?? undefined, regularization: normRegularization });
     }
-    status("Mittelbild in den MNI-Raum");
+    status(tx("Mittelbild in den MNI-Raum"));
     const created = await transferToStandardSpace(n, [D.id], "linear", template, overrides);
     const target = created[0];
-    if (!target) throw new Error("Übertragung in den MNI-Raum fehlgeschlagen.");
-    status(`${dyn.frames.length} Frames werden übertragen`);
+    if (!target) throw new Error(tx("Übertragung in den MNI-Raum fehlgeschlagen."));
+    status(tx("{length} Frames werden übertragen", { length: dyn.frames.length }));
     const points = pullbackPositions(n, overrides.get(subject.id) ?? subject.matrix);
     const v = D.dataset.current;
     const r = await runKineticsJob<{ frames: Float32Array[] }>(
       { type: "toTemplate", frames: dyn.frames, grid: { nx: v.nx, ny: v.ny, nz: v.nz, geometry: v.geometry }, toSubject: overrides.get(D.id) ?? D.matrix, points },
-      (d, t) => status(`Frames werden übertragen (${d}/${t})`),
+      (d, t) => status(tx("Frames werden übertragen ({d}/{t})", { d, t })),
     ).promise;
     const mean = target.dataset.current.withData(meanOfFrames(r.frames, dyn.duration));
     const dataset: LoadedDataset = { ...target.dataset, original: mean, current: mean, dynamic: { ...dyn, frames: r.frames } };
@@ -2347,7 +2345,7 @@ function App() {
     segmentCt: (ctId, modelId) => void startCtSegmentation(ctId, "auto", modelId),
     segmentCts: async (ctIds, modelId, status) => {
       for (const [n, id] of ctIds.entries()) {
-        status(`Organsegmentierung ${n + 1}/${ctIds.length}: ${entryLabel(byId(id)!)}`);
+        status(tx("Organsegmentierung {v}/{length}: {v2}", { v: n + 1, length: ctIds.length, v2: entryLabel(byId(id)!) }));
         if (!(await startCtSegmentation(id, "auto", modelId))) return false;
       }
       return true;
@@ -2362,11 +2360,11 @@ function App() {
     segRunning: ctSegRunning,
     registerTimePoints: async (refCtId, pairs, status) => {
       const refCt = byId(refCtId);
-      if (!refCt) throw new Error("Referenz-CT nicht gefunden.");
+      if (!refCt) throw new Error(tx("Referenz-CT nicht gefunden."));
       for (const [n, p] of pairs.entries()) {
         const ct = live.current.entries.find((e) => e.id === p.ctId);
         if (!ct) continue;
-        status(`Registrierung ${n + 1}/${pairs.length}: ${entryLabel(ct)}`);
+        status(tx("Registrierung {v}/{length}: {v2}", { v: n + 1, length: pairs.length, v2: entryLabel(ct) }));
         const run = runCoregistration(refCt.dataset.current, ct.dataset.current, { dof: 6, cost: "ncc", levels: [8, 4, 2], coarseSearch: true, initial: multiply4(invert4(refCt.matrix), ct.matrix) });
         const result = await run.promise;
         const next = multiply4(refCt.matrix, result.matrix);
@@ -2378,7 +2376,7 @@ function App() {
     },
     putDoseMap: (refSpectId, data, name, replaceId) => {
       const ref = byId(refSpectId);
-      if (!ref) throw new Error("Referenz-SPECT nicht gefunden.");
+      if (!ref) throw new Error(tx("Referenz-SPECT nicht gefunden."));
       const vol = ref.dataset.current.withData(data);
       let max = 0;
       for (const v of data) if (v > max) max = v;
@@ -2418,7 +2416,7 @@ function App() {
     toMni: kineticsToMni,
     labelsFor: (atlasId, targetId) => {
       const A = byId(atlasId), T = byId(targetId);
-      if (!A || !T) throw new Error("Atlas oder Datensatz nicht gefunden.");
+      if (!A || !T) throw new Error(tx("Atlas oder Datensatz nicht gefunden."));
       return atlasLabelsFor(A, T);
     },
     addMaps: (sourceId, maps) => {
@@ -2449,7 +2447,7 @@ function App() {
     const S = normSubject;
     if (!S) return;
     setNormError(null);
-    setFieldStatus("Wird gelesen …");
+    setFieldStatus(tx("Wird gelesen …"));
     try {
       let buffer = await file.arrayBuffer();
       const head = new Uint8Array(buffer, 0, 2);
@@ -2459,7 +2457,7 @@ function App() {
       if (coverage < 0.3) {
         setFieldStatus(null);
         setNormError(
-          `Das Feld zeigt nur zu ${Math.round(coverage * 100)} % in das Bild von „${S.dataset.displayName}“. Falsches Subjekt, ein inverses Feld (iy_*.nii statt y_*.nii) oder ein anders orientiertes Bild?`,
+          tx("Das Feld zeigt nur zu {v} % in das Bild von „{displayName}“. Falsches Subjekt, ein inverses Feld (iy_*.nii statt y_*.nii) oder ein anders orientiertes Bild?", { v: Math.round(coverage * 100), displayName: S.dataset.displayName }),
         );
         return;
       }
@@ -2475,14 +2473,14 @@ function App() {
       setNormalization(n);
       const { nx, ny, nz, geometry } = parsed.grid;
       setFieldStatus(
-        `${file.name}: ${nx} × ${ny} × ${nz}, ${geometry.spacing.map((v) => v.toFixed(2)).join(" × ")} mm; ${Math.round(coverage * 100)} % im Bild des Subjekts` +
-          (parsed.invalidFraction > 0 ? `, ${(parsed.invalidFraction * 100).toFixed(1)} % ohne Zuordnung` : "") +
-          (tpl ? ` – passt zur Vorlage ${tpl.dataset.template?.name}.` : " – Raster weicht von den geladenen Vorlagen ab; die übertragenen Datensätze bilden den Standardraum."),
+        tx("{name}: {nx} × {ny} × {nz}, {v} mm; {v2} % im Bild des Subjekts", { name: file.name, nx, ny, nz, v: geometry.spacing.map((v) => v.toFixed(2)).join(" × "), v2: Math.round(coverage * 100) }) +
+          (parsed.invalidFraction > 0 ? tx(", {v} % ohne Zuordnung", { v: (parsed.invalidFraction * 100).toFixed(1) }) : "") +
+          (tpl ? tx(" – passt zur Vorlage {name}.", { name: tpl.dataset.template?.name }) : tx(" – Raster weicht von den geladenen Vorlagen ab; die übertragenen Datensätze bilden den Standardraum.")),
       );
       await transferToStandardSpace(n, [S.id], "linear", tpl);
     } catch (e) {
       setFieldStatus(null);
-      setNormError(`Verformungsfeld nicht lesbar: ${e instanceof Error ? e.message : String(e)}`);
+      setNormError(tx("Verformungsfeld nicht lesbar: {v}", { v: e instanceof Error ? e.message : String(e) }));
     }
   }
 
@@ -2531,7 +2529,7 @@ function App() {
         const w2v = e && (matrixOverrides?.has(id) ? transformedWorldToVoxel(worldToVoxelTransform(e.dataset.current.geometry), matrixOf(e)) : w2vById.get(id));
         if (!e || !w2v) continue;
         const label = `${i + 1}/${ids.length}: ${entryShort(e)}`;
-        setTransferStatus(`${label} wird übertragen …`);
+        setTransferStatus(tx("{label} wird übertragen …", { label }));
         // Label images keep their label numbers (nearest neighbour) and region names.
         const m: Interpolation = e.dataset.atlas ? "nearest" : method;
         const data = await runResample(e.dataset.current, w2v, points, m, (f) => setTransferStatus(`${label} ${Math.round(f * 100)} %`));
@@ -2541,7 +2539,7 @@ function App() {
         if (dynamic) {
           const frames: Float32Array[] = [];
           for (const [k, f] of dynamic.frames.entries()) {
-            setTransferStatus(`${label}: Frame ${k + 1}/${dynamic.frames.length}`);
+            setTransferStatus(tx("{label}: Frame {v}/{length}", { label, v: k + 1, length: dynamic.frames.length }));
             frames.push(await runResample(e.dataset.current.withData(f), w2v, points, m));
           }
           dynamic = { ...dynamic, frames };
@@ -2577,11 +2575,11 @@ function App() {
         setEntries((prev) => prev.map((x) => (x.id === overlayEntry.id ? { ...x, display: overlayDisplay(x) } : x)));
       }
       setCursor(null);
-      setTransferStatus(`${created.length} Datensatz/Datensätze im Standardraum angelegt (${nx} × ${ny} × ${nz}).`);
+      setTransferStatus(tx("{length} Datensatz/Datensätze im Standardraum angelegt ({nx} × {ny} × {nz}).", { length: created.length, nx, ny, nz }));
       return created;
     } catch (e) {
       setTransferStatus(null);
-      setNormError(`Übertragung fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
+      setNormError(tx("Übertragung fehlgeschlagen: {v}", { v: e instanceof Error ? e.message : String(e) }));
       return [];
     } finally {
       setTransferBusy(false);
@@ -2594,7 +2592,7 @@ function App() {
     if (datasetModality(e.dataset) === "CT") return CT_PRESETS;
     const suv = suvById.get(e.id);
     return [
-      { label: "Auto", window: defaultDisplay(v, e.dataset.source).window },
+      { label: tx("Auto"), window: defaultDisplay(v, e.dataset.source).window },
       ...(suv?.ok ? [5, 10, 15].map((m) => ({ label: `SUV 0–${m}`, window: [0, m / suv.info.factor] as [number, number] })) : []),
     ];
   };
@@ -2682,7 +2680,7 @@ function App() {
     const dist = Math.hypot(b1[0] - before[0], b1[1] - before[1], b1[2] - before[2]);
     showAlignment(
       alignByLandmark(b1, m1.p, moving.matrix),
-      `${entryLabel(moving)} um ${dist.toFixed(0)} mm verschoben: Landmarke 1 liegt jetzt auf Landmarke 1 der Basis (Fadenkreuz). Falls verdreht: „Mit Landmarke 2 ausrichten“ oder im Reiter „Manuell“ um Landmarke 1 drehen.`,
+      tx("{v} um {v2} mm verschoben: Landmarke 1 liegt jetzt auf Landmarke 1 der Basis (Fadenkreuz). Falls verdreht: „Mit Landmarke 2 ausrichten“ oder im Reiter „Manuell“ um Landmarke 1 drehen.", { v: entryLabel(moving), v2: dist.toFixed(0) }),
     );
   }
 
@@ -2702,7 +2700,7 @@ function App() {
     const dm = Math.hypot(m2.p[0] - m1.p[0], m2.p[1] - m1.p[1], m2.p[2] - m1.p[2]);
     showAlignment(
       next,
-      `${entryLabel(moving)} auf Landmarke 1 gelegt und um ${angle.toFixed(0)}° gedreht, bis die Richtung zu Landmarke 2 stimmt. Abstand Landmarke 1–2: Basis ${db.toFixed(0)} mm, Datensatz ${dm.toFixed(0)} mm${Math.abs(db - dm) > 10 ? " – deutlich verschieden, Landmarken prüfen" : ""}.`,
+      tx("{v} auf Landmarke 1 gelegt und um {v2}° gedreht, bis die Richtung zu Landmarke 2 stimmt. Abstand Landmarke 1–2: Basis {v3} mm, Datensatz {v4} mm{v5}.", { v: entryLabel(moving), v2: angle.toFixed(0), v3: db.toFixed(0), v4: dm.toFixed(0), v5: Math.abs(db - dm) > 10 ? tx(" – deutlich verschieden, Landmarken prüfen") : "" }),
     );
   }
 
@@ -2733,7 +2731,7 @@ function App() {
     const l = e?.landmarks?.find((x) => x.name === LANDMARK_1);
     if (!e || !l) return;
     const ids = new Set([e.id, ...(sameFrameToo && isPrimary(e) ? membersOf(e.id).map((x) => x.id) : [])]);
-    if (!window.confirm(`Ursprung (0,0,0) von ${ids.size === 1 ? "„" + entryLabel(e) + "“" : `${ids.size} Datensätzen`} auf Landmarke 1 legen? Die Lage zu den anderen Datensätzen bleibt erhalten.`)) return;
+    if (!window.confirm(tx("Ursprung (0,0,0) von {what} auf Landmarke 1 legen? Die Lage zu den anderen Datensätzen bleibt erhalten.", { what: ids.size === 1 ? "„" + entryLabel(e) + "“" : tx("{n} Datensätzen", { n: ids.size }) }))) return;
     applyReorient(ids, originShift(l.p));
   }
 
@@ -2750,9 +2748,9 @@ function App() {
     const a = moving.dataset.current.geometry.frameOfReferenceUid;
     const b = reference.dataset.current.geometry.frameOfReferenceUid;
     if (!moving.dataset.current.hasPatientGeometry || !reference.dataset.current.hasPatientGeometry)
-      frameNote = "Für mindestens einen Datensatz sind keine Patientenkoordinaten bekannt – vorher über Landmarken oder manuell grob ausrichten.";
+      frameNote = tx("Für mindestens einen Datensatz sind keine Patientenkoordinaten bekannt – vorher über Landmarken oder manuell grob ausrichten.");
     else if (a && b && a !== b)
-      frameNote = "Unterschiedliche Frame-of-Reference-UIDs: Die Datensätze stammen evtl. aus verschiedenen Untersuchungen – Grobsuche empfohlen.";
+      frameNote = tx("Unterschiedliche Frame-of-Reference-UIDs: Die Datensätze stammen evtl. aus verschiedenen Untersuchungen – Grobsuche empfohlen.");
   }
 
   /** NIfTI: user-chosen modality; switching to/from CT also switches between CT and automatic window. */
@@ -2780,7 +2778,7 @@ function App() {
   const dataTab = (
     <>
       <VolumeUploadPanel
-        title={entries.length ? "Weiteren Datensatz laden" : "Volumen laden"}
+        title={entries.length ? tx("Weiteren Datensatz laden") : tx("Volumen laden")}
         onLoaded={handleVolumeLoaded}
         onProjectFile={(f) => void openProjectFile(f)}
         onBusyChange={(b) => {
@@ -2791,20 +2789,20 @@ function App() {
             const hidden = d.filter((x) => !x.shown);
             if (hidden.length)
               setNotice(
-                `${d.length} ${d.length === 1 ? "Datensatz" : "Datensätze"} geladen – nicht eingeblendet: ${hidden.map((h) => h.name).join(", ")}. Einblenden über „Ebenen“ oben rechts im Viewer.`,
+                tx("{length} {v} geladen – nicht eingeblendet: {v2}. Einblenden über „Ebenen“ oben rechts im Viewer.", { length: d.length, v: d.length === 1 ? "Datensatz" : tx("Datensätze"), v2: hidden.map((h) => h.name).join(", ") }),
               );
           }
         }}
-        description="PET, SPECT, CT oder MRT als DICOM (Datei oder Serie) bzw. NIfTI – beliebig viele."
+        description={tx("PET, SPECT, CT oder MRT als DICOM (Datei oder Serie) bzw. NIfTI – beliebig viele.")}
         compact={entries.length > 0}
       />
       <section className="card patient-card">
         <label className="field">
-          Patient-ID
+          {tx("Patient-ID")}
           <input type="text" value={patientId} maxLength={64} placeholder="optional, z. B. P0815" onChange={(e) => setPatientId(e.target.value)} />
         </label>
-        <InfoText details="Wird allen exportierten NIfTI- und CSV-Dateinamen vorangestellt (auch in ZIP-Archiven solcher Dateien) sowie dem Namen der Projektdatei (.recon); DICOM-Exporte bleiben unverändert. Wird im Projekt mitgespeichert.">
-          {sanitizePatientId(patientId) ? `Präfix „${sanitizePatientId(patientId)}_“` : "Präfix für Exportnamen"}
+        <InfoText details={tx("Wird allen exportierten NIfTI- und CSV-Dateinamen vorangestellt (auch in ZIP-Archiven solcher Dateien) sowie dem Namen der Projektdatei (.recon); DICOM-Exporte bleiben unverändert. Wird im Projekt mitgespeichert.")}>
+          {sanitizePatientId(patientId) ? tx("Präfix „{v}_“", { v: sanitizePatientId(patientId) }) : tx("Präfix für Exportnamen")}
         </InfoText>
       </section>
       {entries.length > 0 && (
@@ -2865,7 +2863,7 @@ function App() {
         }}
       />
       <details className="card collapsible">
-        <summary>Vorlagen &amp; Atlanten (Hirn, MNI)</summary>
+        <summary>{tx("Vorlagen & Atlanten (Hirn, MNI)")}</summary>
         <BrainCatalog
           loaded={loadedCatalog}
           busyId={catalogBusy}
@@ -2876,8 +2874,8 @@ function App() {
           onRemoveCached={(id) => void removeCachedEntry(id).then(() => cachedEntryIds().then(setCachedCatalog))}
           error={catalogError}
         />
-        <p className="hint">Eigene Vorlagen:</p>
-        <VolumeUploadPanel single title="Eigene T1-Vorlage (NIfTI)" description="z. B. aus SPM oder CAT12." onLoaded={(l, n) => addOwnTemplate(l, n, "T1")} />
+        <p className="hint">{tx("Eigene Vorlagen:")}</p>
+        <VolumeUploadPanel single title={tx("Eigene T1-Vorlage (NIfTI)")} description={tx("z. B. aus SPM oder CAT12.")} onLoaded={(l, n) => addOwnTemplate(l, n, "T1")} />
         <label className="field">
           Eigene PET-Vorlage (NIfTI; 4D = adaptive Vorlage: amyloid-negativ, amyloid-positiv)
           <input
@@ -2895,7 +2893,7 @@ function App() {
         </label>
       </details>
       <details className="card collapsible" open={entries.length === 0 || !!projectionSet}>
-        <summary>SPECT-Rohdaten rekonstruieren</summary>
+        <summary>{tx("SPECT-Rohdaten rekonstruieren")}</summary>
         <UploadPanel onLoaded={handleLoaded} />
         {projectionSet && (
           <ReconControls projectionSet={projectionSet} busy={busy} progress={progress} onStart={handleStart} onCancel={handleCancel} />
@@ -2929,7 +2927,7 @@ function App() {
     return (
       <LayerSettings
         key={e.id}
-        title={`${entryLabel(e)}${isOverlay ? ` · Overlay ${overlays.length > 1 ? overlays.length - index : ""}` : overlays.length ? " · Basis" : ""}`}
+        title={`${entryLabel(e)}${isOverlay ? ` · Overlay ${overlays.length > 1 ? overlays.length - index : ""}` : overlays.length ? ` · ${tx("Basis")}` : ""}`}
         display={isOverlay ? e.display : { ...e.display, opacity: 1 }}
         onChange={(d) => updateEntry(e.id, { display: d })}
         scale={u.scale}
@@ -2956,17 +2954,17 @@ function App() {
         {e.dataset.atlas && labelList(e)}
         {isOverlay && (
           <div className="chip-row">
-            <button className="chip-btn" disabled={index === 0} title="eine Ebene nach oben" onClick={() => moveOverlay(e.id, 1)}>
-              ↑ nach oben
+            <button className="chip-btn" disabled={index === 0} title={tx("eine Ebene nach oben")} onClick={() => moveOverlay(e.id, 1)}>
+              {tx("↑ nach oben")}
             </button>
-            <button className="chip-btn" disabled={index === overlays.length - 1} title="eine Ebene nach unten" onClick={() => moveOverlay(e.id, -1)}>
-              ↓ nach unten
+            <button className="chip-btn" disabled={index === overlays.length - 1} title={tx("eine Ebene nach unten")} onClick={() => moveOverlay(e.id, -1)}>
+              {tx("↓ nach unten")}
             </button>
             <button className="chip-btn" onClick={() => makeReference(e.id)}>
-              als Basis
+              {tx("als Basis")}
             </button>
             <button className="chip-btn" onClick={() => removeOverlay(e.id)}>
-              aus Ansicht entfernen
+              {tx("aus Ansicht entfernen")}
             </button>
           </div>
         )}
@@ -2976,7 +2974,7 @@ function App() {
 
   const overviewVoi = useStableVoi(
     voiMaskData && volume && activeW2v && voi && active
-      ? { mask: voiMaskData, volume, w2v: activeW2v, bounds: voiBounds, label: `VOI (${voi.shape.kind === "sphere" ? "Kugel" : voi.shape.kind === "box" ? "Quader" : "gezeichnet"}) auf ${datasetModality(active.dataset)}` }
+      ? { mask: voiMaskData, volume, w2v: activeW2v, bounds: voiBounds, label: tx("VOI ({v}) auf {v2}", { v: voi.shape.kind === "sphere" ? "Kugel" : voi.shape.kind === "box" ? "Quader" : "gezeichnet", v2: datasetModality(active.dataset) }) }
       : null,
   );
   const overviewRows = useStableRows(
@@ -2993,12 +2991,12 @@ function App() {
       {[...overlays].reverse().map((o, i) => layerSettings(o, true, i))}
       {reference && layerSettings(reference, false)}
       {hiddenEntries.length > 0 && (
-        <Card title={<>Weitere Datensätze</>} status={{ text: String(hiddenEntries.length), tone: "info" }}>
+        <Card title={<>{tx("Weitere Datensätze")}</>} status={{ text: String(hiddenEntries.length), tone: "info" }}>
           {hiddenEntries.map((e) => (
             <div key={e.id} className="hidden-dataset-row">
               <span>{entryLabel(e)}</span>
               <button className="chip-btn" onClick={() => makeOverlay(e.id)}>
-                als Overlay einblenden
+                {tx("als Overlay einblenden")}
               </button>
             </div>
           ))}
@@ -3041,7 +3039,7 @@ function App() {
     const status = statusOf(e);
     const detail =
       status === "running" && coregProgress
-        ? `Stufe ${coregProgress.level}/${coregProgress.levels} · ${similarity(coregSettings.cost === "auto" ? costFor(e) : coregSettings.cost, coregProgress.cost)}`
+        ? tx("Stufe {level}/{levels} · {v}", { level: coregProgress.level, levels: coregProgress.levels, v: similarity(coregSettings.cost === "auto" ? costFor(e) : coregSettings.cost, coregProgress.cost) })
         : r && (status === "pending" || status === "registered")
           ? `${similarity(r.result.cost, r.result.before)} → ${similarity(r.result.cost, r.result.after)}`
           : undefined;
@@ -3069,7 +3067,7 @@ function App() {
   };
   const landmarkStep = moving && landmarkStepFor?.id === moving.id ? landmarkStepFor.step : 0;
   const movingStatus = moving ? statusOf(moving) : null;
-  const STATUS_TEXT: Record<RegStatusKind, string> = { scanner: "Patientenkoordinaten", registered: "✓ registriert", manual: "✎ manuell/Landmarken", pending: "◐ Ergebnis prüfen", running: "läuft …", queued: "wartet" };
+  const STATUS_TEXT: Record<RegStatusKind, string> = { scanner: tx("Patientenkoordinaten"), registered: tx("✓ registriert"), manual: tx("✎ manuell/Landmarken"), pending: tx("◐ Ergebnis prüfen"), running: tx("läuft …"), queued: tx("wartet") };
 
   /** Datasets that can be edited (VOI, values): all except standard-space templates. */
   const editTargets = entries.filter((e) => !e.dataset.template).map((e) => ({ id: e.id, label: entryLabel(e) }));
@@ -3147,12 +3145,12 @@ function App() {
               <CoregSettingsForm autoCost={autoCost} settings={coregSettings} onSettingsChange={setCoregSettings} running={coregRunning} />
               {!coregRunning ? (
                 <button className={movingStatus === "pending" ? "secondary-btn" : "primary-btn"} onClick={() => void startCoregistration([moving.id])}>
-                  Jetzt registrieren
+                  {tx("Jetzt registrieren")}
                 </button>
               ) : (
                 <>
                   <p className="tool-hint">
-                    {coregProgress ? `Stufe ${coregProgress.level}/${coregProgress.levels} · ${coregProgress.stage}` : "Vorbereitung …"}
+                    {coregProgress ? tx("Stufe {level}/{levels} · {stage}", { level: coregProgress.level, levels: coregProgress.levels, stage: coregProgress.stage }) : tx("Vorbereitung …")}
                   </p>
                   <button
                     className="secondary-btn"
@@ -3161,7 +3159,7 @@ function App() {
                       coregRun.current?.cancel();
                     }}
                   >
-                    Abbrechen
+                    {tx("Abbrechen")}
                   </button>
                 </>
               )}
@@ -3173,10 +3171,10 @@ function App() {
                   </p>
                   <div className="button-row">
                     <button className="primary-btn" onClick={() => acceptCoregistration(moving.id)}>
-                      Übernehmen
+                      {tx("Übernehmen")}
                     </button>
                     <button className="secondary-btn" onClick={() => discardCoregistration(moving.id)}>
-                      Verwerfen
+                      {tx("Verwerfen")}
                     </button>
                   </div>
                 </>
@@ -3187,7 +3185,7 @@ function App() {
             <RegistrationPanel
               params={movingParams}
               onChange={(p) => placeMoving(matrixFromParams(p, movingCenter))}
-              pivots={movingLandmark ? [{ id: "landmark", label: "Landmarke 1 (Ursprung)" }, { id: "center", label: "Volumenmitte" }] : undefined}
+              pivots={movingLandmark ? [{ id: "landmark", label: tx("Landmarke 1 (Ursprung)") }, { id: "center", label: tx("Volumenmitte") }] : undefined}
               pivot={rotPivot}
               onPivotChange={(v) => setRotPivot(v as "landmark" | "center")}
             >
@@ -3203,10 +3201,10 @@ function App() {
             <>
               <div className="button-row">
                 <button className="secondary-btn" disabled={coregRunning} onClick={saveMatrix}>
-                  Matrix speichern
+                  {tx("Matrix speichern")}
                 </button>
                 <label className="secondary-btn file-btn">
-                  Matrix laden
+                  {tx("Matrix laden")}
                   <input
                     type="file"
                     accept=".json,application/json"
@@ -3227,10 +3225,10 @@ function App() {
                   discardResultOnly(moving.id);
                 }}
               >
-                Auf Patientenkoordinaten zurücksetzen
+                {tx("Auf Patientenkoordinaten zurücksetzen")}
               </button>
-              <InfoText details="Wie SPM „Set origin“: Landmarke 1 wird zum Koordinatenursprung (0,0,0) des Datensatzes. Die Lage zu den anderen Datensätzen bleibt, der Export enthält den neuen Ursprung (DICOM als neue Serie mit neuer FrameOfReference). Gilt auch für die Datensätze derselben Aufnahme. Vor einer Normalisierung ausführen.">
-                Ursprung dauerhaft übernehmen
+              <InfoText details={tx("Wie SPM „Set origin“: Landmarke 1 wird zum Koordinatenursprung (0,0,0) des Datensatzes. Die Lage zu den anderen Datensätzen bleibt, der Export enthält den neuen Ursprung (DICOM als neue Serie mit neuer FrameOfReference). Gilt auch für die Datensätze derselben Aufnahme. Vor einer Normalisierung ausführen.")}>
+                {tx("Ursprung dauerhaft übernehmen")}
               </InfoText>
               <div className="button-row">
                 <button className="secondary-btn" disabled={coregRunning || !reference.landmarks?.some((l) => l.name === LANDMARK_1)} onClick={() => reorientTo("base", true)}>
@@ -3245,13 +3243,13 @@ function App() {
                   <p key={side} className="tool-hint">
                     {side === "base" ? "Basis" : "Datensatz"}: Ursprung übernommen.{" "}
                     <button className="link-btn" disabled={coregRunning} onClick={() => resetOrigin(side)}>
-                      zurück auf Original-Ursprung
+                      {tx("zurück auf Original-Ursprung")}
                     </button>
                   </p>
                 ) : null,
               )}
-              <InfoText details="Intensitätsbasierte Registrierung nach dem Vorbild von SPM (Coregister) und FSL FLIRT: Mutual Information für unterschiedliche Modalitäten, Kreuzkorrelation für gleiche; Startpunkt ist die aktuelle Lage (Patientenkoordinaten, Landmarken oder manuelle Korrektur). Grobsuche: Schwerpunkt + Rotationsraster ±30°; Startlage beibehalten: nur ±10° / ±10 mm.">
-                Wie funktioniert die Registrierung?
+              <InfoText details={tx("Intensitätsbasierte Registrierung nach dem Vorbild von SPM (Coregister) und FSL FLIRT: Mutual Information für unterschiedliche Modalitäten, Kreuzkorrelation für gleiche; Startpunkt ist die aktuelle Lage (Patientenkoordinaten, Landmarken oder manuelle Korrektur). Grobsuche: Schwerpunkt + Rotationsraster ±30°; Startlage beibehalten: nur ±10° / ±10 mm.")}>
+                {tx("Wie funktioniert die Registrierung?")}
               </InfoText>
             </>
           }
@@ -3289,7 +3287,7 @@ function App() {
       useMask={normUseMask}
       onUseMaskChange={setNormUseMask}
       maskAvailable={subjectKind !== "CT" && (normTemplate ? !!normTemplate.dataset.template?.mask : templateKind !== "CT")}
-      costLabel={normCost === "ncc" ? "Kreuzkorrelation (gleicher Kontrast)" : "Normalisierte Mutual Information (unterschiedlicher Kontrast)"}
+      costLabel={normCost === "ncc" ? tx("Kreuzkorrelation (gleicher Kontrast)") : tx("Normalisierte Mutual Information (unterschiedlicher Kontrast)")}
       running={normRunning}
       progress={normProgress}
       onStart={startNormalization}
@@ -3318,9 +3316,9 @@ function App() {
       <CentiloidPanel
         voisLoaded={
           centiloidVois
-            ? `VOIs geladen (${centiloidVois.resolutionMm} mm): ${Object.keys(centiloidVois.volumes)
-                .map((k) => VOI_LABELS[k as VoiName])
-                .join(", ")}`
+            ? tx("VOIs geladen ({resolutionMm} mm): {v}", { resolutionMm: centiloidVois.resolutionMm, v: Object.keys(centiloidVois.volumes)
+                .map((k) => tx(VOI_LABELS[k as VoiName]))
+                .join(", ") })
             : null
         }
         onLoadVois={(f) => void loadCentiloidVois(f)}
@@ -3362,51 +3360,51 @@ function App() {
   );
 
   const tabs: ShellTab[] = [
-    { id: "data", label: "Daten", icon: FolderOpen, content: dataTab, badge: entries.length > 1 ? entries.length : undefined },
-    { id: "view", label: "Ansicht", icon: Eye, disabled: layers.length === 0, disabledReason: "Erst einen Datensatz laden", content: viewTab },
-    { id: "registration", label: "Koregistrierung (Patientenraum)", shortLabel: "Ko\u00adregis\u00adtrierung", icon: Crosshair, disabled: entries.length < 2, disabledReason: "Koregistrierung ab zwei Datensätzen", content: registrationTab },
+    { id: "data", label: tx("Daten"), icon: FolderOpen, content: dataTab, badge: entries.length > 1 ? entries.length : undefined },
+    { id: "view", label: tx("Ansicht"), icon: Eye, disabled: layers.length === 0, disabledReason: tx("Erst einen Datensatz laden"), content: viewTab },
+    { id: "registration", label: tx("Koregistrierung (Patientenraum)"), shortLabel: "Ko\u00adregis\u00adtrierung", icon: Crosshair, disabled: entries.length < 2, disabledReason: tx("Koregistrierung ab zwei Datensätzen"), content: registrationTab },
     {
       id: "normalization",
-      label: "Standardraum (MNI, Hirn)",
-      shortLabel: "Standard\u00adraum",
+      label: tx("Standardraum (MNI, Hirn)"),
+      shortLabel: tx("Standard\u00adraum"),
       icon: Brain,
       disabled: entries.filter((e) => !e.dataset.template).length === 0,
-      disabledReason: "Erst einen Datensatz laden",
+      disabledReason: tx("Erst einen Datensatz laden"),
       content: normalizationTab,
     },
     {
       id: "suvr",
-      label: "Centiloid & SUVR",
+      label: tx("Centiloid & SUVR"),
       shortLabel: "SUVR",
       icon: Gauge,
       disabled: entries.filter((e) => !e.dataset.template).length === 0,
-      disabledReason: "Erst einen Datensatz laden",
+      disabledReason: tx("Erst einen Datensatz laden"),
       content: suvrTab,
     },
     {
       id: "kinetics",
-      label: "Kinetik",
+      label: tx("Kinetik"),
       icon: Activity,
       disabled: !entries.some((e) => e.dataset.dynamic),
-      disabledReason: "Nur für dynamische Daten (4D-NIfTI oder dynamische DICOM-Serie)",
+      disabledReason: tx("Nur für dynamische Daten (4D-NIfTI oder dynamische DICOM-Serie)"),
       content: <KineticsPanel api={kineticsApi} />,
     },
     {
       id: "dosimetry",
-      label: "Dosimetrie",
-      shortLabel: "Dosi\u00admetrie",
+      label: tx("Dosimetrie"),
+      shortLabel: tx("Dosi\u00admetrie"),
       icon: Radiation,
       disabled: !entries.some((e) => !e.dataset.atlas && !e.dataset.template && !isAnatomical(e.dataset.source)),
-      disabledReason: "Erst SPECT-Daten laden",
+      disabledReason: tx("Erst SPECT-Daten laden"),
       content: <DosimetryPanel api={dosimetryApi} />,
     },
     {
       id: "tumor",
-      label: "Segmentierung & MTV",
-      shortLabel: "Segm. & MTV",
+      label: tx("Segmentierung & MTV"),
+      shortLabel: tx("Segm. & MTV"),
       icon: Target,
       disabled: tumorTargets.length === 0 && ctEntries.length === 0,
-      disabledReason: "Erst ein PET oder CT laden",
+      disabledReason: tx("Erst ein PET oder CT laden"),
       content: (
         <>
         <CtSegCard
@@ -3435,7 +3433,7 @@ function App() {
         />
         {organEntry?.dataset.atlas && (
           <Card title={<>Regionen · {entryLabel(organEntry)}</>} defaultOpen={false} persistKey="tumor-regions">
-            <p className="tool-hint">Klick: Fadenkreuz in die Region · Häkchen: ein-/ausblenden.</p>
+            <p className="tool-hint">{tx("Klick: Fadenkreuz in die Region · Häkchen: ein-/ausblenden.")}</p>
             {labelList(organEntry)}
           </Card>
         )}
@@ -3445,8 +3443,8 @@ function App() {
           onTargetChange={setTumorTargetId}
           unitInfo={
             tumorSuv?.ok
-              ? "Schwellen in SUV (Körpergewicht) aus dem DICOM-Header."
-              : `Kein SUV verfügbar${tumorSuv && !tumorSuv.ok ? ` (${tumorSuv.reason})` : ""} – z. B. Therapie-SPECT in Counts. Schwellen gelten in der Einheit des Bildes (${tumorRawUnit || "Originalwerte"}) oder relativ zum Maximum; feste SUV-Schwellen (2,5 / 3 / 4) sind dann nicht anwendbar. TLG/TL-PSMA ist das Produkt aus Volumen und mittlerem Wert in dieser Einheit.`
+              ? tx("Schwellen in SUV (Körpergewicht) aus dem DICOM-Header.")
+              : tx("Kein SUV verfügbar{reason} – z. B. Therapie-SPECT in Counts. Schwellen gelten in der Einheit des Bildes ({unit}) oder relativ zum Maximum; feste SUV-Schwellen (2,5 / 3 / 4) sind dann nicht anwendbar. TLG/TL-PSMA ist das Produkt aus Volumen und mittlerem Wert in dieser Einheit.", { reason: tumorSuv && !tumorSuv.ok ? ` (${tx(tumorSuv.reason)})` : "", unit: tumorRawUnit || tx("Originalwerte") })
           }
           suvAvailable={!!tumorSuv?.ok}
           onAddLesionAtCursor={addLesionAtCursor}
@@ -3490,10 +3488,10 @@ function App() {
     },
     {
       id: "analysis",
-      label: "Analyse",
+      label: tx("Analyse"),
       icon: BarChart3,
       disabled: !stats,
-      disabledReason: "Erst einen Datensatz laden",
+      disabledReason: tx("Erst einen Datensatz laden"),
       content: volume && stats && active && (
         <>
           <DatasetOverview
@@ -3531,11 +3529,11 @@ function App() {
     },
     {
       id: "imcalc",
-      label: "IMCALC – voxelweise Rechnung",
+      label: tx("IMCALC – voxelweise Rechnung"),
       shortLabel: "IMCALC",
       icon: Calculator,
       disabled: imcalcInputs.length === 0,
-      disabledReason: "Erst einen Datensatz laden",
+      disabledReason: tx("Erst einen Datensatz laden"),
       content: (
         <>
         <ImcalcPanel
@@ -3589,10 +3587,10 @@ function App() {
     },
     {
       id: "edit",
-      label: "Bearbeiten",
+      label: tx("Bearbeiten"),
       icon: Wand2,
       disabled: !stats,
-      disabledReason: "Erst einen Datensatz laden",
+      disabledReason: tx("Erst einen Datensatz laden"),
       badge: dataset?.edits.length,
       content: dataset && volume && stats && (
         <>
@@ -3629,7 +3627,7 @@ function App() {
           />
           <TripleWindowCard
             cts={ctEntries.filter((e) => e.dataset.kindLabel !== "CT 3W").map((e) => ({ id: e.id, label: entryLabel(e) }))}
-            organSets={organEntries.map((e) => ({ id: e.id, label: entryLabel(e), forCt: ctEntries.find((c) => e.dataset.displayName === `CT-Organe · ${c.dataset.displayName}`)?.id }))}
+            organSets={organEntries.map((e) => ({ id: e.id, label: entryLabel(e), forCt: ctEntries.find((c) => tBoth("CT-Organe · {displayName}", { displayName: c.dataset.displayName }).includes(e.dataset.displayName))?.id }))}
             busy={tripleBusy}
             status={tripleStatus}
             error={tripleError}
@@ -3651,11 +3649,11 @@ function App() {
     },
     {
       id: "header",
-      label: "Header",
+      label: tx("Header"),
       icon: FileCode2,
       wide: true,
       disabled: dataset?.source.kind !== "dicom",
-      disabledReason: "Header-Editor nur für DICOM-Datensätze (aktiver Datensatz)",
+      disabledReason: tx("Header-Editor nur für DICOM-Datensätze (aktiver Datensatz)"),
       badge: dataset?.headerEdits.length,
       content: dataset && active && (
         <HeaderPanel key={active.id} dataset={dataset} onEditsChange={(headerEdits) => setDataset(active.id, { ...dataset, headerEdits })} />
@@ -3663,10 +3661,10 @@ function App() {
     },
     {
       id: "export",
-      label: "Export",
+      label: tx("Export"),
       icon: Download,
       disabled: !dataset,
-      disabledReason: "Erst einen Datensatz laden",
+      disabledReason: tx("Erst einen Datensatz laden"),
       content: dataset && active && (
         <ExportPanel
           items={spaces.map((sp) => {
@@ -3687,43 +3685,43 @@ function App() {
   const act = (a: JobActivity | false | "" | null | undefined) => {
     if (a) activities.push(a);
   };
-  act(projectBusy && { id: "project", label: projectBusy === "save" ? "Projekt speichern" : "Projekt öffnen", tab: "data" });
-  act(loadBusy && { id: "load", label: "Laden", detail: "Dateien werden gelesen", tab: "data" });
-  act(busy && { id: "recon", label: "Rekonstruktion", fraction: progress, tab: "data" });
+  act(projectBusy && { id: "project", label: projectBusy === "save" ? tx("Projekt speichern") : tx("Projekt öffnen"), tab: "data" });
+  act(loadBusy && { id: "load", label: tx("Laden"), detail: tx("Dateien werden gelesen"), tab: "data" });
+  act(busy && { id: "recon", label: tx("Rekonstruktion"), fraction: progress, tab: "data" });
   act(
     coregRunning && {
       id: "coreg",
-      label: "Koregistrierung",
+      label: tx("Koregistrierung"),
       detail: `${regQueue.running ? (byId(regQueue.running) ? entryShort(byId(regQueue.running)!) : "") : ""}${regQueue.waiting.length ? ` · ${regQueue.waiting.length} wartend` : ""}${coregProgress ? ` · ${coregProgress.stage}` : ""}`,
       tab: "registration",
     },
   );
-  act(normRunning && !centiloidRunning && { id: "norm", label: "Normalisierung", detail: normProgress?.stage, fraction: normProgress?.fraction ?? null, tab: "normalization" });
-  act(transferBusy && { id: "transfer", label: "Übertragung", detail: transferStatus ?? undefined, tab: "normalization" });
-  act(centiloidRunning && { id: "centiloid", label: "Centiloid", detail: normProgress ? normProgress.stage : (centiloidStatus ?? undefined), fraction: normProgress?.fraction ?? null, tab: "suvr" });
+  act(normRunning && !centiloidRunning && { id: "norm", label: tx("Normalisierung"), detail: normProgress?.stage, fraction: normProgress?.fraction ?? null, tab: "normalization" });
+  act(transferBusy && { id: "transfer", label: tx("Übertragung"), detail: transferStatus ?? undefined, tab: "normalization" });
+  act(centiloidRunning && { id: "centiloid", label: tx("Centiloid"), detail: normProgress ? normProgress.stage : (centiloidStatus ?? undefined), fraction: normProgress?.fraction ?? null, tab: "suvr" });
   act(
     ctSegRunning && {
       id: "ctseg",
-      label: "CT-Segmentierung",
-      detail: ctSegProgress ? `${ctSegProgress.stage}${ctSegProgress.total ? ` · Kachel ${Math.min(ctSegProgress.done + 1, ctSegProgress.total)}/${ctSegProgress.total}` : ""}` : "Vorbereitung",
+      label: tx("CT-Segmentierung"),
+      detail: ctSegProgress ? `${ctSegProgress.stage}${ctSegProgress.inference && ctSegProgress.total ? ` · ${tx("Kachel {n}/{total}", { n: Math.min(ctSegProgress.done + 1, ctSegProgress.total), total: ctSegProgress.total })}` : ""}` : tx("Vorbereitung"),
       fraction: ctSegProgress?.total ? ctSegProgress.done / ctSegProgress.total : null,
       tab: "tumor",
     },
   );
-  act(tumorBusy && { id: "tumor", label: "Segmentierung & MTV", detail: "Segmentierung", tab: "tumor" });
-  act(fusionBusy && { id: "fusion", label: "Fusionsexport", tab: "view" });
-  act(editBusy && { id: "edit", label: "Bearbeiten", tab: "edit" });
-  act((catalogBusy || atlasBusy) && { id: "bundled", label: catalogBusy ? "Vorlage laden" : "Atlas laden", tab: catalogBusy ? "data" : "analysis" });
-  act(exportActivity && { id: "export", label: "Export", detail: exportActivity, tab: "export" });
-  act(tripleBusy && { id: "triple", label: "Triple-Window-CT", detail: tripleStatus ?? undefined, tab: "edit" });
+  act(tumorBusy && { id: "tumor", label: tx("Segmentierung & MTV"), detail: tx("Segmentierung"), tab: "tumor" });
+  act(fusionBusy && { id: "fusion", label: tx("Fusionsexport"), tab: "view" });
+  act(editBusy && { id: "edit", label: tx("Bearbeiten"), tab: "edit" });
+  act((catalogBusy || atlasBusy) && { id: "bundled", label: catalogBusy ? tx("Vorlage laden") : tx("Atlas laden"), tab: catalogBusy ? "data" : "analysis" });
+  act(exportActivity && { id: "export", label: tx("Export"), detail: exportActivity, tab: "export" });
+  act(tripleBusy && { id: "triple", label: tx("Triple-Window-CT"), detail: tripleStatus ?? undefined, tab: "edit" });
   act(imcalcBusy && { id: "imcalc", label: "IMCALC", detail: imcalcBusy, tab: "imcalc" });
-  act(dosimetryActivity && { id: "dosimetry", label: "Dosimetrie", detail: dosimetryActivity, tab: "dosimetry" });
-  act(kineticsActivity && { id: "kinetics", label: "Kinetik", detail: kineticsActivity.label, fraction: kineticsActivity.fraction, tab: "kinetics" });
-  act(ctSegError && !ctSegRunning && { id: "ctseg-error", label: "CT-Segmentierung", error: ctSegError, tab: "tumor" });
-  act(normError && !normRunning && { id: "norm-error", label: "Normalisierung", error: normError, tab: "normalization" });
-  act(coregError && !coregRunning && { id: "coreg-error", label: "Koregistrierung", error: coregError, tab: "registration" });
-  act(centiloidError && !centiloidRunning && { id: "centiloid-error", label: "Centiloid", error: centiloidError, tab: "suvr" });
-  act(tumorError && !tumorBusy && { id: "tumor-error", label: "Segmentierung & MTV", error: tumorError, tab: "tumor" });
+  act(dosimetryActivity && { id: "dosimetry", label: tx("Dosimetrie"), detail: dosimetryActivity, tab: "dosimetry" });
+  act(kineticsActivity && { id: "kinetics", label: tx("Kinetik"), detail: kineticsActivity.label, fraction: kineticsActivity.fraction, tab: "kinetics" });
+  act(ctSegError && !ctSegRunning && { id: "ctseg-error", label: tx("CT-Segmentierung"), error: ctSegError, tab: "tumor" });
+  act(normError && !normRunning && { id: "norm-error", label: tx("Normalisierung"), error: normError, tab: "normalization" });
+  act(coregError && !coregRunning && { id: "coreg-error", label: tx("Koregistrierung"), error: coregError, tab: "registration" });
+  act(centiloidError && !centiloidRunning && { id: "centiloid-error", label: tx("Centiloid"), error: centiloidError, tab: "suvr" });
+  act(tumorError && !tumorBusy && { id: "tumor-error", label: tx("Segmentierung & MTV"), error: tumorError, tab: "tumor" });
   // MIP of the topmost visible functional image (not of label images or CT/MR).
   // MIP: own dataset (automatic: PET → SPECT → CT, shown datasets first) and own color table.
   const mipCandidates = [
@@ -3823,12 +3821,12 @@ function App() {
           <button
             className="secondary-btn"
             disabled={!entries.length || !!projectBusy}
-            title={entries.length ? "Ganzes Projekt als .recon-Datei speichern (Datensätze, Registrierung, Labelbilder, Einstellungen)" : "Erst Daten laden"}
+            title={entries.length ? tx("Ganzes Projekt als .recon-Datei speichern (Datensätze, Registrierung, Labelbilder, Einstellungen)") : tx("Erst Daten laden")}
             onClick={() => void saveProjectFile()}
           >
-            <Save size={14} /> {projectBusy === "save" ? "Wird gespeichert …" : "Projekt speichern"}
+            <Save size={14} /> {projectBusy === "save" ? tx("Wird gespeichert …") : tx("Projekt speichern")}
           </button>
-          <button className={`icon-btn${manualOpen ? " active" : ""}`} title="Handbuch" aria-label="Handbuch öffnen" aria-pressed={manualOpen} onClick={() => setManualOpen((o) => !o)}>
+          <button className={`icon-btn${manualOpen ? " active" : ""}`} title={tx("Handbuch")} aria-label={tx("Handbuch öffnen")} aria-pressed={manualOpen} onClick={() => setManualOpen((o) => !o)}>
             ?
           </button>
           <LangToggle />
@@ -3837,7 +3835,7 @@ function App() {
       headerInfo={
         <ActivityBar
           activities={activities}
-          idleText={entries.length ? `${entries.length} ${entries.length === 1 ? "Datensatz" : "Datensätze"} geladen` : undefined}
+          idleText={entries.length ? tx("{length} {v} geladen", { length: entries.length, v: entries.length === 1 ? "Datensatz" : tx("Datensätze") }) : undefined}
           onOpen={(tab) => {
             setActiveTab(tab);
             setPanelOpen(true);
@@ -3903,7 +3901,7 @@ function App() {
                   ...(reference ? [{ id: reference.id, label: entryShort(reference), title: entryLabel(reference), lut: reference.display.lut, visible: reference.display.visible, role: "base" as const, locked: overlays.length === 0, timeMs: entryTimes.get(reference.id) }] : []),
                   ...entries
                     .filter((e) => e.id !== reference?.id && !overlays.some((o) => o.id === e.id))
-                    .map((e) => ({ id: e.id, label: entryShort(e), title: `${entryLabel(e)} – anklicken zum Einblenden`, lut: e.display.lut, visible: false, role: "hidden" as const, timeMs: entryTimes.get(e.id) })),
+                    .map((e) => ({ id: e.id, label: entryShort(e), title: tx("{v} – anklicken zum Einblenden", { v: entryLabel(e) }), lut: e.display.lut, visible: false, role: "hidden" as const, timeMs: entryTimes.get(e.id) })),
                 ]}
                 onVisibleChange={(id, visible) => {
                   const e = byId(id);
@@ -3922,12 +3920,12 @@ function App() {
           }
           toolbarRight={
             [...suvById.values()].some((x) => x?.ok) ? (
-              <span className="unit-toggle" role="group" aria-label="Werte von PET und SPECT">
-                <button className={unitMode === "suv" ? "active" : ""} aria-pressed={unitMode === "suv"} title="PET/SPECT mit SUV-Angaben im Header als SUV (Körpergewicht) – für die ganze App" onClick={() => handleUnitModeChange("suv")}>
+              <span className="unit-toggle" role="group" aria-label={tx("Werte von PET und SPECT")}>
+                <button className={unitMode === "suv" ? "active" : ""} aria-pressed={unitMode === "suv"} title={tx("PET/SPECT mit SUV-Angaben im Header als SUV (Körpergewicht) – für die ganze App")} onClick={() => handleUnitModeChange("suv")}>
                   SUV
                 </button>
-                <button className={unitMode === "raw" ? "active" : ""} aria-pressed={unitMode === "raw"} title="Originalwerte aus dem Header (Counts, Bq/ml) – für die ganze App" onClick={() => handleUnitModeChange("raw")}>
-                  Counts/Bq/ml
+                <button className={unitMode === "raw" ? "active" : ""} aria-pressed={unitMode === "raw"} title={tx("Originalwerte aus dem Header (Counts, Bq/ml) – für die ganze App")} onClick={() => handleUnitModeChange("raw")}>
+                  {tx("Counts/Bq/ml")}
                 </button>
               </span>
             ) : undefined
@@ -3944,11 +3942,11 @@ function App() {
       ) : (
         <div className="welcome">
           <div className="welcome-card">
-            <h2>Willkommen in Recon Studio</h2>
+            <h2>{tx("Willkommen in Recon Studio")}</h2>
             <p>
               {projectionSet
-                ? "Rohdaten geladen – im Panel „Daten“ die Rekonstruktion starten."
-                : "PET-, SPECT-, CT- oder MRT-Daten als DICOM (einzeln oder als Serie) bzw. NIfTI laden, SPECT-Rohdaten rekonstruieren, analysieren, bearbeiten, coregistrieren und exportieren."}
+                ? tx("Rohdaten geladen – im Panel „Daten“ die Rekonstruktion starten.")
+                : tx("PET-, SPECT-, CT- oder MRT-Daten als DICOM (einzeln oder als Serie) bzw. NIfTI laden, SPECT-Rohdaten rekonstruieren, analysieren, bearbeiten, coregistrieren und exportieren.")}
             </p>
             {!projectionSet && (
               <div className="welcome-actions">
@@ -3959,22 +3957,22 @@ function App() {
                     setPanelOpen(true);
                   }}
                 >
-                  Daten laden
+                  {tx("Daten laden")}
                 </button>
                 <button className="secondary-btn" disabled={!!projectBusy} onClick={() => projectInput.current?.click()}>
-                  {projectBusy === "open" ? "Wird geöffnet …" : "Projekt öffnen …"}
+                  {projectBusy === "open" ? tx("Wird geöffnet …") : tx("Projekt öffnen …")}
                 </button>
               </div>
             )}
             {projectError && <div className="error-banner">{projectError}</div>}
-            <p className="welcome-note">Alle Daten werden ausschließlich lokal im Browser verarbeitet.</p>
+            <p className="welcome-note">{tx("Alle Daten werden ausschließlich lokal im Browser verarbeitet.")}</p>
           </div>
         </div>
       )}
       {notice && (
         <div className="toast" role="status">
           <span>{notice}</span>
-          <button className="icon-btn small" aria-label="Hinweis schließen" onClick={() => setNotice(null)}>
+          <button className="icon-btn small" aria-label={tx("Hinweis schließen")} onClick={() => setNotice(null)}>
             ×
           </button>
         </div>

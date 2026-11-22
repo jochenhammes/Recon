@@ -3,6 +3,7 @@ import { type TagOverrides, stringValue, usArrayValue } from "../export/dicomRew
 import { lookupTag } from "./dictionary";
 import { RP_SEQUENCE, radiopharmaceuticalSequence, readNuclideEdit } from "./radionuclide";
 
+import { t } from "../i18n";
 /** One header row for display. */
 export interface HeaderRow {
   tag: string;
@@ -36,17 +37,17 @@ export const EDITABLE_VRS = new Set([...TEXT_VRS, "US"]);
  */
 export function lockReason(tag: string): string | undefined {
   const group = tag.slice(1, 5);
-  if (group === "0002") return "Datei-Metainformation wird beim Export erzeugt.";
+  if (group === "0002") return t("Datei-Metainformation wird beim Export erzeugt.");
   if (group === "7fe0") return "Pixeldaten.";
-  if (group === "0028") return "Bildpixel-Beschreibung wird beim Export aus den Daten gesetzt.";
+  if (group === "0028") return t("Bildpixel-Beschreibung wird beim Export aus den Daten gesetzt.");
   if (["x00080018", "x0020000e", "x00200032", "x00200037", "x00200052", "x00200013", "x00280008"].includes(tag))
-    return "Wird beim Export automatisch gesetzt (Identität/Geometrie).";
+    return t("Wird beim Export automatisch gesetzt (Identität/Geometrie).");
   if (["x00540080", "x00540081", "x00541330", "x00540022", "x52009229", "x52009230"].includes(tag)) return "Schicht-/Geometrieinformation.";
   return undefined;
 }
 
 function displayValue(ds: DataSet, el: Element, vr: string): string {
-  if (el.tag === "x7fe00010") return `<Pixeldaten, ${el.length === 0xffffffff ? "komprimiert" : `${el.length} Bytes`}>`;
+  if (el.tag === "x7fe00010") return `<${t("Pixeldaten")}, ${el.length === 0xffffffff ? t("komprimiert") : `${el.length} Bytes`}>`;
   if (el.length === 0) return "";
   try {
     if (NUMBER_VRS.has(vr)) {
@@ -55,18 +56,18 @@ function displayValue(ds: DataSet, el: Element, vr: string): string {
       const read = (i: number) =>
         vr === "US" ? ds.uint16(el.tag, i) : vr === "SS" ? ds.int16(el.tag, i) : vr === "UL" ? ds.uint32(el.tag, i) : vr === "SL" ? ds.int32(el.tag, i) : vr === "FL" ? ds.float(el.tag, i) : ds.double(el.tag, i);
       const values = Array.from({ length: Math.min(n, 16) }, (_, i) => read(i));
-      return values.join("\\") + (n > 16 ? ` … (${n} Werte)` : "");
+      return values.join("\\") + (n > 16 ? t(" … ({n} Werte)", { n }) : "");
     }
     if (TEXT_VRS.has(vr) || vr === "??") {
       const s = ds.string(el.tag) ?? "";
       // Implicit VR with unknown tag: show text only if it looks printable.
-      if (vr === "??" && /[^\x20-\x7e -ÿ\\]/.test(s)) return `<${el.length} Bytes>`;
+      if (vr === "??" && /[^\x20-\x7e -ÿ\\]/.test(s)) return t("<{length} Bytes>", { length: el.length });
       return s.length > 200 ? `${s.slice(0, 200)} …` : s;
     }
   } catch {
     /* fall through to byte size */
   }
-  return `<${el.length} Bytes>`;
+  return t("<{length} Bytes>", { length: el.length });
 }
 
 /** Top-level (and nested, read-only) rows of a dataset in tag order. */
@@ -77,12 +78,12 @@ export function headerRows(ds: DataSet, explicitVr: boolean): HeaderRow[] {
       const entry = lookupTag(el.tag);
       const vr = (explicitVr || el.tag.startsWith("x0002") ? el.vr : undefined) ?? entry?.vr ?? (el.items ? "SQ" : "??");
       const isSequence = vr === "SQ" || !!el.items;
-      const reason = lockReason(el.tag) ?? (isSequence ? "Sequenzen sind nur lesbar." : !EDITABLE_VRS.has(vr) ? `VR ${vr} ist nicht editierbar.` : undefined);
+      const reason = lockReason(el.tag) ?? (isSequence ? t("Sequenzen sind nur lesbar.") : !EDITABLE_VRS.has(vr) ? t("VR {vr} ist nicht editierbar.", { vr }) : undefined);
       return {
         tag: el.tag,
         name: entry?.name ?? "",
         vr: isSequence ? "SQ" : vr,
-        value: isSequence ? `${el.items?.length ?? 0} Element(e)` : displayValue(ds, el, vr),
+        value: isSequence ? t("{v} Element(e)", { v: el.items?.length ?? 0 }) : displayValue(ds, el, vr),
         editable: !reason,
         lockReason: reason,
         items: el.items?.map((it) => (it.dataSet ? headerRows(it.dataSet, explicitVr) : [])),
@@ -98,36 +99,36 @@ const SINGLE_VALUE = new Set(["ST", "LT", "UT", "UR"]);
 /** Validates a value for a VR; returns an error message or null. Multi-values are separated by "\". */
 export function validateValue(vr: string, value: string): string | null {
   if (vr === "US") {
-    for (const p of value.split("\\")) if (!/^\d+$/.test(p.trim()) || Number(p) > 65535) return "Ganze Zahl 0–65535 erwartet.";
+    for (const p of value.split("\\")) if (!/^\d+$/.test(p.trim()) || Number(p) > 65535) return t("Ganze Zahl 0–65535 erwartet.");
     return null;
   }
   const parts = SINGLE_VALUE.has(vr) ? [value] : value.split("\\");
   for (const p of parts) {
     const max = MAX_LENGTH[vr];
-    if (max !== undefined && p.length > max) return `Höchstens ${max} Zeichen pro Wert (VR ${vr}).`;
-    if ([...p].some((c) => c.charCodeAt(0) < 32 && c !== "\n" && c !== "\r" && c !== "\t")) return "Steuerzeichen sind nicht erlaubt.";
+    if (max !== undefined && p.length > max) return t("Höchstens {max} Zeichen pro Wert (VR {vr}).", { max, vr });
+    if ([...p].some((c) => c.charCodeAt(0) < 32 && c !== "\n" && c !== "\r" && c !== "\t")) return t("Steuerzeichen sind nicht erlaubt.");
     if (p === "") continue;
     switch (vr) {
       case "DA":
-        if (!/^\d{8}$/.test(p)) return "Datum im Format JJJJMMTT erwartet.";
+        if (!/^\d{8}$/.test(p)) return t("Datum im Format JJJJMMTT erwartet.");
         break;
       case "TM":
-        if (!/^\d{2}(\d{2}(\d{2}(\.\d{1,6})?)?)?$/.test(p)) return "Uhrzeit im Format HHMMSS(.ffffff) erwartet.";
+        if (!/^\d{2}(\d{2}(\d{2}(\.\d{1,6})?)?)?$/.test(p)) return t("Uhrzeit im Format HHMMSS(.ffffff) erwartet.");
         break;
       case "DS":
-        if (!/^\s*[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?\s*$/.test(p)) return "Dezimalzahl erwartet.";
+        if (!/^\s*[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?\s*$/.test(p)) return t("Dezimalzahl erwartet.");
         break;
       case "IS":
-        if (!/^\s*[+-]?\d+\s*$/.test(p)) return "Ganze Zahl erwartet.";
+        if (!/^\s*[+-]?\d+\s*$/.test(p)) return t("Ganze Zahl erwartet.");
         break;
       case "UI":
-        if (!/^(0|[1-9]\d*)(\.(0|[1-9]\d*))*$/.test(p)) return "UID aus Ziffern und Punkten erwartet (ohne führende Nullen).";
+        if (!/^(0|[1-9]\d*)(\.(0|[1-9]\d*))*$/.test(p)) return t("UID aus Ziffern und Punkten erwartet (ohne führende Nullen).");
         break;
       case "CS":
-        if (!/^[A-Z0-9 _]*$/.test(p)) return "Nur Großbuchstaben, Ziffern, Leerzeichen und _ erlaubt.";
+        if (!/^[A-Z0-9 _]*$/.test(p)) return t("Nur Großbuchstaben, Ziffern, Leerzeichen und _ erlaubt.");
         break;
       case "AS":
-        if (!/^\d{3}[DWMY]$/.test(p)) return "Alter im Format nnnD/W/M/Y erwartet (z. B. 056Y).";
+        if (!/^\d{3}[DWMY]$/.test(p)) return t("Alter im Format nnnD/W/M/Y erwartet (z. B. 056Y).");
         break;
     }
   }

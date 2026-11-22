@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { IDENTITY_PARAMS, type TransformParams } from "../core/transform";
 
+import { t } from "../i18n";
 type Key = "tx" | "ty" | "tz" | "rx" | "ry" | "rz";
 const TRANSLATIONS: [Key, string, string][] = [
   ["tx", "x (R↔L)", "Rechts ↔ Links"],
@@ -60,7 +61,7 @@ export function RegistrationPanel({ params, onChange, children, pivots, pivot, o
     <>
       {pivots && pivots.length > 1 && onPivotChange && (
         <label className="field">
-          Drehpunkt
+          {t("Drehpunkt")}
           <select value={pivot} onChange={(e) => onPivotChange(e.target.value)}>
             {pivots.map((p) => (
               <option key={p.id} value={p.id}>
@@ -81,7 +82,7 @@ export function RegistrationPanel({ params, onChange, children, pivots, pivot, o
         ))}
       </div>
       <details className="compact-details">
-        <summary>In 90°-Schritten drehen</summary>
+        <summary>{t("In 90°-Schritten drehen")}</summary>
         <div className="chip-row">
           {ROTATIONS.map(([k, l]) => (
             <span key={k} className="chip-group">
@@ -94,13 +95,13 @@ export function RegistrationPanel({ params, onChange, children, pivots, pivot, o
             </span>
           ))}
           <button className="chip-btn" onClick={() => set("rz", params.rz + 180)}>
-            um z 180°
+            {t("um z 180°")}
           </button>
         </div>
       </details>
       <label className="checkbox-field">
         <input type="checkbox" checked={sliders} onChange={(e) => setSliders(e.target.checked)} />
-        <span>Schieberegler für die Feinarbeit</span>
+        <span>{t("Schieberegler für die Feinarbeit")}</span>
       </label>
       {sliders && (
         <>
@@ -110,7 +111,7 @@ export function RegistrationPanel({ params, onChange, children, pivots, pivot, o
       )}
       {children}
       <button className="secondary-btn" onClick={() => onChange(IDENTITY_PARAMS)}>
-        Manuelle Lage zurücksetzen
+        {t("Manuelle Lage zurücksetzen")}
       </button>
     </>
   );

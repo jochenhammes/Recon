@@ -1,6 +1,7 @@
 import { Info } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
+import { t } from "../i18n";
 /** Card heading with an optional ⓘ button that unfolds a longer explanation below it. */
 export function CardTitle({ children, info }: { children: ReactNode; info?: ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -31,7 +32,7 @@ export function InfoText({ children, details, warn }: { children?: ReactNode; de
 
 export function InfoButton({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   return (
-    <button type="button" className={open ? "info-btn open" : "info-btn"} aria-expanded={open} aria-label="Erläuterung" title={open ? "Erläuterung ausblenden" : "Erläuterung anzeigen"} onClick={onToggle}>
+    <button type="button" className={open ? "info-btn open" : "info-btn"} aria-expanded={open} aria-label={t("Erläuterung")} title={open ? t("Erläuterung ausblenden") : t("Erläuterung anzeigen")} onClick={onToggle}>
       <Info size={14} />
     </button>
   );

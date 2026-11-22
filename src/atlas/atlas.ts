@@ -4,6 +4,7 @@ import type { LoadedDataset } from "../dataset/types";
 import { createDataset } from "../dataset/types";
 import { fetchNifti } from "../normalization/templates";
 
+import { t, tk } from "../i18n";
 /** Marks a dataset as a label atlas (integer region indices) with its label table. */
 export interface AtlasInfo {
   name: string;
@@ -18,7 +19,7 @@ export const BUNDLED_CEREBRA = {
   image: `${BASE}CerebrA_MNI152NLin2009cAsym_res-02_dseg.nii.gz`,
   table: `${BASE}CerebrA_labels.tsv`,
   attribution:
-    "CerebrA (Manera et al. 2020, Sci Data 7:237), CC0 1.0; erstellt auf MNI-ICBM2009c symmetrisch, für Recon Studio auf das 2-mm-Raster der asymmetrischen Vorlage übertragen.",
+    tk("CerebrA (Manera et al. 2020, Sci Data 7:237), CC0 1.0; erstellt auf MNI-ICBM2009c symmetrisch, für Recon Studio auf das 2-mm-Raster der asymmetrischen Vorlage übertragen."),
 };
 
 /**
@@ -63,7 +64,7 @@ export async function loadBundledAtlas(): Promise<LoadedDataset> {
   const [img, table] = await Promise.all([
     fetchNifti(BUNDLED_CEREBRA.image),
     fetch(BUNDLED_CEREBRA.table).then((r) => {
-      if (!r.ok) throw new Error(`Atlas-Tabelle konnte nicht geladen werden (${r.status}).`);
+      if (!r.ok) throw new Error(t("Atlas-Tabelle konnte nicht geladen werden ({status}).", { status: r.status }));
       return r.text();
     }),
   ]);
@@ -76,7 +77,7 @@ export function atlasFromLabels(data: Float32Array, name: string, table?: Map<nu
   const labels = new Map<number, string>(table ?? []);
   for (let i = 0; i < data.length; i++) {
     const l = Math.round(data[i]);
-    if (l > 0 && !labels.has(l)) labels.set(l, `Region ${l}`);
+    if (l > 0 && !labels.has(l)) labels.set(l, t("Region {l}", { l }));
   }
   return { name, labels };
 }
@@ -147,10 +148,10 @@ export interface ReferencePreset {
 
 /** Common SUVR reference regions, matched by region name (English and German atlas tables). */
 export const REFERENCE_PRESETS: ReferencePreset[] = [
-  { id: "cerebellum-gm", label: "Kleinhirnrinde (grau)", match: (n) => /cerebell\w*\s+(gr[ae]y|cortex)|kleinhirnrinde/i.test(n) },
-  { id: "cerebellum", label: "Kleinhirn gesamt (inkl. Vermis)", match: (n) => /cerebell|vermis|vermal|kleinhirn/i.test(n) },
-  { id: "pons", label: "Pons / Hirnstamm", match: (n) => /\bpons\b|brain\s*stem|brainstem|hirnstamm/i.test(n) },
-  { id: "whole", label: "Ganzes Gehirn (alle Regionen)", match: () => true },
+  { id: "cerebellum-gm", label: tk("Kleinhirnrinde (grau)"), match: (n) => /cerebell\w*\s+(gr[ae]y|cortex)|kleinhirnrinde/i.test(n) },
+  { id: "cerebellum", label: tk("Kleinhirn gesamt (inkl. Vermis)"), match: (n) => /cerebell|vermis|vermal|kleinhirn/i.test(n) },
+  { id: "pons", label: tk("Pons / Hirnstamm"), match: (n) => /\bpons\b|brain\s*stem|brainstem|hirnstamm/i.test(n) },
+  { id: "whole", label: tk("Ganzes Gehirn (alle Regionen)"), match: () => true },
 ];
 
 export function presetIndices(atlas: AtlasInfo, preset: ReferencePreset): Set<number> {
@@ -162,12 +163,12 @@ export function presetIndices(atlas: AtlasInfo, preset: ReferencePreset): Set<nu
 /** CSV (semicolon separated, decimal comma for German spreadsheets) of regional values and SUVR. */
 export function regionCsv(stats: RegionStat[], refMean: number, meta: { dataset: string; atlas: string; reference: string; unit: string }): string {
   const f = (v: number, d = 4) => (Number.isFinite(v) ? v.toFixed(d).replace(".", ",") : "");
-  const head = [["Index", "Region", "Voxel", "Volumen_ml", `Mittel_${meta.unit}`, "Median", "SD", "Varianz", "Min", "Max", "SUVR"].join(";")];
+  const head = [["Index", "Region", "Voxel", "Volumen_ml", t("Mittel_{unit}", { unit: meta.unit }), "Median", "SD", "Varianz", "Min", "Max", "SUVR"].join(";")];
   const rows = stats.map((r) => [r.index, `"${r.name.replace(/"/g, "'")}"`, r.voxels, f(r.volumeMl, 2), f(r.mean), f(r.median), f(r.sd), f(r.variance, 6), f(r.min), f(r.max), f(r.mean / refMean)].join(";"));
   return csvWithInfo([...head, ...rows], [
-    ["Datensatz", meta.dataset],
-    ["Atlas", meta.atlas],
-    ["Referenzregion", `${meta.reference} (Mittelwert ${f(refMean)} ${meta.unit})`],
+    [t("Datensatz"), meta.dataset],
+    [t("Atlas"), meta.atlas],
+    [t("Referenzregion"), t("{reference} (Mittelwert {v} {unit})", { reference: meta.reference, v: f(refMean), unit: meta.unit })],
   ]);
 }
 
@@ -176,15 +177,15 @@ export function labelStatsCsv(stats: RegionStat[], meta: { dataset: string; atla
   const f = (v: number, d = 4) => (Number.isFinite(v) ? v.toFixed(d).replace(".", ",") : "");
   const u = meta.unit ? `_${meta.unit}` : "";
   const head = [
-    ["Index", "Region", "Voxel", "Volumen_ml", `Mittel${u}`, `SD${u}`, `Varianz${u}${u ? "²" : ""}`, `Median${u}`, `Min${u}`, `Max${u}`].join(";"),
+    ["Index", "Region", "Voxel", "Volumen_ml", t("Mittel{u}", { u }), `SD${u}`, t("Varianz{u}{v}", { u, v: u ? "²" : "" }), t("Median{u}", { u }), t("Min{u}", { u }), t("Max{u}", { u })].join(";"),
   ];
   const rows = stats.map((r) => [r.index, `"${r.name.replace(/"/g, "'")}"`, r.voxels, f(r.volumeMl, 3), f(r.mean), f(r.sd), f(r.variance, 6), f(r.median), f(r.min), f(r.max)].join(";"));
   return csvWithInfo([...head, ...rows], [
-    ["Datensatz", meta.dataset],
-    ["Labels", meta.atlas],
-    ["Einheit", meta.unit || "Originalwerte"],
-    ["SD/Varianz", "Stichprobe (n − 1)"],
-    ...(meta.note ? [["Hinweis", meta.note] as [string, string]] : []),
+    [t("Datensatz"), meta.dataset],
+    [t("Labels"), meta.atlas],
+    [t("Einheit"), meta.unit || t("Originalwerte")],
+    [t("SD/Varianz"), t("Stichprobe (n − 1)")],
+    ...(meta.note ? [[t("Hinweis"), meta.note] as [string, string]] : []),
   ]);
 }
 
@@ -268,10 +269,10 @@ export function labelHistogramCsv(
     [r.index, `"${r.name.replace(/"/g, "'")}"`, totals[i], ...Array.from(counts[i], (c) => (opts.relative ? f(totals[i] ? (100 * c) / totals[i] : 0, 4) : String(c)))].join(";"),
   );
   return csvWithInfo([...head, ...rows], [
-    ["Datensatz", meta.dataset],
-    ["Labels", meta.atlas],
-    ["Bins", `${bins} von ${f(lo)} bis ${f(hi)}${u} (Breite ${f(width, 6)}); Spaltenkopf = Bin-Untergrenze; Werte außerhalb in der ersten/letzten Bin`],
-    ["Werte", opts.relative ? "Anteil der Voxel der Region in %" : "Anzahl Voxel"],
-    ...(meta.note ? [["Hinweis", meta.note] as [string, string]] : []),
+    [t("Datensatz"), meta.dataset],
+    [t("Labels"), meta.atlas],
+    [t("Bins"), t("{bins} von {v} bis {v2}{u} (Breite {v3}); Spaltenkopf = Bin-Untergrenze; Werte außerhalb in der ersten/letzten Bin", { bins, v: f(lo), v2: f(hi), u, v3: f(width, 6) })],
+    [t("Werte"), opts.relative ? t("Anteil der Voxel der Region in %") : t("Anzahl Voxel")],
+    ...(meta.note ? [[t("Hinweis"), meta.note] as [string, string]] : []),
   ]);
 }

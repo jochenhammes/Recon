@@ -1,6 +1,7 @@
 import type { KineticsJob } from "../workers/kinetics.worker";
 
 import { workerOptions } from "../i18n/lang";
+import { t } from "../i18n";
 export interface KineticsRun<T> {
   promise: Promise<T>;
   cancel: () => void;
@@ -25,7 +26,7 @@ export function runKineticsJob<T>(job: KineticsJob, onProgress?: (done: number, 
     };
     worker.onerror = (e) => {
       worker.terminate();
-      reject(new Error(e.message || "Kinetik-Berechnung fehlgeschlagen."));
+      reject(new Error(e.message || t("Kinetik-Berechnung fehlgeschlagen.")));
     };
     // Frames are copied, not transferred: the dataset keeps its own.
     worker.postMessage(job);

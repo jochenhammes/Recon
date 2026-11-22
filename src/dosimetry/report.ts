@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 /**
  * Dosimetry report: a self-contained HTML page (printable as PDF from the browser) with every intermediate result,
  * so that results stay comparable with other software (OpenDose3D, OLINDA, …).
@@ -138,7 +139,7 @@ ${kv([
   ["Elektronenenergie", d.electronKeV !== undefined ? `${num(d.electronKeV, 5)} keV/Zerfall (${d.energySource})` : "–"],
   ["Injektion", d.injection],
   ["Kalibrierung", d.calibration],
-  ["Unsicherheiten (Eingabe)", d.uncertaintyInputs],
+  [t("Unsicherheiten (Eingabe)"), d.uncertaintyInputs],
 ])}
 <h2>Zeitpunkte</h2>
 <table><thead><tr><th>Zeitpunkt</th><th>Aufnahme</th><th>t p.i. (h)</th><th>Dauer (s)</th><th>Einheit</th><th>MBq/Einheit</th><th>CT</th><th>Organe</th><th>Läsionen</th><th>Registrierung</th><th>Sichtfeld (MBq)</th><th>% inj.</th></tr></thead><tbody>

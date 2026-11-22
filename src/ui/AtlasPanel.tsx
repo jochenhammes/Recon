@@ -6,6 +6,7 @@ import { Card } from "./Card";
 import { type AtlasInfo, REFERENCE_PRESETS, type RegionStat, pooledMean, presetIndices, regionCsv } from "../atlas/atlas";
 import type { Option } from "./NormalizationPanel";
 
+import { t } from "../i18n";
 export interface AtlasOption extends Option {
   atlas: AtlasInfo;
 }
@@ -58,7 +59,7 @@ export function AtlasPanel(props: AtlasPanelProps) {
   const preset = presets.find((p) => p.id === refMode);
   const effectiveMode = preset ? refMode : refMode === "custom" ? "custom" : (presets[0]?.id ?? "custom");
   const refIndices = effectiveMode === "custom" ? new Set(customRefs) : (presets.find((p) => p.id === effectiveMode)?.indices ?? new Set<number>());
-  const refLabel = effectiveMode === "custom" ? `Eigene Auswahl (${customRefs.length} Regionen)` : (presets.find((p) => p.id === effectiveMode)?.label ?? "");
+  const refLabel = effectiveMode === "custom" ? t("Eigene Auswahl ({length} Regionen)", { length: customRefs.length }) : (presets.find((p) => p.id === effectiveMode)?.label ?? "");
 
   const current = result && atlas && target && result.atlasId === atlas.id && result.targetId === target.id && result.gmOnly === (gmOnly && props.gmLoaded) ? result : null;
   const refMean = current ? pooledMean(current.stats, refIndices) : NaN;
@@ -84,7 +85,7 @@ export function AtlasPanel(props: AtlasPanelProps) {
 
   function downloadCsv() {
     if (!current || !atlas) return;
-    const csv = regionCsv(rows, refMean, { dataset: current.datasetLabel, atlas: current.gmOnly ? `${atlas.label} · nur graue Substanz (GM ≥ 0,5)` : atlas.label, reference: refLabel, unit: current.unit || "Wert" });
+    const csv = regionCsv(rows, refMean, { dataset: current.datasetLabel, atlas: current.gmOnly ? t("{label} · nur graue Substanz (GM ≥ 0,5)", { label: atlas.label }) : atlas.label, reference: refLabel, unit: current.unit || "Wert" });
     const url = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;
@@ -110,7 +111,7 @@ export function AtlasPanel(props: AtlasPanelProps) {
       <div className="button-row">
         <AtlasPicker busy={props.bundledLoading} onLoad={props.onLoadBundled} />
         <button className="secondary-btn" onClick={() => fileInput.current?.click()}>
-          Eigener Atlas …
+          {t("Eigener Atlas …")}
         </button>
         <input
           ref={fileInput}
@@ -130,7 +131,7 @@ export function AtlasPanel(props: AtlasPanelProps) {
       {atlas && (
         <>
           <label className="field">
-            Atlas
+            {t("Atlas")}
             <select value={atlas.id} onChange={(e) => setAtlasId(e.target.value)}>
               {props.atlases.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -141,7 +142,7 @@ export function AtlasPanel(props: AtlasPanelProps) {
           </label>
           {atlas.atlas.attribution && <p className="tool-hint">{atlas.atlas.attribution}</p>}
           <label className="field">
-            Datensatz
+            {t("Datensatz")}
             <select value={target?.id ?? ""} onChange={(e) => setTargetId(e.target.value)}>
               {props.targets.map((t) => (
                 <option key={t.id} value={t.id}>
@@ -151,17 +152,17 @@ export function AtlasPanel(props: AtlasPanelProps) {
             </select>
           </label>
           <label className="field">
-            Referenzregion
+            {t("Referenzregion")}
             <select value={effectiveMode} onChange={(e) => setRefMode(e.target.value)}>
               {presets.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.label} ({p.indices.size})
                 </option>
               ))}
-              <option value="custom">Eigene Auswahl …</option>
+              <option value="custom">{t("Eigene Auswahl …")}</option>
             </select>
           </label>
-          <label className="checkbox-field" title="Regionen auf Voxel mit Wahrscheinlichkeit graue Substanz ≥ 0,5 beschränken (Gewebekarte MNI 2009c); vermindert den Einfluss von weißer Substanz und Liquor. Nur für Daten im MNI-Raum.">
+          <label className="checkbox-field" title={t("Regionen auf Voxel mit Wahrscheinlichkeit graue Substanz ≥ 0,5 beschränken (Gewebekarte MNI 2009c); vermindert den Einfluss von weißer Substanz und Liquor. Nur für Daten im MNI-Raum.")}>
             <input
               type="checkbox"
               checked={gmOnly}
@@ -170,7 +171,7 @@ export function AtlasPanel(props: AtlasPanelProps) {
                 if (e.target.checked && !props.gmLoaded) props.onLoadGm();
               }}
             />
-            Nur graue Substanz (GM ≥ 0,5){gmOnly && !props.gmLoaded ? " – Gewebekarte wird geladen …" : ""}
+            Nur graue Substanz (GM ≥ 0,5){gmOnly && !props.gmLoaded ? t(" – Gewebekarte wird geladen …") : ""}
           </label>
           {effectiveMode === "custom" && (
             <label className="field">
@@ -190,7 +191,7 @@ export function AtlasPanel(props: AtlasPanelProps) {
             </label>
           )}
           <button className="primary-btn" disabled={!target} onClick={run}>
-            Regionen auswerten
+            {t("Regionen auswerten")}
           </button>
         </>
       )}
@@ -199,37 +200,37 @@ export function AtlasPanel(props: AtlasPanelProps) {
         <>
           <p className="tool-hint">
             Referenz: {refLabel} – Mittel {fmtVal(refMean)} {current.unit}
-            {!Number.isFinite(refMean) && " (keine Voxel in der Referenzregion)"}
+            {!Number.isFinite(refMean) && t(" (keine Voxel in der Referenzregion)")}
           </p>
           <div className="button-row">
             <button className="secondary-btn" onClick={downloadCsv}>
-              Tabelle als CSV
+              {t("Tabelle als CSV")}
             </button>
             <button className="secondary-btn" disabled={!Number.isFinite(refMean) || !(refMean > 0)} onClick={() => target && props.onCreateSuvrImage(target.id, refMean, refLabel)}>
-              SUVR-Bild anlegen
+              {t("SUVR-Bild anlegen")}
             </button>
           </div>
-          <div className="segmented-control" role="group" aria-label="Sortierung">
+          <div className="segmented-control" role="group" aria-label={t("Sortierung")}>
             {(["name", "index", "suvr"] as SortKey[]).map((k) => (
               <button key={k} className={sort === k ? "active" : ""} onClick={() => setSort(k)}>
                 {k === "name" ? "Name" : k === "index" ? "Index" : "SUVR ↓"}
               </button>
             ))}
           </div>
-          <BigTable title={`Atlas & SUVR – ${current.datasetLabel}`} onCsv={downloadCsv}>
+          <BigTable title={t("Atlas & SUVR – {datasetLabel}", { datasetLabel: current.datasetLabel })} onCsv={downloadCsv}>
             <table className="region-table">
               <thead>
                 <tr>
-                  <th>Region</th>
+                  <th>{t("Region")}</th>
                   <th>ml</th>
-                  <th>Mittel</th>
+                  <th>{t("Mittel")}</th>
                   <th>SUVR</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.index} className={refIndices.has(r.index) ? "reference-row" : undefined}>
-                    <td title={`Index ${r.index}, ${r.voxels} Voxel, Median ${fmtVal(r.median)}, SD ${fmtVal(r.sd)}`}>{r.name}</td>
+                    <td title={t("Index {index}, {voxels} Voxel, Median {v}, SD {v2}", { index: r.index, voxels: r.voxels, v: fmtVal(r.median), v2: fmtVal(r.sd) })}>{r.name}</td>
                     <td>{fmt(r.volumeMl, 1)}</td>
                     <td>{fmtVal(r.mean)}</td>
                     <td>{fmt(r.mean / refMean, 3)}</td>

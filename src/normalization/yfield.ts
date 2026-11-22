@@ -4,6 +4,7 @@ import type { Volume3D } from "../viewer/volume";
 import { readNiftiAll } from "../viewer/volumeLoader";
 import type { Normalization } from "./model";
 
+import { t } from "../i18n";
 /**
  * SPM / CAT12 deformation fields (y_*.nii): 5D NIfTI with dim = [nx, ny, nz, 1, 3], float. For every
  * voxel of the standard-space grid (the file's own header geometry) the three planes hold the position
@@ -30,7 +31,7 @@ export function parseDeformationField(buffer: ArrayBuffer): ParsedField {
   const components = rest.reduce((a, b) => a * b, 1);
   // Accept [x,y,z,1,3] (SPM) and [x,y,z,3] (some tools write 4D).
   if (components !== 3 || !rest.every((d, i) => d === 1 || (d === 3 && rest.slice(i + 1).every((x) => x === 1))))
-    throw new DeformationFieldError(`Kein Verformungsfeld: erwartet ${nx}×${ny}×${nz}×1×3, gefunden ${n.dims.join("×")}.`);
+    throw new DeformationFieldError(t("Kein Verformungsfeld: erwartet {nx}×{ny}×{nz}×1×3, gefunden {v}.", { nx, ny, nz, v: n.dims.join("×") }));
   const nvox = nx * ny * nz;
   const field = new Float32Array(nvox * 3);
   let invalid = 0;
@@ -88,7 +89,7 @@ export function buildDeformationField(n: Normalization): Uint8Array<ArrayBuffer>
   dv.setFloat32(112, 1, true);
   dv.setFloat32(116, 0, true);
   dv.setUint8(123, 2 | 8); // xyzt_units: mm, s
-  writeAscii(dv, 148, 80, `Deformation (Recon Studio, ${n.kind}) -> ${n.templateName}`);
+  writeAscii(dv, 148, 80, t("Deformation (Recon Studio, {kind}) -> {templateName}", { kind: n.kind, templateName: n.templateName }));
   const srow = niftiSformFromGeometry(geometry);
   for (let i = 0; i < 12; i++) dv.setFloat32(280 + 4 * i, srow[i], true);
   dv.setInt16(254, 2, true); // sform_code: aligned

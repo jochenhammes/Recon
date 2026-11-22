@@ -7,6 +7,7 @@ import type { SegmentProgress } from "./infer";
 import { type ModelMeta, normalizeForModel, rasGrid } from "./preprocess";
 
 import { workerOptions } from "../i18n/lang";
+import { tr, tk } from "../i18n";
 /** CT segmentation models shipped with the app (ONNX, top-k output). */
 export interface CtModelInfo {
   id: string;
@@ -26,22 +27,22 @@ export interface CtModelInfo {
 }
 
 export const CT_MODELS: CtModelInfo[] = [
-  { id: "totalseg-3mm", dir: "totalseg-total-3mm", label: "TotalSegmentator total (3 mm)", info: "117 Strukturen · nnU-Net", license: "Apache-2.0", sizeMb: 66, short: "TotalSegmentator", attribution: "TotalSegmentator total 3 mm (Wasserthal et al. 2023), Apache-2.0" },
+  { id: "totalseg-3mm", dir: "totalseg-total-3mm", label: tk("TotalSegmentator total (3 mm)"), info: tk("117 Strukturen · nnU-Net"), license: "Apache-2.0", sizeMb: 66, short: "TotalSegmentator", attribution: "TotalSegmentator total 3 mm (Wasserthal et al. 2023), Apache-2.0" },
   {
     id: "totalseg-organs-1.5mm",
     dir: "totalseg-organs-1.5mm",
-    label: "TotalSegmentator Organe (1,5 mm)",
-    info: "24 Organe, feines Raster · nnU-Net · für Rumpf-/Bauch-CT, langsam, WebGPU empfohlen",
+    label: tk("TotalSegmentator Organe (1,5 mm)"),
+    info: tk("24 Organe, feines Raster · nnU-Net · für Rumpf-/Bauch-CT, langsam, WebGPU empfohlen"),
     license: "Apache-2.0",
     sizeMb: 125,
-    short: "TotalSegmentator 1,5 mm",
+    short: tk("TotalSegmentator 1,5 mm"),
     attribution: "TotalSegmentator v2 organs 1.5 mm, Dataset291 (Wasserthal et al. 2023), Apache-2.0",
   },
   {
     id: "moose-organs-1.5mm",
     dir: "moose-organs-1.5mm",
-    label: "MOOSE Organe (1,5 mm)",
-    info: "19 Organe inkl. Gehirn/Schilddrüse · auf PET/CT-CTs trainiert · für Rumpf-/Bauch-CT, langsam",
+    label: tk("MOOSE Organe (1,5 mm)"),
+    info: tk("19 Organe inkl. Gehirn/Schilddrüse · auf PET/CT-CTs trainiert · für Rumpf-/Bauch-CT, langsam"),
     license: "CC BY 4.0",
     sizeMb: 122,
     short: "MOOSE",
@@ -58,7 +59,7 @@ const CACHE = "recon-studio-models-v1";
 export async function loadModelMeta(id: string = DEFAULT_CT_MODEL): Promise<ModelMeta> {
   const MODEL_BASE = modelBase(id);
   const r = await fetch(`${MODEL_BASE}model.json`);
-  if (!r.ok) throw new Error(`Modellbeschreibung nicht ladbar (${r.status}).`);
+  if (!r.ok) throw new Error(tr("Modellbeschreibung nicht ladbar ({status}).", { status: r.status }));
   return r.json();
 }
 
@@ -78,7 +79,7 @@ export async function loadModelBytes(meta: ModelMeta, onProgress?: (loaded: numb
     let res = cache ? await cache.match(url) : undefined;
     if (!res) {
       const net = await fetch(url);
-      if (!net.ok || !net.body) throw new Error(`Modell nicht ladbar (${net.status}).`);
+      if (!net.ok || !net.body) throw new Error(tr("Modell nicht ladbar ({status}).", { status: net.status }));
       const reader = net.body.getReader();
       const parts: Uint8Array[] = [];
       for (;;) {
@@ -104,7 +105,7 @@ export async function loadModelBytes(meta: ModelMeta, onProgress?: (loaded: numb
     out.set(c, o);
     o += c.length;
   }
-  if (out.length !== meta.bytes) throw new Error("Modelldatei unvollständig.");
+  if (out.length !== meta.bytes) throw new Error(tr("Modelldatei unvollständig."));
   return out.buffer;
 }
 
@@ -138,8 +139,8 @@ export function segmentationMemory(grid: { nx: number; ny: number; nz: number },
     bytes,
     message: ok
       ? ""
-      : `CT zu groß für das ${String(spacingMm).replace(".", ",")}-mm-Modell (${lengthCm} cm Länge, ≈ ${(bytes / 1e9).toFixed(1)} GB Arbeitsspeicher). ` +
-        "Bitte das 3-mm-Modell verwenden oder das CT auf die Körperregion zuschneiden (Bearbeiten → VOI → Auf VOI zuschneiden).",
+      : tr("CT zu groß für das {v}-mm-Modell ({lengthCm} cm Länge, ≈ {v2} GB Arbeitsspeicher). ", { v: String(spacingMm).replace(".", ","), lengthCm, v2: (bytes / 1e9).toFixed(1) }) +
+        tr("Bitte das 3-mm-Modell verwenden oder das CT auf die Körperregion zuschneiden (Bearbeiten → VOI → Auf VOI zuschneiden)."),
   };
 }
 
@@ -164,14 +165,14 @@ export function runCtSegmentation(ct: Volume3D, backend: CtSegBackend, onProgres
     rejectFn = reject;
     (async () => {
       const meta = await loadModelMeta(modelId);
-      const model = await loadModelBytes(meta, (l, t) => onProgress({ done: l, total: t, stage: `Modell laden (${(l / 1e6).toFixed(0)} / ${(t / 1e6).toFixed(0)} MB)` }), modelId);
+      const model = await loadModelBytes(meta, (l, t) => onProgress({ done: l, total: t, stage: tr("Modell laden ({v} / {v2} MB)", { v: (l / 1e6).toFixed(0), v2: (t / 1e6).toFixed(0) }) }), modelId);
       if (cancelled) return;
       const grid = rasGrid(ct, meta.spacing[0]);
       const check = segmentationMemory(grid, meta.spacing[0]);
       if (!check.ok) throw new Error(check.message);
       const mm = meta.spacing[0].toString().replace(".", ",");
-      onProgress({ done: 0, total: 1, stage: `CT auf ${mm} mm umrechnen` });
-      const data = await runResample(ct, worldToVoxelTransform(ct.geometry), grid, "linear", (f) => onProgress({ done: f, total: 1, stage: `CT auf ${mm} mm umrechnen` }));
+      onProgress({ done: 0, total: 1, stage: tr("CT auf {mm} mm umrechnen", { mm }) });
+      const data = await runResample(ct, worldToVoxelTransform(ct.geometry), grid, "linear", (f) => onProgress({ done: f, total: 1, stage: tr("CT auf {mm} mm umrechnen", { mm }) }));
       const bodyThreshold = normalizeForModel(data, meta.normalization);
       if (cancelled) return;
 
@@ -203,12 +204,12 @@ export function runCtSegmentation(ct: Volume3D, backend: CtSegBackend, onProgres
         watchdog = setInterval(() => {
           const p = last as SegmentProgress | null;
           if (!p || p.backend !== "webgpu") return;
-          const isInference = p.stage.startsWith("Inferenz");
+          const isInference = !!p.inference;
           const limit = isInference ? tileTimeLimitSec(p.done, p.elapsed ?? 0) : 15 * 60;
           if ((Date.now() - lastAt) / 1000 > limit) {
-            const where = isInference ? `bei Kachel ${Math.min(p.done + 1, p.total)}/${p.total}` : "bei der Initialisierung";
-            const note = `WebGPU reagierte nicht mehr (${where}) – neu gestartet auf der CPU`;
-            onProgress({ done: 0, total: 1, stage: "Neustart auf der CPU", backend: "wasm", note, receivedAt: Date.now() });
+            const where = isInference ? tr("bei Kachel {v}/{total}", { v: Math.min(p.done + 1, p.total), total: p.total }) : tr("bei der Initialisierung");
+            const note = tr("WebGPU reagierte nicht mehr ({where}) – neu gestartet auf der CPU", { where });
+            onProgress({ done: 0, total: 1, stage: tr("Neustart auf der CPU"), backend: "wasm", note, receivedAt: Date.now() });
             start("wasm", note);
           }
         }, 5000);

@@ -3,6 +3,7 @@ import type { LabelStat } from "../atlas/labelStats";
 import { formatValue } from "../components/format";
 import { lutTable } from "../viewer/volume";
 
+import { t } from "../i18n";
 export interface LabelListProps {
   names: Map<number, string>;
   stats: Map<number, LabelStat>;
@@ -24,7 +25,7 @@ export function LabelList({ names, stats, visible, onVisibleChange, onGoto }: La
   const rows = useMemo(
     () =>
       [...stats.values()]
-        .map((s) => ({ ...s, name: names.get(s.id) ?? `Region ${s.id}` }))
+        .map((s) => ({ ...s, name: names.get(s.id) ?? t("Region {id}", { id: s.id }) }))
         .sort((a, b) => a.name.localeCompare(b.name)),
     [stats, names],
   );
@@ -37,22 +38,22 @@ export function LabelList({ names, stats, visible, onVisibleChange, onGoto }: La
   return (
     <div className="label-list">
       <div className="label-list-head">
-        <input type="search" placeholder={`${rows.length} Regionen durchsuchen …`} value={query} onChange={(e) => setQuery(e.target.value)} />
+        <input type="search" placeholder={t("{length} Regionen durchsuchen …", { length: rows.length })} value={query} onChange={(e) => setQuery(e.target.value)} />
         <button className="link-btn" onClick={() => set(all)}>
-          alle
+          {t("alle")}
         </button>
         <button className="link-btn" onClick={() => set([])}>
-          keine
+          {t("keine")}
         </button>
         {q && (
-          <button className="link-btn" title="Nur die gefundenen Regionen anzeigen" onClick={() => set(shown.map((r) => r.id))}>
-            nur Treffer
+          <button className="link-btn" title={t("Nur die gefundenen Regionen anzeigen")} onClick={() => set(shown.map((r) => r.id))}>
+            {t("nur Treffer")}
           </button>
         )}
       </div>
       <div className="label-list-body">
         {shown.map((r) => (
-          <div key={r.id} className="label-row" onClick={() => onGoto(r.id)} title={`Label ${r.id} · ${r.voxels} Voxel – klicken: Fadenkreuz in die Region`}>
+          <div key={r.id} className="label-row" onClick={() => onGoto(r.id)} title={t("Label {id} · {voxels} Voxel – klicken: Fadenkreuz in die Region", { id: r.id, voxels: r.voxels })}>
             <input
               type="checkbox"
               checked={vis.has(r.id)}
@@ -64,7 +65,7 @@ export function LabelList({ names, stats, visible, onVisibleChange, onGoto }: La
             <span className="label-ml">{formatValue(r.volumeMl)} ml</span>
           </div>
         ))}
-        {shown.length === 0 && <p className="tool-hint">Keine Region gefunden.</p>}
+        {shown.length === 0 && <p className="tool-hint">{t("Keine Region gefunden.")}</p>}
       </div>
     </div>
   );

@@ -25,6 +25,7 @@ import { type Centroid, type LesionMatch, labelCentroids, matchLesions } from ".
 import { type SessionItem, acquisitionMs, fmtDateTime, groupSessions, hoursPi, studyUidOf } from "./sessions";
 import { type TpCardView, type UnassignedItem, TimePointsCard } from "./TimePointsCard";
 
+import { tr, tBoth } from "../i18n";
 export interface DosEntry {
   id: string;
   label: string;
@@ -148,7 +149,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
       ...spectCandidates.map((e) => item(e, "functional")),
       ...cts.map((e) => item(e, "ct")),
       ...labelCandidates.map((e): SessionItem => {
-        const parent = cts.find((c) => e.dataset.displayName === `CT-Organe · ${c.dataset.displayName}`)?.id ?? e.dataset.derivedFrom?.sourceId;
+        const parent = cts.find((c) => tBoth("CT-Organe · {displayName}", { displayName: c.dataset.displayName }).includes(e.dataset.displayName))?.id ?? e.dataset.derivedFrom?.sourceId;
         return { ...item(e, "label"), parentId: parent, kind: isOrganMap(e) ? "organs" : isLesionMap(e) ? "lesions" : "other" };
       }),
     ];
@@ -189,17 +190,17 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
     const quant = tp.unitOverride ? tp.unitOverride === "Bq/ml" : headerQuant ? true : headerUnit === "CNTS" ? false : !!profile.quantitative;
     const unit: TpView["unit"] = quant ? "Bq/ml" : "Counts";
     const unitSource: TpView["unitSource"] = tp.unitOverride ? "manuell" : headerQuant || headerUnit === "CNTS" ? "Header" : "Profil";
-    if (tp.unitOverride && headerUnit && (headerQuant ? "Bq/ml" : "Counts") !== tp.unitOverride) note.push(`Header: ${headerQuant ? "Bq/ml" : headerUnit === "CNTS" ? "Counts" : headerUnit} – von Hand auf ${tp.unitOverride} gestellt`);
-    else if (headerUnit && !headerQuant && headerUnit !== "CNTS") note.push(`Einheit im Header: ${h!.units} – wie ${unit} behandelt`);
+    if (tp.unitOverride && headerUnit && (headerQuant ? "Bq/ml" : "Counts") !== tp.unitOverride) note.push(tr("Header: {v} – von Hand auf {unitOverride} gestellt", { v: headerQuant ? "Bq/ml" : headerUnit === "CNTS" ? "Counts" : headerUnit, unitOverride: tp.unitOverride }));
+    else if (headerUnit && !headerQuant && headerUnit !== "CNTS") note.push(tr("Einheit im Header: {v} – wie {unit} behandelt", { v: h!.units, unit }));
     let mbqPerCount: number;
     if (quant) {
       const [sx, sy, sz] = e.dataset.current.geometry.spacing;
       // Bq/ml × ml per voxel → Bq; images decay corrected to the injection are brought back to the acquisition time.
       const toAcq = h?.decayCorrection?.toUpperCase() === "ADMIN" && tH !== undefined && nuclide ? Math.exp((-Math.LN2 * tH * 3600) / nuclide.halfLifeSec) : 1;
-      if (h?.decayCorrection?.toUpperCase() === "ADMIN") note.push(tH !== undefined ? "auf Injektion zerfallskorrigiert – auf Aufnahmezeit zurückgerechnet" : "auf Injektion zerfallskorrigiert – Zeit p.i. fehlt");
+      if (h?.decayCorrection?.toUpperCase() === "ADMIN") note.push(tH !== undefined ? tr("auf Injektion zerfallskorrigiert – auf Aufnahmezeit zurückgerechnet") : tr("auf Injektion zerfallskorrigiert – Zeit p.i. fehlt"));
       mbqPerCount = ((sx * sy * sz) / 1000) * 1e-6 * toAcq;
     } else {
-      if (decayCorrected && h?.decayCorrection?.toUpperCase() === "ADMIN") note.push("Bild auf Injektion zerfallskorrigiert – Zeitachse prüfen");
+      if (decayCorrected && h?.decayCorrection?.toUpperCase() === "ADMIN") note.push(tr("Bild auf Injektion zerfallskorrigiert – Zeitachse prüfen"));
       mbqPerCount = !profile.quantitative && profile.cpsPerMBq > 0 && nuclide && durationSec ? countsToMBq(durationSec, profile.cpsPerMBq, nuclide.halfLifeSec, decayCorrected) : NaN;
     }
     const sum = positiveSum(e.dataset.current.data);
@@ -221,7 +222,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
     return names;
   }, [setup.labelSets, entries, tps.map((t) => t.lesionSetId).join()]); // eslint-disable-line react-hooks/exhaustive-deps
   const regionOpts = (key: string): DosRegionOptions =>
-    setup.regions[key] ?? { enabled: DEFAULT_ORGANS.includes(key) || key.startsWith("läsion"), model: "auto", recovery: key.startsWith("läsion") };
+    setup.regions[key] ?? { enabled: DEFAULT_ORGANS.includes(key) || /^(läsion|lesion)/.test(key), model: "auto", recovery: /^(läsion|lesion)/.test(key) };
   /** BED parameters of a region: own values, else the kidney defaults for kidneys. */
   const bedParams = (name: string, o: DosRegionOptions) => {
     const kidney = /kidney|niere/i.test(name);
@@ -326,7 +327,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
           distMm = a && b ? Math.hypot(a.center[0] - b.center[0], a.center[1] - b.center[1], a.center[2] - b.center[2]) : undefined;
         }
         r.set(x.refId, { otherId, distMm, manual: isManual });
-        if (otherId !== null && !m.has(otherId)) m.set(otherId, refAtlas.labels.get(x.refId) ?? `Läsion ${x.refId}`);
+        if (otherId !== null && !m.has(otherId)) m.set(otherId, refAtlas.labels.get(x.refId) ?? tr("Läsion {refId}", { refId: x.refId }));
       }
       byTp.set(spectId, m);
       rows.set(spectId, r);
@@ -428,7 +429,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
     const fo = e.dataset.current.geometry.frameOfReferenceUid;
     return timePoints.find((t) => {
       const ct = byId(t.ctId), sp = byId(t.spectId);
-      if (ct && e.dataset.displayName === `CT-Organe · ${ct.dataset.displayName}`) return true;
+      if (ct && tBoth("CT-Organe · {displayName}", { displayName: ct.dataset.displayName }).includes(e.dataset.displayName)) return true;
       return !!fo && (ct?.dataset.current.geometry.frameOfReferenceUid === fo || sp?.dataset.current.geometry.frameOfReferenceUid === fo);
     })?.spectId;
   }
@@ -439,7 +440,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
     if (!ct) return undefined;
     const fo = ct.dataset.current.geometry.frameOfReferenceUid;
     return (
-      labelCandidates.find((e) => e.dataset.displayName === `CT-Organe · ${ct.dataset.displayName}`) ??
+      labelCandidates.find((e) => tBoth("CT-Organe · {displayName}", { displayName: ct.dataset.displayName }).includes(e.dataset.displayName)) ??
       labelCandidates.find((e) => /^CT-Organe/.test(e.dataset.displayName) && !!fo && e.dataset.current.geometry.frameOfReferenceUid === fo)
     );
   }
@@ -478,16 +479,16 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
 
   async function measure() {
     if (!tpViews.length) return;
-    setBusy("Aktivitäten messen");
+    setBusy(tr("Aktivitäten messen"));
     setError(null);
-    api.onActivity("Aktivitäten messen");
+    api.onActivity(tr("Aktivitäten messen"));
     try {
       const enabledKeys = new Set([...labelNames.keys()].filter((k) => regionOpts(k).enabled));
       const measurements: DosimetrySetup["measurements"] = {};
       for (const [n, tp] of tpViews.entries()) {
-        setStatus(`Zeitpunkt ${n + 1}/${tpViews.length}`);
+        setStatus(tr("Zeitpunkt {v}/{length}", { v: n + 1, length: tpViews.length }));
         await new Promise((r) => setTimeout(r, 10));
-        if (!Number.isFinite(tp.mbqPerCount)) throw new Error(`${tp.label}: Kalibrierung unvollständig (Kamera-Profil, Aufnahmedauer).`);
+        if (!Number.isFinite(tp.mbqPerCount)) throw new Error(tr("{label}: Kalibrierung unvollständig (Kamera-Profil, Aufnahmedauer).", { label: tp.label }));
         const spect = byId(tp.spectId)!;
         const ct = byId(tp.ctId);
         const sets = setsFor(tp.spectId);
@@ -513,7 +514,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
         measurements[tp.spectId] = res;
       }
       set((s) => ({ ...s, measurements, measuredSig: labelSig }));
-      setStatus(`Gemessen: ${Object.values(measurements).reduce((s, m) => s + Object.keys(m).length, 0)} Regionen über ${tpViews.length} Zeitpunkt(e).`);
+      setStatus(tr("Gemessen: {v} Regionen über {length} Zeitpunkt(e).", { v: Object.values(measurements).reduce((s, m) => s + Object.keys(m).length, 0), length: tpViews.length }));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setStatus(null);
@@ -528,7 +529,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
     setError(null);
     try {
       const ok = await api.segmentCts(ctIds, undefined, setStatus);
-      setStatus(ok ? `${ctIds.length} CT(s) segmentiert – jetzt „Aktivitäten messen“.` : "Organsegmentierung abgebrochen oder fehlgeschlagen (Details in der Karte CT-Organsegmentierung).");
+      setStatus(ok ? tr("{length} CT(s) segmentiert – jetzt „Aktivitäten messen“.", { length: ctIds.length }) : tr("Organsegmentierung abgebrochen oder fehlgeschlagen (Details in der Karte CT-Organsegmentierung)."));
     } finally {
       setBusy(null);
     }
@@ -539,7 +540,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
     if (!ref?.ctId) return;
     setBusy("Registrierung");
     setError(null);
-    api.onActivity("Zeitpunkte registrieren");
+    api.onActivity(tr("Zeitpunkte registrieren"));
     try {
       const pairs = tpViews.slice(1).filter((tp) => tp.ctId).map((tp) => ({
         ctId: tp.ctId!,
@@ -548,7 +549,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
       await api.registerTimePoints(ref.ctId, pairs, setStatus);
       const done = new Set(pairs.map((p) => p.followers[0]));
       set((s) => ({ ...s, timePoints: s.timePoints.map((t) => (done.has(t.spectId) ? { ...t, registered: true } : t)) }));
-      setStatus(`${pairs.length} Zeitpunkt(e) auf das CT von ${ref.label} registriert. Bitte die Überlagerung prüfen.`);
+      setStatus(tr("{length} Zeitpunkt(e) auf das CT von {label} registriert. Bitte die Überlagerung prüfen.", { length: pairs.length, label: ref.label }));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -565,13 +566,13 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
     api.onActivity("Dosiskarte");
     try {
       const vtps = tpViews.map((tp) => {
-        if (tp.tH === undefined || !Number.isFinite(tp.mbqPerCount)) throw new Error(`${tp.label}: Zeitpunkt oder Kalibrierung fehlt.`);
+        if (tp.tH === undefined || !Number.isFinite(tp.mbqPerCount)) throw new Error(tr("{label}: Zeitpunkt oder Kalibrierung fehlt.", { label: tp.label }));
         return { spect: place(byId(tp.spectId)!), mbqPerCount: tp.mbqPerCount, tH: tp.tH };
       });
       const refPlaced = place(byId(ref.spectId)!);
       const kernel = setup.voxel.kernel;
       if (kernel && Math.abs(kernel.voxelMm - refPlaced.volume.geometry.spacing[0]) / kernel.voxelMm > 0.05)
-        throw new Error(`Kernel-Voxelgröße ${kernel.voxelMm} mm passt nicht zur SPECT-Voxelgröße ${refPlaced.volume.geometry.spacing[0].toFixed(2)} mm.`);
+        throw new Error(tr("Kernel-Voxelgröße {voxelMm} mm passt nicht zur SPECT-Voxelgröße {v} mm.", { voxelMm: kernel.voxelMm, v: refPlaced.volume.geometry.spacing[0].toFixed(2) }));
       const refCt = byId(ref.ctId);
       const run = runVoxelDose(
         {
@@ -598,14 +599,14 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
         }
         setMethodCmp(cmp);
       } else setMethodCmp(null);
-      const name = `Dosis (Gy) · ${nuclideId} · ${kernel ? "Kernel" : "lokal"}`;
+      const name = tr("Dosis (Gy) · {nuclideId} · {v}", { nuclideId, v: kernel ? "Kernel" : "lokal" });
       const id = api.putDoseMap(ref.spectId, dose, name, setup.voxel.doseId && byId(setup.voxel.doseId) ? setup.voxel.doseId : undefined);
       set((s) => ({ ...s, voxel: { ...s.voxel, doseId: id } }));
       let max = 0;
       for (const v of dose) if (v > max) max = v;
-      setStatus(`Dosiskarte erstellt (Maximum ${fmt(max)} Gy).`);
+      setStatus(tr("Dosiskarte erstellt (Maximum {v} Gy).", { v: fmt(max) }));
     } catch (e) {
-      if (e instanceof DOMException && e.name === "AbortError") setStatus("Dosiskarte abgebrochen.");
+      if (e instanceof DOMException && e.name === "AbortError") setStatus(tr("Dosiskarte abgebrochen."));
       else {
         setError(e instanceof Error ? e.message : String(e));
         setStatus(null);
@@ -639,7 +640,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
     setError(null);
     try {
       const voxel = Number(kernelVoxel.replace(",", "."));
-      if (!(voxel > 0)) throw new Error("Bitte zuerst die Voxelgröße des Kernels (mm) eintragen.");
+      if (!(voxel > 0)) throw new Error(tr("Bitte zuerst die Voxelgröße des Kernels (mm) eintragen."));
       const kernel = parseKernel(await file.text(), file.name, voxel, kernelUnit);
       set((s) => ({ ...s, voxel: { ...s.voxel, kernel } }));
     } catch (e) {
@@ -664,7 +665,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
     const f = (v: number | undefined, d = 4) => (v === undefined || !Number.isFinite(v) ? "" : v.toFixed(d).replace(".", ","));
     const sep = ";";
     const maxTp = Math.max(0, ...rows.map((r) => r.t.length));
-    const head = ["Region", "Volumen_ml", "Masse_g", "RC", ...Array.from({ length: maxTp }, (_, i) => [`t${i + 1}_h`, `A${i + 1}_MBq`]).flat(), "Modell", "Teff_h", "TIA_MBq_h", "TIA_SD", "Dosis_Gy", "Dosis_SD_Gy", "Unsicherheit_rel_%", "Unsicherheit_Anteile", "BED_Gy", "Dmean_Voxel_Gy", "D2_Gy", "D50_Gy", "D98_Gy"];
+    const head = ["Region", "Volumen_ml", "Masse_g", "RC", ...Array.from({ length: maxTp }, (_, i) => [`t${i + 1}_h`, tr("A{v}_MBq", { v: i + 1 })]).flat(), "Modell", "Teff_h", "TIA_MBq_h", "TIA_SD", "Dosis_Gy", "Dosis_SD_Gy", "Unsicherheit_rel_%", tr("Unsicherheit_Anteile"), "BED_Gy", "Dmean_Voxel_Gy", "D2_Gy", "D50_Gy", "D98_Gy"];
     const lines = rows.map((r) => {
       const d = dvhs.get(r.key);
       const pts = Array.from({ length: maxTp }, (_, i) => [f(r.t[i], 2), f(r.a[i])]).flat();
@@ -673,16 +674,16 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
     const csv = csvWithInfo([head.join(sep), ...lines], [
       ["Nuklid", nuclideId],
       ["Elektronenenergie keV/Zerfall", String(energy ?? "")],
-      ["Kamera-Profil", profile.quantitative ? `${profile.name} (Bq/ml, kein Kalibrierfaktor)` : `${profile.name} (${profile.cpsPerMBq} cps/MBq)`],
+      [tr("Kamera-Profil"), profile.quantitative ? tr("{name} (Bq/ml, kein Kalibrierfaktor)", { name: profile.name }) : tr("{name} ({cpsPerMBq} cps/MBq)", { name: profile.name, cpsPerMBq: profile.cpsPerMBq })],
       ["Injektion", injectionMs ? new Date(injectionMs).toLocaleString("de-DE") : ""],
-      ["Injizierte Aktivität MBq", String(injectedMBq ?? "")],
-      ["Methode", "Lokale Energiedeposition der Elektronen (Organ/Läsion); Voxelkarte: " + (setup.voxel.kernel ? `Kernel ${setup.voxel.kernel.name}` : "lokal")],
+      [tr("Injizierte Aktivität MBq"), String(injectedMBq ?? "")],
+      ["Methode", tr("Lokale Energiedeposition der Elektronen (Organ/Läsion); Voxelkarte: ") + (setup.voxel.kernel ? tr("Kernel {name}", { name: setup.voxel.kernel.name }) : "lokal")],
       ["Hinweis", "Forschungswerkzeug, kein Medizinprodukt"],
     ]);
     const url = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = withPatientId(`Dosimetrie_${nuclideId.replace(/[äöüÄÖÜß]/g, umlaut)}.csv`);
+    a.download = withPatientId(tr("Dosimetrie_{v}.csv", { v: nuclideId.replace(/[äöüÄÖÜß]/g, umlaut) }));
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -696,14 +697,14 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
       nuclide: nuclideId,
       halfLife: nuclide?.halfLifeText ?? "",
       electronKeV: energy,
-      energySource: setup.energyOverride[nuclideId] !== undefined ? "eigener Wert" : (DEFAULT_ENERGIES[nuclideId]?.source ?? ""),
+      energySource: setup.energyOverride[nuclideId] !== undefined ? tr("eigener Wert") : (DEFAULT_ENERGIES[nuclideId]?.source ?? ""),
       calibration: (() => {
         const rcText = profile.recovery?.length ? `; RC ${profile.recovery.map((r) => `${r.volumeMl} ml → ${r.rc}`).join(", ")}` : "";
-        if (tpViews.every((t) => t.unit === "Bq/ml")) return `quantitative Bilder (Bq/ml), kein Kalibrierfaktor (Profil ${profile.name})${rcText}`;
-        if (profile.quantitative) return `Bilder in Counts, aber quantitatives Profil gewählt – Kalibrierung fehlt`;
+        if (tpViews.every((t) => t.unit === "Bq/ml")) return tr("quantitative Bilder (Bq/ml), kein Kalibrierfaktor (Profil {name}){rcText}", { name: profile.name, rcText });
+        if (profile.quantitative) return tr("Bilder in Counts, aber quantitatives Profil gewählt – Kalibrierung fehlt");
         return `${profile.name}: ${profile.cpsPerMBq} cps/MBq${profile.collimator ? `, Kollimator ${profile.collimator}` : ""}${profile.window ? `, Fenster ${profile.window}` : ""}${rcText}${profile.note ? ` (${profile.note})` : ""}`;
       })(),
-      injection: `${injectionMs ? new Date(injectionMs).toLocaleString("de-DE") : "Zeit fehlt"} · ${injectedMBq !== undefined ? `${injectedMBq} MBq` : "Aktivität fehlt"}`,
+      injection: `${injectionMs ? new Date(injectionMs).toLocaleString("de-DE") : tr("Zeit fehlt")} · ${injectedMBq !== undefined ? `${injectedMBq} MBq` : tr("Aktivität fehlt")}`,
       timePoints: views.map((v, n) => ({
         label: `T${n + 1}: ${v.label}`,
         acqText: fmtDateTime(v.acqMs),
@@ -743,10 +744,10 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
         };
       }),
       methods: [
-        ["Organ-/Läsionsdosis", "TIA × Elektronenenergie / Masse (lokale Energiedeposition); Masse aus der CT-Dichte (ρ = 1 + HU/1000, oberhalb von Wasser 1 + 0,6·HU/1000)"],
+        [tr("Organ-/Läsionsdosis"), "TIA × Elektronenenergie / Masse (lokale Energiedeposition); Masse aus der CT-Dichte (ρ = 1 + HU/1000, oberhalb von Wasser 1 + 0,6·HU/1000)"],
         ["Kurvenmodelle", "automatisch: 1 Zeitpunkt Hänscheid (Madsen mit T_eff), 2 monoexponentiell, ≥ 3 biexponentiell mit Aufnahme wenn ansteigend; Auswaschung nicht langsamer als der physikalische Zerfall"],
-        ["Voxelkarte", doseEntry ? `${setup.voxel.method === "mono" ? "monoexponentiell (log-linear)" : "Trapez + Ausläufer"} je Voxel; ${setup.voxel.kernel ? `Faltung mit Kernel ${setup.voxel.kernel.name} (${setup.voxel.kernel.voxelMm} mm), Dichte-Skalierung ρ_Wasser/ρ` : "lokale Deposition"}` : "nicht berechnet"],
-        ["Läsionen über Zeitpunkte", refLesionEntry ? `Schwerpunkt-Zuordnung, max. ${maxMm} mm${Object.keys(setup.lesionLinks?.manual ?? {}).length ? ", manuell korrigiert" : ""}` : "–"],
+        ["Voxelkarte", doseEntry ? `${setup.voxel.method === "mono" ? "monoexponentiell (log-linear)" : tr("Trapez + Ausläufer")} je Voxel; ${setup.voxel.kernel ? `Faltung mit Kernel ${setup.voxel.kernel.name} (${setup.voxel.kernel.voxelMm} mm), Dichte-Skalierung ρ_Wasser/ρ` : "lokale Deposition"}` : "nicht berechnet"],
+        [tr("Läsionen über Zeitpunkte"), refLesionEntry ? tr("Schwerpunkt-Zuordnung, max. {maxMm} mm{v}", { maxMm, v: Object.keys(setup.lesionLinks?.manual ?? {}).length ? tr(", manuell korrigiert") : "" }) : "–"],
         ["Unsicherheit", "EANM-Leitfaden (Gear et al., EJNMMI Physics 2018): Fit-Kovarianz und eingegebene relative Unsicherheiten quadratisch addiert, k = 1"],
         ["Quellen", "MIRD-Pamphlete 23/26; EANM-Empfehlungen Lu-177 (2022); ICRP Publication 107; Hänscheid et al.; Madsen et al."],
       ],
@@ -765,14 +766,14 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
     const url = URL.createObjectURL(new Blob([reportHtml()], { type: "text/html;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = withPatientId(`Dosimetrie-Bericht_${nuclideId}.html`);
+    a.download = withPatientId(tr("Dosimetrie-Bericht_{nuclideId}.html", { nuclideId }));
     a.click();
     URL.revokeObjectURL(url);
   }
 
   function printReport() {
     const w = window.open("", "_blank");
-    if (!w) return setError("Das Druckfenster wurde vom Browser blockiert – „Bericht (HTML)“ herunterladen und dort drucken.");
+    if (!w) return setError(tr("Das Druckfenster wurde vom Browser blockiert – „Bericht (HTML)“ herunterladen und dort drucken."));
     w.document.write(reportHtml());
     w.document.close();
     w.focus();
@@ -785,7 +786,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
         const tMax = Math.max(...sel.t, sel.fit.teffH ?? 0) * 2;
         const xs = Array.from({ length: 80 }, (_, i) => (tMax * i) / 79);
         return [
-          { label: "Messung", x: sel.t, y: sel.a, style: "points" as const, color: "#e8590c" },
+          { label: tr("Messung"), x: sel.t, y: sel.a, style: "points" as const, color: "#e8590c" },
           { label: TAC_MODEL_LABELS[sel.fit.model], x: xs, y: xs.map(sel.fit.curve), style: "line" as const, color: "#7c6cf0" },
         ];
       })()
@@ -804,10 +805,10 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
     const ctAcq = tp.ctId ? acquisitionMs(byId(tp.ctId)!.dataset) : undefined;
     const warnings: string[] = [];
     if (acqMs !== undefined && ctAcq !== undefined && Math.abs(acqMs - ctAcq) > 3 * HOUR)
-      warnings.push(`CT ${(Math.abs(acqMs - ctAcq) / HOUR).toFixed(1).replace(".", ",")} h von der Aufnahme entfernt (${fmtDateTime(ctAcq)}) – richtiges CT?`);
-    if ((sessionOf(v.spectId)?.functional.length ?? 0) > 1) warnings.push("Zur selben Aufnahme gehören mehrere Funktionsbilder – richtiges Bild gewählt?");
-    if (acqMs === undefined && tp.tHoursManual === undefined) warnings.push("Kein Aufnahmedatum im Header – Zeit p.i. bitte eingeben.");
-    if (!tp.ctId) warnings.push("Kein CT: Masse aus der Dichte, Organsegmentierung und Registrierung nicht möglich.");
+      warnings.push(tr("CT {v} h von der Aufnahme entfernt ({v2}) – richtiges CT?", { v: (Math.abs(acqMs - ctAcq) / HOUR).toFixed(1).replace(".", ","), v2: fmtDateTime(ctAcq) }));
+    if ((sessionOf(v.spectId)?.functional.length ?? 0) > 1) warnings.push(tr("Zur selben Aufnahme gehören mehrere Funktionsbilder – richtiges Bild gewählt?"));
+    if (acqMs === undefined && tp.tHoursManual === undefined) warnings.push(tr("Kein Aufnahmedatum im Header – Zeit p.i. bitte eingeben."));
+    if (!tp.ctId) warnings.push(tr("Kein CT: Masse aus der Dichte, Organsegmentierung und Registrierung nicht möglich."));
     return {
       spectId: v.spectId,
       label: v.label,
@@ -841,8 +842,8 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
 
   return (
     <>
-      <InfoText details="Forschungswerkzeug, kein zertifiziertes Medizinprodukt. Grundlage: quantitative SPECT vom Gerät (OSEM mit Schwächungs-, Streu- und Auflösungskorrektur) in Counts; die SPECT-Rekonstruktion dieser App ist dafür nicht geeignet.">
-        Forschungswerkzeug · SPECT vom Gerät
+      <InfoText details={tr("Forschungswerkzeug, kein zertifiziertes Medizinprodukt. Grundlage: quantitative SPECT vom Gerät (OSEM mit Schwächungs-, Streu- und Auflösungskorrektur) in Counts; die SPECT-Rekonstruktion dieser App ist dafür nicht geeignet.")}>
+        {tr("Forschungswerkzeug · SPECT vom Gerät")}
       </InfoText>
 
       <TimePointsCard
@@ -889,7 +890,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
           api.showTimePoint(tp.ctId ?? tp.spectId, [tp.ctId ? tp.spectId : undefined, organ, tp.lesionSetId].filter((x): x is string => !!x));
         }}
         onSegment={(ctId, modelId) => {
-          if (organSetOf(ctId) && !window.confirm("Die Organe dieses CTs sind schon segmentiert. Trotzdem neu segmentieren?")) return;
+          if (organSetOf(ctId) && !window.confirm(tr("Die Organe dieses CTs sind schon segmentiert. Trotzdem neu segmentieren?"))) return;
           api.segmentCt(ctId, modelId);
         }}
         segRunning={api.segRunning}
@@ -898,13 +899,13 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
       />
 
       <Card
-        title={<>Nuklid und Kalibrierung</>}
+        title={<>{tr("Nuklid und Kalibrierung")}</>}
         persistKey="dos-cal"
-        status={tpViews.some((t) => t.unit === "Counts") && profile.quantitative ? { text: "Faktor fehlt", tone: "warn" } : { text: profile.quantitative ? "Bq/ml" : profile.name, tone: "ok" }}
-        info="Standard ist das Profil „Quantitativ (Bq/ml, z. B. xSPECT Quant)“: Bilder mit echten Aktivitätskonzentrationen brauchen keinen Kalibrierfaktor. Für SPECT in Counts ein Profil mit Kalibrierfaktor der Kamerakonfiguration (Kamera, Kollimator, Energiefenster, Rekonstruktion) in cps/MBq anlegen oder aus einer Phantomaufnahme bestimmen: Counts / (Aufnahmedauer × Faktor) = MBq, Zerfall während der Aufnahme korrigiert. Recovery-Koeffizienten (Kugelphantom) korrigieren den Partialvolumeneffekt kleiner Läsionen – auch bei quantitativen Bildern („Mit RC als eigenes Profil“).">
+        status={tpViews.some((t) => t.unit === "Counts") && profile.quantitative ? { text: tr("Faktor fehlt"), tone: "warn" } : { text: profile.quantitative ? "Bq/ml" : profile.name, tone: "ok" }}
+        info={tr("Standard ist das Profil „Quantitativ (Bq/ml, z. B. xSPECT Quant)“: Bilder mit echten Aktivitätskonzentrationen brauchen keinen Kalibrierfaktor. Für SPECT in Counts ein Profil mit Kalibrierfaktor der Kamerakonfiguration (Kamera, Kollimator, Energiefenster, Rekonstruktion) in cps/MBq anlegen oder aus einer Phantomaufnahme bestimmen: Counts / (Aufnahmedauer × Faktor) = MBq, Zerfall während der Aufnahme korrigiert. Recovery-Koeffizienten (Kugelphantom) korrigieren den Partialvolumeneffekt kleiner Läsionen – auch bei quantitativen Bildern („Mit RC als eigenes Profil“).")}>
         <div className="field-row">
           <label className="field">
-            Nuklid{headerNuclide && headerNuclide !== nuclideId ? ` (Header: ${headerNuclide})` : ""}
+            Nuklid{headerNuclide && headerNuclide !== nuclideId ? tr(" (Header: {headerNuclide})", { headerNuclide }) : ""}
             <select value={nuclideId} onChange={(e) => set((s) => ({ ...s, nuclide: e.target.value }))}>
               {THERAPY_NUCLIDES.map((n) => (
                 <option key={n} value={n}>
@@ -926,15 +927,15 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
           </label>
         </div>
         {!energyChecked && (
-          <InfoText warn details={`Vorgabewert ${DEFAULT_ENERGIES[nuclideId]?.electronKeV} keV ist ungeprüft – bitte gegen ICRP 107 (oder NNDC NuDat) prüfen und eintragen.`}>
-            Energie ungeprüft
+          <InfoText warn details={tr("Vorgabewert {v} keV ist ungeprüft – bitte gegen ICRP 107 (oder NNDC NuDat) prüfen und eintragen.", { v: DEFAULT_ENERGIES[nuclideId]?.electronKeV })}>
+            {tr("Energie ungeprüft")}
           </InfoText>
         )}
         {DEFAULT_ENERGIES[nuclideId] && (
           <InfoText
             details={`Elektronen ${DEFAULT_ENERGIES[nuclideId].electronKeV} keV/Zerfall${DEFAULT_ENERGIES[nuclideId].betaKeV !== undefined ? ` (davon β⁻ ${DEFAULT_ENERGIES[nuclideId].betaKeV} keV)` : ""}${DEFAULT_ENERGIES[nuclideId].photonKeV !== undefined ? `, Photonen ${DEFAULT_ENERGIES[nuclideId].photonKeV} keV/Zerfall (nur mit Kernel berücksichtigt)` : ""}. Quelle: ${DEFAULT_ENERGIES[nuclideId].source}.`}
           >
-            {setup.energyOverride[nuclideId] !== undefined ? `Eigener Wert · Vorgabe ${DEFAULT_ENERGIES[nuclideId].electronKeV} keV` : "ICRP 107"}
+            {setup.energyOverride[nuclideId] !== undefined ? tr("Eigener Wert · Vorgabe {v} keV", { v: DEFAULT_ENERGIES[nuclideId].electronKeV }) : "ICRP 107"}
           </InfoText>
         )}
         <ProfileEditor profiles={profiles} current={profile} nuclide={nuclideId} onSelect={(p) => set((s) => ({ ...s, profile: p }))} onSave={saveProfile}
@@ -954,36 +955,36 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
           halfLifeSec={nuclide?.halfLifeSec}
           nuclide={nuclideId}
           onUse={(cps, note) => {
-            if (!profile.quantitative && window.confirm(`Kalibrierfaktor im Profil „${profile.name}“ durch ${cps} cps/MBq ersetzen?\n(Abbrechen = neues Profil anlegen)`)) {
+            if (!profile.quantitative && window.confirm(tr("Kalibrierfaktor im Profil „{name}“ durch {cps} cps/MBq ersetzen?\n(Abbrechen = neues Profil anlegen)", { name: profile.name, cps }))) {
               saveProfile({ ...profile, cpsPerMBq: cps, nuclide: nuclideId, note });
             } else {
-              saveProfile({ id: `cam${Date.now()}`, name: `Phantom ${new Date().toLocaleDateString("de-DE")}`, nuclide: nuclideId, cpsPerMBq: cps, note });
+              saveProfile({ id: `cam${Date.now()}`, name: tr("Phantom {v}", { v: new Date().toLocaleDateString("de-DE") }), nuclide: nuclideId, cpsPerMBq: cps, note });
             }
           }}
         />
       </Card>
 
-      <Card title={<>Regionen</>} persistKey="dos-reg" status={labelNames.size ? { text: `${[...labelNames.keys()].filter((k) => regionOpts(k).enabled).length} aktiv`, tone: "info" } : null}
-        info="Labelbilder (CT-Organsegmentierung, Läsionen, eigene Segmentierungen). Ein Labelbild gilt für seinen Zeitpunkt oder – nach der Registrierung – für alle Zeitpunkte. Regionen gleichen Namens werden über die Zeitpunkte verbunden. Speichel- und Tränendrüsen sind nicht im CT-Modell: als eigene Segmentierung oder VOI laden.">
+      <Card title={<>{tr("Regionen")}</>} persistKey="dos-reg" status={labelNames.size ? { text: tr("{v} aktiv", { v: [...labelNames.keys()].filter((k) => regionOpts(k).enabled).length }), tone: "info" } : null}
+        info={tr("Labelbilder (CT-Organsegmentierung, Läsionen, eigene Segmentierungen). Ein Labelbild gilt für seinen Zeitpunkt oder – nach der Registrierung – für alle Zeitpunkte. Regionen gleichen Namens werden über die Zeitpunkte verbunden. Speichel- und Tränendrüsen sind nicht im CT-Modell: als eigene Segmentierung oder VOI laden.")}>
         {tps.length > 1 && (
           <div className="dos-labelsource">
-            <div className="segmented-control" role="group" aria-label="Labelbilder der Zeitpunkte">
+            <div className="segmented-control" role="group" aria-label={tr("Labelbilder der Zeitpunkte")}>
               <button className={labelSource === "t1" ? "active" : ""} onClick={() => set((s) => ({ ...s, labelSource: "t1" }))}>
-                Von T1 für alle
+                {tr("Von T1 für alle")}
               </button>
               <button className={labelSource === "perTp" ? "active" : ""} onClick={() => set((s) => ({ ...s, labelSource: "perTp" }))}>
-                Organkarte je Zeitpunkt
+                {tr("Organkarte je Zeitpunkt")}
               </button>
             </div>
             {labelSource === "t1" ? (
               <>
                 <p className="tool-hint">
-                  Organkarte{tps[0].lesionSetId ? " und Läsionen" : ""} von T1 ({byId(organIdOf(tps[0]))?.label ?? "keine Organkarte"}) gelten über die Registrierung für alle Zeitpunkte; eigene Labelbilder der anderen
+                  Organkarte{tps[0].lesionSetId ? tr(" und Läsionen") : ""} von T1 ({byId(organIdOf(tps[0]))?.label ?? tr("keine Organkarte")}) gelten über die Registrierung für alle Zeitpunkte; eigene Labelbilder der anderen
                   Zeitpunkte werden nicht verwendet.
                 </p>
                 {tps.slice(1).some((t) => !isRegistered(t)) && (
-                  <InfoText warn details="Die Labelbilder von T1 werden über die Registrierung auf die anderen Zeitpunkte übertragen. Ohne Registrierung liegen sie dort an der falschen Stelle. „Zeitpunkte registrieren“ (Karte Zeitpunkte) oder im Bereich Koregistrierung.">
-                    Nicht alle Zeitpunkte registriert
+                  <InfoText warn details={tr("Die Labelbilder von T1 werden über die Registrierung auf die anderen Zeitpunkte übertragen. Ohne Registrierung liegen sie dort an der falschen Stelle. „Zeitpunkte registrieren“ (Karte Zeitpunkte) oder im Bereich Koregistrierung.")}>
+                    {tr("Nicht alle Zeitpunkte registriert")}
                   </InfoText>
                 )}
               </>
@@ -994,16 +995,16 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                   return missing.length ? (
                     <div className="button-row">
                       <button className="secondary-btn" disabled={api.segRunning || !!busy} onClick={() => void segmentMissing(missing)}>
-                        {api.segRunning ? "Segmentierung läuft …" : `Fehlende Organkarten segmentieren (${missing.length} CT${missing.length > 1 ? "s" : ""})`}
+                        {api.segRunning ? tr("Segmentierung läuft …") : tr("Fehlende Organkarten segmentieren ({length} CT{v})", { length: missing.length, v: missing.length > 1 ? "s" : "" })}
                       </button>
                     </div>
                   ) : (
-                    <p className="tool-hint">Jeder Zeitpunkt hat eine eigene Organkarte – gemessen wird in der Anatomie des jeweiligen CTs (keine Registrierung nötig).</p>
+                    <p className="tool-hint">{tr("Jeder Zeitpunkt hat eine eigene Organkarte – gemessen wird in der Anatomie des jeweiligen CTs (keine Registrierung nötig).")}</p>
                   );
                 })()}
                 {!allHaveLesions && tps.some((t) => t.lesionSetId) && (
-                  <InfoText warn details="Für die Läsionen braucht jeder Zeitpunkt ein eigenes Läsionsbild (in „Segmentierung & MTV“ je SPECT segmentieren); sonst ergäben sich Kurven mit nur einem Punkt. Alternative: „Von T1 für alle“.">
-                    Läsionen werden in diesem Modus nicht ausgewertet
+                  <InfoText warn details={tr("Für die Läsionen braucht jeder Zeitpunkt ein eigenes Läsionsbild (in „Segmentierung & MTV“ je SPECT segmentieren); sonst ergäben sich Kurven mit nur einem Punkt. Alternative: „Von T1 für alle“.")}>
+                    {tr("Läsionen werden in diesem Modus nicht ausgewertet")}
                   </InfoText>
                 )}
               </>
@@ -1011,7 +1012,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
           </div>
         )}
         {labelCandidates.length === 0 && (
-          <InfoText details="Organe auf dem CT segmentieren (Karte Zeitpunkte) oder Läsionen im Bereich „Segmentierung & MTV“ erzeugen; eigene Segmentierungen als NIfTI laden.">Noch keine Labelbilder</InfoText>
+          <InfoText details={tr("Organe auf dem CT segmentieren (Karte Zeitpunkte) oder Läsionen im Bereich „Segmentierung & MTV“ erzeugen; eigene Segmentierungen als NIfTI laden.")}>{tr("Noch keine Labelbilder")}</InfoText>
         )}
         {labelCandidates.map((e) => {
           const ls = setup.labelSets.find((l) => l.id === e.id);
@@ -1021,7 +1022,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
               <span className="export-item-name">{e.label}</span>
               {ls && (
                 <select value={ls.tp} onChange={(ev) => set((s) => ({ ...s, labelSets: s.labelSets.map((l) => (l.id === e.id ? { ...l, tp: ev.target.value } : l)) }))}>
-                  <option value="all">alle Zeitpunkte</option>
+                  <option value="all">{tr("alle Zeitpunkte")}</option>
                   {tpViews.map((tp, n) => (
                     <option key={tp.spectId} value={tp.spectId}>
                       Zeitpunkt {n + 1}
@@ -1042,7 +1043,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                   <span className="export-item-name">{name}</span>
                   {o.enabled && (
                     <em className="export-item-grid">
-                      <label title="Recovery-Koeffizient anwenden">
+                      <label title={tr("Recovery-Koeffizient anwenden")}>
                         <input type="checkbox" checked={o.recovery} onChange={(e) => setRegion(key, { recovery: e.target.checked })} /> RC
                       </label>
                     </em>
@@ -1055,15 +1056,15 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
         {lesionLinks.rows.size > 0 && refLesionEntry?.dataset.atlas && (
           <div className="dos-lesions">
             <div className="field-row">
-              <InfoText details={`Läsionsbilder je Zeitpunkt werden über die Schwerpunkte im registrierten Raum einander zugeordnet (optimale Paarung, höchstens ${maxMm} mm Abstand). Gemessen wird unter dem Namen der Läsion von T1; Läsionen ohne Partner zählen nicht. Zuordnung per Auswahl korrigierbar. Vorher „Zeitpunkte registrieren“.`}>
-                Läsionen über Zeitpunkte
+              <InfoText details={tr("Läsionsbilder je Zeitpunkt werden über die Schwerpunkte im registrierten Raum einander zugeordnet (optimale Paarung, höchstens {maxMm} mm Abstand). Gemessen wird unter dem Namen der Läsion von T1; Läsionen ohne Partner zählen nicht. Zuordnung per Auswahl korrigierbar. Vorher „Zeitpunkte registrieren“.", { maxMm })}>
+                {tr("Läsionen über Zeitpunkte")}
               </InfoText>
               <label className="field">
                 max. Abstand (mm)
                 <input type="text" inputMode="decimal" value={maxMm} onChange={(e) => set((s) => ({ ...s, lesionLinks: { manual: s.lesionLinks?.manual ?? {}, maxMm: numOrUndef(e.target.value) ?? 20 } }))} />
               </label>
             </div>
-            {tps.slice(1).some((t) => !isRegistered(t) && t.lesionSetId) && <p className="tool-hint tool-warning">Nicht alle Zeitpunkte sind registriert – Abstände sind dann nicht aussagekräftig.</p>}
+            {tps.slice(1).some((t) => !isRegistered(t) && t.lesionSetId) && <p className="tool-hint tool-warning">{tr("Nicht alle Zeitpunkte sind registriert – Abstände sind dann nicht aussagekräftig.")}</p>}
             <table className="region-table">
               <thead>
                 <tr>
@@ -1085,7 +1086,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                           <select
                             className={`inline-select${r?.manual ? " manual" : ""}`}
                             value={r?.otherId ?? ""}
-                            title={r?.manual ? "manuell zugeordnet" : "automatisch"}
+                            title={r?.manual ? tr("manuell zugeordnet") : "automatisch"}
                             onChange={(e) =>
                               set((s) => {
                                 const links = s.lesionLinks ?? { maxMm, manual: {} };
@@ -1110,41 +1111,41 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
             </table>
             {Object.keys(setup.lesionLinks?.manual ?? {}).length > 0 && (
               <button className="link-btn" onClick={() => set((s) => ({ ...s, lesionLinks: { maxMm, manual: {} } }))}>
-                Manuelle Zuordnungen zurücksetzen
+                {tr("Manuelle Zuordnungen zurücksetzen")}
               </button>
             )}
           </div>
         )}
         {measurementStale && (
-          <InfoText warn details="Seit der letzten Messung haben sich Labelbilder geändert – z. B. Läsionen in „Segmentierung & MTV“ bestätigt oder abgewählt, eine Organkarte neu segmentiert oder die Läsionszuordnung korrigiert. Die Ergebnisse unten beruhen noch auf dem alten Stand.">
-            Labelbilder geändert – neu messen
+          <InfoText warn details={tr("Seit der letzten Messung haben sich Labelbilder geändert – z. B. Läsionen in „Segmentierung & MTV“ bestätigt oder abgewählt, eine Organkarte neu segmentiert oder die Läsionszuordnung korrigiert. Die Ergebnisse unten beruhen noch auf dem alten Stand.")}>
+            {tr("Labelbilder geändert – neu messen")}
           </InfoText>
         )}
         <button className="primary-btn" disabled={!!busy || !tpViews.length || !setup.labelSets.length || !allCalibrated} onClick={() => void measure()}>
-          Aktivitäten messen
+          {tr("Aktivitäten messen")}
         </button>
-        {!allCalibrated && <p className="tool-hint">Kalibrierung unvollständig: Kamera-Profil (Nuklid und Kalibrierung) bzw. Aufnahmedauer fehlt.</p>}
+        {!allCalibrated && <p className="tool-hint">{tr("Kalibrierung unvollständig: Kamera-Profil (Nuklid und Kalibrierung) bzw. Aufnahmedauer fehlt.")}</p>}
       </Card>
 
-      <Card title={<>Kurven und Dosis</>} persistKey="dos-res" status={rows.length ? { text: `${rows.length} Regionen`, tone: "ok" } : null}
-        info="Je Region: Aktivität (MBq, ggf. durch den Recovery-Koeffizienten geteilt) über der Zeit, Fit und zeitintegrierte Aktivität (TIA). Automatisch: 1 Zeitpunkt → Hänscheid (bzw. Madsen mit T_eff), 2 → monoexponentiell, ≥ 3 → biexponentiell mit Aufnahmephase, wenn die Aktivität zwischen den ersten Zeitpunkten noch steigt, sonst monoexponentiell. Die Auswaschung ist nie langsamer als der physikalische Zerfall. Dosis = TIA × Elektronenenergie / Masse (lokale Energiedeposition; Masse aus CT-Dichte). BED = D + D²·λ / ((μ + λ)·α/β) für jede Region mit α/β und Reparatur-Halbwertszeit (Region anklicken; Nieren: Vorgabe unten), mit der effektiven Halbwertszeit des Fits. D2/D50/D98 aus der Voxel-Dosiskarte.">
+      <Card title={<>{tr("Kurven und Dosis")}</>} persistKey="dos-res" status={rows.length ? { text: tr("{length} Regionen", { length: rows.length }), tone: "ok" } : null}
+        info={tr("Je Region: Aktivität (MBq, ggf. durch den Recovery-Koeffizienten geteilt) über der Zeit, Fit und zeitintegrierte Aktivität (TIA). Automatisch: 1 Zeitpunkt → Hänscheid (bzw. Madsen mit T_eff), 2 → monoexponentiell, ≥ 3 → biexponentiell mit Aufnahmephase, wenn die Aktivität zwischen den ersten Zeitpunkten noch steigt, sonst monoexponentiell. Die Auswaschung ist nie langsamer als der physikalische Zerfall. Dosis = TIA × Elektronenenergie / Masse (lokale Energiedeposition; Masse aus CT-Dichte). BED = D + D²·λ / ((μ + λ)·α/β) für jede Region mit α/β und Reparatur-Halbwertszeit (Region anklicken; Nieren: Vorgabe unten), mit der effektiven Halbwertszeit des Fits. D2/D50/D98 aus der Voxel-Dosiskarte.")}>
         {measurementStale && rows.length > 0 && (
-          <InfoText warn details="Labelbilder haben sich seit der Messung geändert (z. B. Läsionen in „Segmentierung & MTV“ bestätigt oder abgewählt). Unter „Regionen“ erneut „Aktivitäten messen“.">
-            Veraltet – Labelbilder geändert
+          <InfoText warn details={tr("Labelbilder haben sich seit der Messung geändert (z. B. Läsionen in „Segmentierung & MTV“ bestätigt oder abgewählt). Unter „Regionen“ erneut „Aktivitäten messen“.")}>
+            {tr("Veraltet – Labelbilder geändert")}
           </InfoText>
         )}
         {rows.length === 0 ? (
-          <InfoText details="Zeitpunkte, Kalibrierung und Regionen festlegen, dann „Aktivitäten messen“.">Noch keine Messwerte</InfoText>
+          <InfoText details={tr("Zeitpunkte, Kalibrierung und Regionen festlegen, dann „Aktivitäten messen“.")}>{tr("Noch keine Messwerte")}</InfoText>
         ) : (
           <>
             {sel && (
               <>
-                <Chart series={chart} xLabel="Zeit p.i. (h)" yLabel={`${sel.name} (MBq)`} />
+                <Chart series={chart} xLabel={tr("Zeit p.i. (h)")} yLabel={tr("{name} (MBq)", { name: sel.name })} />
                 <div className="field-row">
                   <label className="field">
                     Modell ({sel.name})
                     <select value={sel.opts.model} onChange={(e) => setRegion(sel.key, { model: e.target.value as TacModel | "auto" })}>
-                      <option value="auto">automatisch</option>
+                      <option value="auto">{tr("automatisch")}</option>
                       {(Object.keys(TAC_MODEL_LABELS) as TacModel[]).map((m) => (
                         <option key={m} value={m}>
                           {TAC_MODEL_LABELS[m]}
@@ -1154,7 +1155,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                   </label>
                   <label className="field">
                     T_eff Population (h)
-                    <input type="text" inputMode="decimal" placeholder="für Madsen" value={sel.opts.teffH ?? ""} onChange={(e) => setRegion(sel.key, { teffH: numOrUndef(e.target.value) })} />
+                    <input type="text" inputMode="decimal" placeholder={tr("für Madsen")} value={sel.opts.teffH ?? ""} onChange={(e) => setRegion(sel.key, { teffH: numOrUndef(e.target.value) })} />
                   </label>
                 </div>
                 <div className="field-row">
@@ -1175,9 +1176,9 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                 {sel.fit.note && <p className="tool-hint">{sel.fit.note}</p>}
                 {(() => {
                   const aw = akaikeWeights(sel.t, sel.a, { physHalfLifeH: halfLifeH });
-                  if (!aw.weights.length) return sel.t.length > 1 ? <p className="tool-hint">Akaike-Gewichte ab 4 Zeitpunkten (Vergleich mono/biexponentiell ab 5).</p> : null;
+                  if (!aw.weights.length) return sel.t.length > 1 ? <p className="tool-hint">{tr("Akaike-Gewichte ab 4 Zeitpunkten (Vergleich mono/biexponentiell ab 5).")}</p> : null;
                   return (
-                    <p className="tool-hint" title="Akaike-Gewichte (AICc) der vergleichbaren Modelle und die damit gewichtete TIA (OpenDose3D-Ansatz); das Ergebnis oben nutzt weiterhin das gewählte bzw. automatisch bestimmte Modell.">
+                    <p className="tool-hint" title={tr("Akaike-Gewichte (AICc) der vergleichbaren Modelle und die damit gewichtete TIA (OpenDose3D-Ansatz); das Ergebnis oben nutzt weiterhin das gewählte bzw. automatisch bestimmte Modell.")}>
                       Akaike-Gewichte: {aw.weights.map((w) => `${TAC_MODEL_LABELS[w.model]} ${Math.round(w.weight * 100)} %`).join(" · ")} · gewichtete TIA {fmt(aw.averagedTia)} MBq·h
                     </p>
                   );
@@ -1187,20 +1188,20 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                     Unsicherheit der Dosis (k = 1): ± {pct(sel.unc.rel)} – {sel.unc.parts.map((p) => `${p.label} ${pct(p.rel)}`).join(" · ")}
                   </p>
                 )}
-                {selDvh && <Chart series={[{ label: "DVH", x: selDvh.curve.dose, y: selDvh.curve.volumePct, style: "line", color: "#2f9e44" }]} xLabel="Dosis (Gy)" yLabel={`${sel.name}: Volumen (%)`} />}
+                {selDvh && <Chart series={[{ label: "DVH", x: selDvh.curve.dose, y: selDvh.curve.volumePct, style: "line", color: "#2f9e44" }]} xLabel={tr("Dosis (Gy)")} yLabel={tr("{name}: Volumen (%)", { name: sel.name })} />}
               </>
             )}
             <p className="tool-hint">Zeile anklicken = Kurve, Fit und DVH der Region.</p>
-            <BigTable title={`Dosimetrie · ${nuclideId}`} onCsv={downloadCsv}>
+            <BigTable title={tr("Dosimetrie · {nuclideId}", { nuclideId })} onCsv={downloadCsv}>
               <table className="region-table label-stats-table">
                 <thead>
                   <tr>
-                    <th>Region</th>
-                    <th>Masse (g)</th>
-                    <th>Modell</th>
+                    <th>{tr("Region")}</th>
+                    <th>{tr("Masse (g)")}</th>
+                    <th>{tr("Modell")}</th>
                     <th>T_eff (h)</th>
-                    <th>TIA (MBq·h)</th>
-                    <th>Dosis (Gy)</th>
+                    <th>{tr("TIA (MBq·h)")}</th>
+                    <th>{tr("Dosis (Gy)")}</th>
                     <th>BED (Gy)</th>
                     <th>D2/D50/D98 (Gy)</th>
                   </tr>
@@ -1213,7 +1214,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                         <td>
                           {r.name}
                           {r.t.length < tpViews.length && (
-                            <span className="tool-warning" title={`Nur an ${r.t.length} von ${tpViews.length} Zeitpunkten gemessen – für die übrigen fehlt ein Labelbild mit dieser Region (Quelle der Labelbilder oben unter „Regionen“).`}>
+                            <span className="tool-warning" title={tr("Nur an {length} von {length2} Zeitpunkten gemessen – für die übrigen fehlt ein Labelbild mit dieser Region (Quelle der Labelbilder oben unter „Regionen“).", { length: r.t.length, length2: tpViews.length })}>
                               {" "}
                               ({r.t.length}/{tpViews.length})
                             </span>
@@ -1230,11 +1231,11 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                           {fmt(r.doseGy)}
                           {pm(r.doseSdGy, r.doseGy)}
                         </td>
-                        <td title={r.bed === undefined ? (r.fit.teffH ? "α/β und Reparatur-T½ für diese Region eintragen (Zeile anklicken)" : "BED nur mit effektiver Halbwertszeit") : undefined}>
+                        <td title={r.bed === undefined ? (r.fit.teffH ? tr("α/β und Reparatur-T½ für diese Region eintragen (Zeile anklicken)") : tr("BED nur mit effektiver Halbwertszeit")) : undefined}>
                           {r.bed !== undefined ? fmt(r.bed) : <span className="tool-hint">–</span>}
                         </td>
-                        <td title={d ? undefined : doseEntry ? "Nur Labelbilder von T1 oder „alle Zeitpunkte“ (die Dosiskarte liegt im Raster von T1)" : "D2/D50/D98 kommen aus der Voxel-Dosiskarte – dort „Dosiskarte berechnen“"}>
-                          {d ? `${fmt(d.d2)} / ${fmt(d.d50)} / ${fmt(d.d98)}` : <span className="tool-hint">{doseEntry ? "nicht auf T1" : "nach Voxelkarte"}</span>}
+                        <td title={d ? undefined : doseEntry ? tr("Nur Labelbilder von T1 oder „alle Zeitpunkte“ (die Dosiskarte liegt im Raster von T1)") : tr("D2/D50/D98 kommen aus der Voxel-Dosiskarte – dort „Dosiskarte berechnen“")}>
+                          {d ? `${fmt(d.d2)} / ${fmt(d.d50)} / ${fmt(d.d98)}` : <span className="tool-hint">{doseEntry ? tr("nicht auf T1") : tr("nach Voxelkarte")}</span>}
                         </td>
                       </tr>
                     );
@@ -1244,7 +1245,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
             </BigTable>
             <div className="button-row">
               <button className="primary-btn" onClick={() => setReportView(reportHtml())}>
-                Bericht anzeigen
+                {tr("Bericht anzeigen")}
               </button>
               <button className="secondary-btn" onClick={downloadReport}>
                 HTML
@@ -1253,8 +1254,8 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                 PDF
               </button>
             </div>
-            <InfoText details="Bericht mit allen Zwischenergebnissen: Zeitpunkte (Datum, t p.i., Dauer, Kalibrierung), Aktivitäten je Region, Modell und Parameter, Akaike-Gewichte, TIA und Dosis mit Unsicherheit, BED, DVH-Kennwerte, Methodenvergleich lokal/Kernel, Methodik und Quellen. „Bericht anzeigen“ öffnet ihn groß über dem Viewer (dort drucken oder als PDF speichern); „HTML“ lädt ihn herunter, „PDF“ öffnet direkt den Druckdialog.">
-                Bericht mit allen Zwischenergebnissen
+            <InfoText details={tr("Bericht mit allen Zwischenergebnissen: Zeitpunkte (Datum, t p.i., Dauer, Kalibrierung), Aktivitäten je Region, Modell und Parameter, Akaike-Gewichte, TIA und Dosis mit Unsicherheit, BED, DVH-Kennwerte, Methodenvergleich lokal/Kernel, Methodik und Quellen. „Bericht anzeigen“ öffnet ihn groß über dem Viewer (dort drucken oder als PDF speichern); „HTML“ lädt ihn herunter, „PDF“ öffnet direkt den Druckdialog.")}>
+                {tr("Bericht mit allen Zwischenergebnissen")}
               </InfoText>
             <div className="field-row">
               <label className="field">
@@ -1286,21 +1287,21 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                 </label>
               ))}
             </div>
-            <InfoText details="Relative Standardunsicherheiten (k = 1) nach dem EANM-Leitfaden (Gear et al., EJNMMI Physics 2018), quadratisch addiert mit der Unsicherheit des Kurvenfits: Kalibrierfaktor (z. B. Streuung wiederholter Phantommessungen), Recovery-Koeffizient (nur Regionen mit RC) und segmentiertes Volumen (Masse ∝ Volumen). Keine Vorgabewerte – aus eigenen Messungen bestimmen. Ohne Eingabe zählt nur der Fit.">
-              Unsicherheit nach EANM 2018
+            <InfoText details={tr("Relative Standardunsicherheiten (k = 1) nach dem EANM-Leitfaden (Gear et al., EJNMMI Physics 2018), quadratisch addiert mit der Unsicherheit des Kurvenfits: Kalibrierfaktor (z. B. Streuung wiederholter Phantommessungen), Recovery-Koeffizient (nur Regionen mit RC) und segmentiertes Volumen (Masse ∝ Volumen). Keine Vorgabewerte – aus eigenen Messungen bestimmen. Ohne Eingabe zählt nur der Fit.")}>
+              {tr("Unsicherheit nach EANM 2018")}
             </InfoText>
           </>
         )}
       </Card>
 
-      <Card title={<>Voxel-Dosiskarte</>} persistKey="dos-voxel" defaultOpen={false} status={doseEntry ? { text: "erstellt", tone: "ok" } : null}
-        info="Dosiskarte auf dem Raster des SPECT von Zeitpunkt 1. Alle Zeitpunkte werden über die Registrierung abgetastet; je Voxel Trapez + Ausläufer oder monoexponentieller Fit (log-linear), bei einem Zeitpunkt Hänscheid. Dosis: lokale Energiedeposition der Elektronen mit CT-Dichte oder Faltung mit einem geladenen Dosis-Voxel-Kernel (enthält auch Photonen; Dichte-Skalierung ρ_Wasser/ρ). DVH je Region aus der Karte.">
+      <Card title={<>{tr("Voxel-Dosiskarte")}</>} persistKey="dos-voxel" defaultOpen={false} status={doseEntry ? { text: tr("erstellt"), tone: "ok" } : null}
+        info={tr("Dosiskarte auf dem Raster des SPECT von Zeitpunkt 1. Alle Zeitpunkte werden über die Registrierung abgetastet; je Voxel Trapez + Ausläufer oder monoexponentieller Fit (log-linear), bei einem Zeitpunkt Hänscheid. Dosis: lokale Energiedeposition der Elektronen mit CT-Dichte oder Faltung mit einem geladenen Dosis-Voxel-Kernel (enthält auch Photonen; Dichte-Skalierung ρ_Wasser/ρ). DVH je Region aus der Karte.")}>
         <div className="field-row">
           <label className="field">
-            Integration je Voxel
+            {tr("Integration je Voxel")}
             <select value={setup.voxel.method} onChange={(e) => set((s) => ({ ...s, voxel: { ...s.voxel, method: e.target.value as "trapezoid" | "mono" } }))}>
-              <option value="mono">Monoexponentiell (log-linear)</option>
-              <option value="trapezoid">Trapez + Ausläufer</option>
+              <option value="mono">{tr("Monoexponentiell (log-linear)")}</option>
+              <option value="trapezoid">{tr("Trapez + Ausläufer")}</option>
             </select>
           </label>
         </div>
@@ -1310,15 +1311,15 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
             <input type="text" inputMode="decimal" placeholder={tpViews[0] ? byId(tpViews[0].spectId)?.dataset.current.geometry.spacing[0].toFixed(2) : ""} value={kernelVoxel} onChange={(e) => setKernelVoxel(e.target.value)} />
           </label>
           <label className="field">
-            Einheit
+            {tr("Einheit")}
             <select value={kernelUnit} onChange={(e) => setKernelUnit(e.target.value as typeof kernelUnit)}>
-              <option value="mGy/MBq·s">mGy/(MBq·s)</option>
-              <option value="Gy/MBq·s">Gy/(MBq·s)</option>
+              <option value="mGy/MBq·s">{tr("mGy/(MBq·s)")}</option>
+              <option value="Gy/MBq·s">{tr("Gy/(MBq·s)")}</option>
               <option value="Gy/Bq·s">Gy/(Bq·s)</option>
             </select>
           </label>
           <label className="field">
-            Kernel-Tabelle
+            {tr("Kernel-Tabelle")}
             <input type="file" accept=".txt,.csv,.dat,text/plain" onChange={(e) => e.target.files?.[0] && void loadKernel(e.target.files[0])} />
           </label>
         </div>
@@ -1327,39 +1328,39 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
             <>
               Kernel: {setup.voxel.kernel.name} ({setup.voxel.kernel.voxelMm} mm, Radius {setup.voxel.kernel.radius} Voxel){" "}
               <button className="link-btn" onClick={() => set((s) => ({ ...s, voxel: { ...s.voxel, kernel: undefined } }))}>
-                entfernen
+                {tr("entfernen")}
               </button>
             </>
           ) : (
-            <span title="Ohne Kernel: lokale Energiedeposition (Lu-177, Tb-161; für I-131 und Y-90 fehlen dann Photonen bzw. die β-Reichweite). Kernel-Tabelle: Zeilen „i j k S“, z. B. Voxel-S-Werte nach Lanconelli 2012 für die passende Voxelgröße.">
-              Ohne Kernel: lokale Deposition
+            <span title={tr("Ohne Kernel: lokale Energiedeposition (Lu-177, Tb-161; für I-131 und Y-90 fehlen dann Photonen bzw. die β-Reichweite). Kernel-Tabelle: Zeilen „i j k S“, z. B. Voxel-S-Werte nach Lanconelli 2012 für die passende Voxelgröße.")}>
+              {tr("Ohne Kernel: lokale Deposition")}
             </span>
           )}
         </p>
         <button className="primary-btn" disabled={!!busy || !tpViews.length || !allCalibrated || energy === undefined} onClick={() => void doseMap()}>
-          {doseEntry ? "Dosiskarte neu berechnen" : "Dosiskarte berechnen"}
+          {doseEntry ? tr("Dosiskarte neu berechnen") : "Dosiskarte berechnen"}
         </button>
         {doseEntry && (
           <button className="secondary-btn" onClick={() => api.showDataset(doseEntry.id)}>
-            Dosiskarte anzeigen
+            {tr("Dosiskarte anzeigen")}
           </button>
         )}
         {busy === "Dosiskarte" && (
           <button className="secondary-btn" onClick={() => voxelRun.current?.cancel()}>
-            Abbrechen
+            {tr("Abbrechen")}
           </button>
         )}
         {methodCmp && methodCmp.size > 0 && (
           <>
-            <InfoText details="Mittlere Dosis je Region aus der Voxelkarte: lokale Energiedeposition der Elektronen (mit CT-Dichte) gegenüber der Kernel-Faltung (Elektronen und Photonen, Dichte-Skalierung ρ_Wasser/ρ). Große Abweichungen bei kleinen Regionen (Kreuzbestrahlung, β-Reichweite) und bei Photonenstrahlern (I-131) sind zu erwarten; in Lunge und Knochen ist auch die Faltung nur eine Näherung.">
-              Methodenvergleich lokal / Kernel
+            <InfoText details={tr("Mittlere Dosis je Region aus der Voxelkarte: lokale Energiedeposition der Elektronen (mit CT-Dichte) gegenüber der Kernel-Faltung (Elektronen und Photonen, Dichte-Skalierung ρ_Wasser/ρ). Große Abweichungen bei kleinen Regionen (Kreuzbestrahlung, β-Reichweite) und bei Photonenstrahlern (I-131) sind zu erwarten; in Lunge und Knochen ist auch die Faltung nur eine Näherung.")}>
+              {tr("Methodenvergleich lokal / Kernel")}
             </InfoText>
             <table className="region-table">
               <thead>
                 <tr>
-                  <th>Region</th>
-                  <th>lokal (Gy)</th>
-                  <th>Kernel (Gy)</th>
+                  <th>{tr("Region")}</th>
+                  <th>{tr("lokal (Gy)")}</th>
+                  <th>{tr("Kernel (Gy)")}</th>
                   <th>Δ</th>
                 </tr>
               </thead>
@@ -1378,7 +1379,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
         )}
       </Card>
 
-      {reportView && <ReportOverlay html={reportView} title={`Dosimetrie-Bericht · ${nuclideId}`} onDownload={downloadReport} onClose={() => setReportView(null)} />}
+      {reportView && <ReportOverlay html={reportView} title={tr("Dosimetrie-Bericht · {nuclideId}", { nuclideId })} onDownload={downloadReport} onClose={() => setReportView(null)} />}
       {busy && <p className="tool-hint">{busy} … {status}</p>}
       {!busy && status && <p className="tool-hint">{status}</p>}
       {error && <div className="error-banner">{error}</div>}
@@ -1454,7 +1455,7 @@ function ProfileEditor({
   const cur = current ?? QUANT_PROFILE;
   const edit = (p?: CameraProfile) =>
     setDraft({
-      name: p ? (isBuiltinProfile(p) ? "xSPECT Quant mit RC" : p.name) : "",
+      name: p ? (isBuiltinProfile(p) ? tr("xSPECT Quant mit RC") : p.name) : "",
       cps: p && !p.quantitative ? String(p.cpsPerMBq) : "",
       collimator: p?.collimator ?? "",
       window: p?.window ?? "",
@@ -1464,7 +1465,7 @@ function ProfileEditor({
   function commit() {
     if (!draft) return;
     const cps = Number(draft.cps.replace(",", "."));
-    if (!draft.name.trim() || (!draft.quantitative && !(cps > 0))) return setErr(draft.quantitative ? "Name angeben." : "Name und Kalibrierfaktor (cps/MBq > 0) angeben – oder „quantitativ (Bq/ml)“ wählen.");
+    if (!draft.name.trim() || (!draft.quantitative && !(cps > 0))) return setErr(draft.quantitative ? "Name angeben." : tr("Name und Kalibrierfaktor (cps/MBq > 0) angeben – oder „quantitativ (Bq/ml)“ wählen."));
     const recovery = draft.rc
       .split(/[;\n]+/)
       .map((s) => s.trim())
@@ -1473,13 +1474,13 @@ function ProfileEditor({
         const [v, r] = s.split(/[:=\s]+/).map((x) => Number(x.replace(",", ".")));
         return { volumeMl: v, rc: r };
       });
-    if (recovery.some((r) => !(r.volumeMl > 0) || !(r.rc > 0) || r.rc > 1.5)) return setErr("Recovery-Koeffizienten als „Volumen_ml:RC; …“ angeben, z. B. „0,5:0,3; 26,5:0,8“.");
+    if (recovery.some((r) => !(r.volumeMl > 0) || !(r.rc > 0) || r.rc > 1.5)) return setErr(tr("Recovery-Koeffizienten als „Volumen_ml:RC; …“ angeben, z. B. „0,5:0,3; 26,5:0,8“."));
     setErr(null);
     const keepId = current && !isBuiltinProfile(current) && draft.name === current.name;
     onSave({
       id: keepId ? current!.id : `cam${Date.now()}`,
       name: draft.name.trim(),
-      nuclide: draft.quantitative ? "alle" : nuclide,
+      nuclide: draft.quantitative ? tr("alle") : nuclide,
       cpsPerMBq: draft.quantitative ? 0 : cps,
       quantitative: draft.quantitative || undefined,
       collimator: draft.collimator || undefined,
@@ -1492,11 +1493,11 @@ function ProfileEditor({
     <>
       <div className="field-row">
         <label className="field">
-          Kamera-Profil
+          {tr("Kamera-Profil")}
           <select value={cur.id} onChange={(e) => onSelect(list.find((p) => p.id === e.target.value))}>
             {list.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.quantitative ? `${p.name}${isBuiltinProfile(p) ? "" : " · Bq/ml"}` : `${p.name} · ${p.nuclide} · ${p.cpsPerMBq} cps/MBq`}
+                {p.quantitative ? `${p.name}${isBuiltinProfile(p) ? "" : " · Bq/ml"}` : tr("{name} · {nuclide} · {cpsPerMBq} cps/MBq", { name: p.name, nuclide: p.nuclide, cpsPerMBq: p.cpsPerMBq })}
               </option>
             ))}
           </select>
@@ -1504,34 +1505,34 @@ function ProfileEditor({
       </div>
       {!cur.quantitative && cur.nuclide !== nuclide && <p className="tool-hint tool-warning">Profil ist für {cur.nuclide} kalibriert, gewählt ist {nuclide}.</p>}
       <p className="tool-hint">
-        {cur.quantitative ? "Quantitative Bilder (Bq/ml) – kein Kalibrierfaktor · " : ""}
-        {cur.collimator ? `Kollimator ${cur.collimator} · ` : ""}
-        {cur.window ? `Fenster ${cur.window} · ` : ""}
-        {cur.recovery?.length ? `RC: ${cur.recovery.map((r) => `${r.volumeMl} ml → ${r.rc}`).join(", ")}` : "keine Recovery-Koeffizienten"}
+        {cur.quantitative ? tr("Quantitative Bilder (Bq/ml) – kein Kalibrierfaktor · ") : ""}
+        {cur.collimator ? tr("Kollimator {collimator} · ", { collimator: cur.collimator }) : ""}
+        {cur.window ? tr("Fenster {window} · ", { window: cur.window }) : ""}
+        {cur.recovery?.length ? `RC: ${cur.recovery.map((r) => `${r.volumeMl} ml → ${r.rc}`).join(", ")}` : tr("keine Recovery-Koeffizienten")}
       </p>
       {draft ? (
         <div className="dos-profile">
           <div className="field-row">
             <label className="field">
-              Name
+              {tr("Name")}
               <input type="text" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
             </label>
             <label className="field">
-              cps/MBq
-              <input type="text" inputMode="decimal" disabled={draft.quantitative} placeholder={draft.quantitative ? "nicht nötig" : ""} value={draft.cps} onChange={(e) => setDraft({ ...draft, cps: e.target.value })} />
+              {tr("cps/MBq")}
+              <input type="text" inputMode="decimal" disabled={draft.quantitative} placeholder={draft.quantitative ? tr("nicht nötig") : ""} value={draft.cps} onChange={(e) => setDraft({ ...draft, cps: e.target.value })} />
             </label>
           </div>
           <label className="checkbox-field">
             <input type="checkbox" checked={draft.quantitative} onChange={(e) => setDraft({ ...draft, quantitative: e.target.checked })} />
-            <span>Quantitativ (Bilder in Bq/ml, z. B. xSPECT Quant) – kein Kalibrierfaktor</span>
+            <span>{tr("Quantitativ (Bilder in Bq/ml, z. B. xSPECT Quant) – kein Kalibrierfaktor")}</span>
           </label>
           <div className="field-row">
             <label className="field">
-              Kollimator
+              {tr("Kollimator")}
               <input type="text" value={draft.collimator} onChange={(e) => setDraft({ ...draft, collimator: e.target.value })} />
             </label>
             <label className="field">
-              Energiefenster
+              {tr("Energiefenster")}
               <input type="text" value={draft.window} onChange={(e) => setDraft({ ...draft, window: e.target.value })} />
             </label>
           </div>
@@ -1541,31 +1542,31 @@ function ProfileEditor({
           </label>
           <div className="button-row">
             <button className="primary-btn" onClick={commit}>
-              Profil speichern
+              {tr("Profil speichern")}
             </button>
             <button className="secondary-btn" onClick={() => setDraft(null)}>
-              Abbrechen
+              {tr("Abbrechen")}
             </button>
           </div>
         </div>
       ) : (
         <div className="chip-row">
           <button className="chip-btn" onClick={() => edit()}>
-            Neu
+            {tr("Neu")}
           </button>
-          <button className="chip-btn" onClick={() => edit(cur)} title={isBuiltinProfile(cur) ? "Als eigenes Profil mit Recovery-Koeffizienten speichern" : undefined}>
-            {isBuiltinProfile(cur) ? "Mit RC als eigenes Profil" : "Ändern"}
+          <button className="chip-btn" onClick={() => edit(cur)} title={isBuiltinProfile(cur) ? tr("Als eigenes Profil mit Recovery-Koeffizienten speichern") : undefined}>
+            {isBuiltinProfile(cur) ? tr("Mit RC als eigenes Profil") : tr("Ändern")}
           </button>
           {!isBuiltinProfile(cur) && (
-            <button className="chip-btn" onClick={() => window.confirm(`Profil „${cur.name}“ löschen?`) && (onDelete(cur.id), onSelect(undefined))}>
-              Löschen
+            <button className="chip-btn" onClick={() => window.confirm(tr("Profil „{name}“ löschen?", { name: cur.name })) && (onDelete(cur.id), onSelect(undefined))}>
+              {tr("Löschen")}
             </button>
           )}
         </div>
       )}
       <div className="button-row">
         <label className="link-btn">
-          Profile importieren
+          {tr("Profile importieren")}
           <input type="file" accept=".json,application/json" hidden onChange={async (e) => {
             const f = e.target.files?.[0];
             if (!f) return;
@@ -1585,7 +1586,7 @@ function ProfileEditor({
           a.click();
           URL.revokeObjectURL(url);
         }}>
-          Profile exportieren
+          {tr("Profile exportieren")}
         </button>
       </div>
       {err && <p className="tool-hint tool-warning">{err}</p>}

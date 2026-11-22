@@ -1,5 +1,6 @@
 import { type Vec3, type VolumeGeometry, type WorldToVoxel, rotationMatrix } from "./geometry";
 
+import { tr } from "../i18n";
 /**
  * Spatial transform between two datasets in patient (LPS) world coordinates, mm.
  *
@@ -125,7 +126,7 @@ export function invert4(M: Mat4): Mat4 {
   const B = -(d * i - f * g);
   const C = d * h - e * g;
   const det = a * A + b * B + c * C;
-  if (Math.abs(det) < 1e-12) throw new Error("Transformation ist nicht invertierbar.");
+  if (Math.abs(det) < 1e-12) throw new Error(tr("Transformation ist nicht invertierbar."));
   const inv = [
     A / det, -(b * i - c * h) / det, (b * f - c * e) / det,
     B / det, (a * i - c * g) / det, -(a * f - c * d) / det,
@@ -179,7 +180,7 @@ export interface TransformFile {
 export function parseTransformFile(text: string): TransformFile {
   const data = JSON.parse(text) as Partial<TransformFile>;
   if (data.format !== "recon-studio-transform" || !Array.isArray(data.matrix) || data.matrix.length !== 16 || !data.matrix.every(Number.isFinite))
-    throw new Error("Keine gültige Recon-Studio-Transformationsdatei.");
+    throw new Error(tr("Keine gültige Recon-Studio-Transformationsdatei."));
   return data as TransformFile;
 }
 

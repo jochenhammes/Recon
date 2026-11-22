@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
-const SUGGESTIONS = ["Baseline", "Follow-up", "Prä-Therapie", "Post-Therapie", "nativ", "KM", "Low-Dose-CT", "Basis", "Vorlage"];
+import { t, tk } from "../i18n";
+const SUGGESTIONS = ["Baseline", "Follow-up", tk("Prä-Therapie"), "Post-Therapie", "nativ", "KM", "Low-Dose-CT", "Basis", "Vorlage"];
 
 /** Short user tag for a dataset (shown in chips and all dataset lists). */
 export function TagInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -12,11 +13,11 @@ export function TagInput({ value, onChange }: { value: string; onChange: (v: str
   };
   return (
     <label className="field tag-field">
-      Schlagwort
+      {t("Schlagwort")}
       <input
         type="text"
         value={text}
-        placeholder="z. B. Baseline, Follow-up, CT nativ"
+        placeholder={t("z. B. Baseline, Follow-up, CT nativ")}
         list="dataset-tag-suggestions"
         maxLength={40}
         onChange={(e) => setText(e.target.value)}

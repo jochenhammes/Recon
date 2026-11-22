@@ -1,5 +1,6 @@
 import { formatValue } from "../components/format";
 
+import { t } from "../i18n";
 export interface ChartSeries {
   label: string;
   x: number[];
@@ -23,7 +24,7 @@ export function Chart({ series, xLabel, yLabel }: { series: ChartSeries[]; xLabe
   const ticks = (a: number, b: number) => [0, 0.5, 1].map((f) => a + f * (b - a));
   return (
     <div className="kin-chart">
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${yLabel} über ${xLabel}`}>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={t("{yLabel} über {xLabel}", { yLabel, xLabel })}>
         <line x1={PL} x2={W - PR} y1={py(y0)} y2={py(y0)} className="kin-axis" />
         <line x1={PL} x2={PL} y1={PT} y2={H - PB} className="kin-axis" />
         {ticks(x0, x1).map((t) => (

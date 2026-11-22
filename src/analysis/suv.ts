@@ -1,5 +1,6 @@
 import type { DataSet } from "dicom-parser";
 
+import { t } from "../i18n";
 /** Body-weight SUV conversion for a PET series: SUV = value [Bq/ml] × factor. */
 export interface SuvInfo {
   factor: number;
@@ -49,17 +50,17 @@ function parseDt(dt: string | undefined): number | undefined {
  */
 export function computeSuv(ds: DataSet, opts: { halfLifeSec?: number; modality?: string } = {}): SuvResult {
   const modality = opts.modality ?? str(ds, "x00080060");
-  if (modality !== "PT") return { ok: false, reason: `Modality ${modality ?? "unbekannt"} (SUV nur für PET).` };
+  if (modality !== "PT") return { ok: false, reason: t("Modality {v} (SUV nur für PET).", { v: modality ?? "unbekannt" }) };
   const units = str(ds, "x00541001");
-  if (units !== "BQML") return { ok: false, reason: `Einheit ${units ?? "unbekannt"} statt BQML.` };
+  if (units !== "BQML") return { ok: false, reason: t("Einheit {v} statt BQML.", { v: units ?? "unbekannt" }) };
   const weightKg = num(ds, "x00101030");
-  if (!weightKg || weightKg <= 0) return { ok: false, reason: "Patientengewicht (0010,1030) fehlt." };
+  if (!weightKg || weightKg <= 0) return { ok: false, reason: t("Patientengewicht (0010,1030) fehlt.") };
 
   const rp = ds.elements["x00540016"]?.items?.[0]?.dataSet;
-  if (!rp) return { ok: false, reason: "Radiopharmaceutical Information Sequence fehlt." };
+  if (!rp) return { ok: false, reason: t("Radiopharmaceutical Information Sequence fehlt.") };
   const dose = num(rp, "x00181074");
   const halfLife = opts.halfLifeSec ?? num(rp, "x00181075");
-  if (!dose || !halfLife) return { ok: false, reason: "Injizierte Dosis oder Halbwertszeit fehlt." };
+  if (!dose || !halfLife) return { ok: false, reason: t("Injizierte Dosis oder Halbwertszeit fehlt.") };
 
   const decayCorrection = str(ds, "x00541102") ?? "START";
   let minutesToReference = 0;
@@ -70,14 +71,14 @@ export function computeSuv(ds: DataSet, opts: { halfLifeSec?: number; modality?:
       parseDicomDateTime(str(ds, "x00080021") ?? str(ds, "x00080020"), str(rp, "x00181072"));
     const seriesStart = parseDicomDateTime(str(ds, "x00080021") ?? str(ds, "x00080020"), str(ds, "x00080031"));
     if (injection === undefined || seriesStart === undefined)
-      return { ok: false, reason: "Injektions- oder Serienstartzeit fehlt." };
+      return { ok: false, reason: t("Injektions- oder Serienstartzeit fehlt.") };
     let dtMs = seriesStart - injection;
     if (dtMs < 0 && dtMs > -24 * 3600e3 && !str(rp, "x00181078")) dtMs += 24 * 3600e3; // injection before midnight
-    if (dtMs < 0) return { ok: false, reason: "Serienstart liegt vor der Injektion." };
+    if (dtMs < 0) return { ok: false, reason: t("Serienstart liegt vor der Injektion.") };
     minutesToReference = dtMs / 60000;
     doseAtReference = dose * Math.pow(2, -dtMs / 1000 / halfLife);
   } else if (decayCorrection !== "ADMIN") {
-    return { ok: false, reason: `Zerfallskorrektur ${decayCorrection} wird nicht unterstützt.` };
+    return { ok: false, reason: t("Zerfallskorrektur {decayCorrection} wird nicht unterstützt.", { decayCorrection }) };
   }
 
   return {

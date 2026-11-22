@@ -6,6 +6,7 @@ import { type SegmentProgress, inferenceEstimate } from "../segmentation/infer";
 import type { CtSegBackend } from "../workers/ctseg.worker";
 import type { Option } from "./NormalizationPanel";
 
+import { t } from "../i18n";
 export interface CtSegCardProps {
   cts: Option[];
   defaultCtId: string | null;
@@ -75,20 +76,20 @@ export function CtSegCard(props: CtSegCardProps) {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [props.running]);
-  const inference = p?.stage.startsWith("Inferenz") ? inferenceEstimate(p, now) : null;
+  const inference = p?.inference ? inferenceEstimate(p, now) : null;
   const pct = inference ? 100 * inference.fraction : p && p.total > 0 ? (100 * p.done) / p.total : 3;
   const slow = inference && p && inference.avg && inference.since > 3 * inference.avg;
   const autoText = props.webgpu ? (firefox ? "Automatisch (Firefox: CPU)" : mac ? "Automatisch (Mac: CPU)" : "Automatisch (WebGPU)") : "Automatisch (CPU)";
   return (
-    <Card title={<>CT-Organsegmentierung</>} info={
+    <Card title={<>{t("CT-Organsegmentierung")}</>} info={
           <>
             <p>
               Organe, Knochen, Gefäße und Muskeln direkt im Browser segmentieren – die Daten verlassen den Rechner nicht. Das gewählte Modell wird beim
               ersten Mal geladen und im Browser gespeichert. Ergebnis: Label-Datensatz (Atlas) zum CT.
             </p>
             <p>
-              Modelle: <b>TotalSegmentator „total“ 3 mm</b> (Standard; 117 Strukturen inkl. Knochen, Gefäße, Muskeln),{" "}
-              <b>TotalSegmentator Organe 1,5 mm</b> (24 Organe, etwas genauer, vor allem bei kleinen Organen) und <b>MOOSE Organe 1,5 mm</b>{" "}
+              Modelle: <b>{t("TotalSegmentator „total“ 3 mm")}</b> (Standard; 117 Strukturen inkl. Knochen, Gefäße, Muskeln),{" "}
+              <b>{t("TotalSegmentator Organe 1,5 mm")}</b> {t("(24 Organe, etwas genauer, vor allem bei kleinen Organen) und")} <b>{t("MOOSE Organe 1,5 mm")}</b>{" "}
               (19 Organe inkl. Gehirn und Schilddrüsenlappen; auf Low-Dose-CTs aus PET/CT trainiert, CC BY 4.0). Die 1,5-mm-Modelle brauchen
               etwa 3× Rechenzeit und passen nur für Rumpf-/Bauch-CTs in den Speicher. Vergleich auf Expertendaten (AMOS, 3 Fälle): mittlerer
               Dice 0,86 bzw. 0,85 statt 0,83.
@@ -99,10 +100,10 @@ export function CtSegCard(props: CtSegCardProps) {
               nnU-Net (Isensee et al. 2021). Nicht für diagnostische Zwecke zertifiziert.
             </p>
           </>
-        } status={props.running ? { text: "läuft", tone: "run" } : null}>
-      <p className="tool-hint">{model.info}, lokal im Browser.</p>
+        } status={props.running ? { text: t("läuft"), tone: "run" } : null}>
+      <p className="tool-hint">{t("{info}, lokal im Browser.", { info: t(model.info) })}</p>
       {props.cts.length === 0 ? (
-        <p className="tool-hint">Kein CT geladen.</p>
+        <p className="tool-hint">{t("Kein CT geladen.")}</p>
       ) : (
         <>
           <label className="field">
@@ -116,37 +117,37 @@ export function CtSegCard(props: CtSegCardProps) {
             </select>
           </label>
           <label className="field">
-            Modell
+            {t("Modell")}
             <select value={model.id} disabled={props.running} onChange={(e) => chooseModel(e.target.value)}>
               {CT_MODELS.map((m) => (
-                <option key={m.id} value={m.id} title={`${m.info} · ${m.license} · ${m.sizeMb} MB`}>
-                  {m.label}
+                <option key={m.id} value={m.id} title={`${t(m.info)} · ${m.license} · ${m.sizeMb} MB`}>
+                  {t(m.label)}
                   {m.restriction ? ` – ${m.restriction}` : ""}
                 </option>
               ))}
             </select>
           </label>
-          {model.restriction && <InfoText warn details={`Lizenz ${model.license}: ${model.restriction}.`}>{model.restriction}</InfoText>}
+          {model.restriction && <InfoText warn details={t("Lizenz {license}: {restriction}.", { license: model.license, restriction: model.restriction })}>{model.restriction}</InfoText>}
           <label className="field">
-            Berechnung
+            {t("Berechnung")}
             <select value={backend} disabled={props.running} onChange={(e) => chooseBackend(e.target.value as CtSegBackend)}>
               <option value="auto">{autoText}</option>
               <option value="webgpu" disabled={!props.webgpu}>
-                WebGPU (Grafikkarte){props.webgpu ? "" : " – nicht verfügbar"}
+                WebGPU (Grafikkarte){props.webgpu ? "" : t(" – nicht verfügbar")}
               </option>
               <option value="wasm">CPU</option>
             </select>
           </label>
           {!props.webgpu ? (
-            <InfoText warn details="Kein WebGPU verfügbar: Die Berechnung läuft auf der CPU und kann für ein Ganzkörper-CT sehr lange dauern. Empfohlen: Chrome oder Edge mit aktueller Grafikkarte. Bei WebGPU-Fehlern wird automatisch auf der CPU weitergerechnet.">
-              CPU-Modus – langsam
+            <InfoText warn details={t("Kein WebGPU verfügbar: Die Berechnung läuft auf der CPU und kann für ein Ganzkörper-CT sehr lange dauern. Empfohlen: Chrome oder Edge mit aktueller Grafikkarte. Bei WebGPU-Fehlern wird automatisch auf der CPU weitergerechnet.")}>
+              {t("CPU-Modus – langsam")}
             </InfoText>
           ) : firefox ? (
-            <InfoText details="In Firefox ist WebGPU mit diesem Modell noch unzuverlässig – „Automatisch“ nutzt daher die CPU. Bei WebGPU-Fehlern wird automatisch auf der CPU weitergerechnet.">Firefox: CPU</InfoText>
+            <InfoText details={t("In Firefox ist WebGPU mit diesem Modell noch unzuverlässig – „Automatisch“ nutzt daher die CPU. Bei WebGPU-Fehlern wird automatisch auf der CPU weitergerechnet.")}>{t("Firefox: CPU")}</InfoText>
           ) : null}
           {!props.running ? (
             <button className="primary-btn" disabled={!ct} onClick={() => ct && props.onRun(ct.id, backend, model.id)}>
-              Organe segmentieren
+              {t("Organe segmentieren")}
             </button>
           ) : (
             <>
@@ -157,10 +158,10 @@ export function CtSegCard(props: CtSegCardProps) {
               {p?.note && <p className="warning-banner">{p.note}</p>}
               <p className="tool-hint">
                 {p && inference
-                  ? `${p.stage} · Kachel ${Math.min(p.done + 1, p.total)}/${p.total}` +
+                  ? t("{stage} · Kachel {v}/{total}", { stage: p.stage, v: Math.min(p.done + 1, p.total), total: p.total }) +
                     (p.done < p.total ? ` läuft seit ${fmtTime(inference.since)}${inference.avg ? ` (bisher Ø ${fmtTime(inference.avg)})` : ""}` : "") +
-                    ` · ${fmtTime(inference.elapsed)} vergangen` +
-                    (inference.remaining !== undefined ? ` · noch ca. ${fmtTime(inference.remaining)}` : p.done === 0 && p.backend === "webgpu" ? " · erste Kachel langsamer" : "")
+                    t(" · {v} vergangen", { v: fmtTime(inference.elapsed) }) +
+                    (inference.remaining !== undefined ? t(" · noch ca. {v}", { v: fmtTime(inference.remaining) }) : p.done === 0 && p.backend === "webgpu" ? t(" · erste Kachel langsamer") : "")
                   : p
                     ? p.stage
                     : "Vorbereitung …"}
@@ -168,13 +169,13 @@ export function CtSegCard(props: CtSegCardProps) {
               {slow && p?.backend === "webgpu" && (
                 <InfoText
                   warn
-                  details={`Diese Kachel dauert ungewöhnlich lange. Reagiert WebGPU nicht, wird nach ${fmtTime(tileTimeLimitSec(p.done, p.elapsed ?? 0))} automatisch auf der CPU neu gestartet – oder jetzt abbrechen und „CPU“ wählen.`}
+                  details={t("Diese Kachel dauert ungewöhnlich lange. Reagiert WebGPU nicht, wird nach {v} automatisch auf der CPU neu gestartet – oder jetzt abbrechen und „CPU“ wählen.", { v: fmtTime(tileTimeLimitSec(p.done, p.elapsed ?? 0)) })}
                 >
-                  Kachel ungewöhnlich langsam
+                  {t("Kachel ungewöhnlich langsam")}
                 </InfoText>
               )}
               <button className="secondary-btn" onClick={props.onCancel}>
-                Abbrechen
+                {t("Abbrechen")}
               </button>
             </>
           )}

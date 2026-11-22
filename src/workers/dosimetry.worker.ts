@@ -5,6 +5,7 @@ import type { Placed } from "../dosimetry/dose";
 import type { DoseKernel } from "../dosimetry/setup";
 import { densityMap, doseFromTia, voxelTia } from "../dosimetry/voxelDose";
 
+import { t } from "../i18n";
 /** A volume placed in the reference world, as plain data (Volume3D does not cross the worker boundary). */
 export interface PlainPlaced {
   data: Float32Array;
@@ -46,16 +47,16 @@ self.onmessage = async (event: MessageEvent<VoxelDoseJob>) => {
       physHalfLifeH: job.physHalfLifeH,
       electronKeV: job.electronKeV,
       method: job.method,
-      onProgress: (f) => post({ type: "progress", stage: "Zeitintegral", fraction: f }),
+      onProgress: (f) => post({ type: "progress", stage: t("Zeitintegral"), fraction: f }),
     });
-    post({ type: "progress", stage: "Dichte", fraction: 0 });
+    post({ type: "progress", stage: t("Dichte"), fraction: 0 });
     const rho = densityMap(ref, job.ct ? toPlaced(job.ct) : undefined);
     const led = doseFromTia(tia, rho, ref.volume, { electronKeV: job.electronKeV });
     if (!job.kernel) {
       post({ type: "result", dose: led }, [led.buffer]);
       return;
     }
-    post({ type: "progress", stage: "Kernel-Faltung", fraction: 0 });
+    post({ type: "progress", stage: t("Kernel-Faltung"), fraction: 0 });
     const dose = doseFromTia(tia, rho, ref.volume, { electronKeV: job.electronKeV, kernel: job.kernel });
     post({ type: "result", dose, led }, [dose.buffer, led.buffer]);
   } catch (e) {

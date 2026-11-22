@@ -6,6 +6,7 @@ import mjsUrl from "onnxruntime-web/ort-wasm-simd-threaded.jsep.mjs?url";
 import type { Vec3 } from "../core/geometry";
 import { slidingWindow } from "../segmentation/infer";
 import { transposePatch } from "../segmentation/preprocess";
+import { t } from "../i18n";
 
 /** "auto": WebGPU if available (except Firefox, where WebGPU with ONNX Runtime is not yet reliable), else CPU. */
 export type CtSegBackend = "auto" | "webgpu" | "wasm";
@@ -61,8 +62,8 @@ self.onmessage = async (event: MessageEvent<CtSegJob | { type: "stop" }>) => {
     let note = msg.note ?? "";
 
     const run = async (backend: "webgpu" | "wasm") => {
-      const label = backend === "webgpu" ? "WebGPU" : `CPU${ort.env.wasm.numThreads === 1 ? ", 1 Thread" : `, ${ort.env.wasm.numThreads} Threads`}`;
-      post({ type: "progress", progress: { done: 0, total: 1, stage: `Modell wird initialisiert (${label})`, backend, note } });
+      const label = backend === "webgpu" ? "WebGPU" : t("CPU, {numThreads} Threads", { numThreads: ort.env.wasm.numThreads });
+      post({ type: "progress", progress: { done: 0, total: 1, stage: t("Modell wird initialisiert ({label})", { label }), backend, note } });
       const session = await ort.InferenceSession.create(new Uint8Array(msg.model), {
         executionProviders: backend === "webgpu" ? ["webgpu", "wasm"] : ["wasm"],
         graphOptimizationLevel: "all",
@@ -74,7 +75,7 @@ self.onmessage = async (event: MessageEvent<CtSegJob | { type: "stop" }>) => {
         try {
           const dev = (await ort.env.webgpu.device) as unknown as GpuDeviceLike;
           dev.addEventListener("uncapturederror", (e) => (gpuError ??= e.error?.message || "WebGPU-Fehler"));
-          void dev.lost.then((i) => (gpuError ??= `WebGPU-Gerät verloren${i.message ? ` (${i.message})` : ""}`));
+          void dev.lost.then((i) => (gpuError ??= t("WebGPU-Gerät verloren") + (i.message ? ` (${i.message})` : "")));
         } catch {
           /* device not accessible: the main-thread watchdog still catches hangs */
         }
@@ -117,7 +118,7 @@ self.onmessage = async (event: MessageEvent<CtSegJob | { type: "stop" }>) => {
             bodyThreshold: msg.bodyThreshold,
             topkOutput: msg.topkOutput,
             stepFraction: msg.stepFraction,
-            onProgress: (p) => post({ type: "progress", progress: { ...p, stage: `Inferenz (${label})`, backend, note } }),
+            onProgress: (p) => post({ type: "progress", progress: { ...p, stage: t("Inferenz ({label})", { label }), inference: true, backend, note } }),
             shouldStop: () => stop,
           },
         );
@@ -134,7 +135,7 @@ self.onmessage = async (event: MessageEvent<CtSegJob | { type: "stop" }>) => {
     if (msg.backend === "wasm") backend = "wasm";
     else if (!hasGpu) {
       backend = "wasm";
-      if (msg.backend === "webgpu") note = "WebGPU in diesem Browser nicht verfügbar – CPU verwendet";
+      if (msg.backend === "webgpu") note = t("WebGPU in diesem Browser nicht verfügbar – CPU verwendet");
     } else backend = msg.backend === "auto" && (firefox || mac) ? "wasm" : "webgpu";
 
     let labels: Uint8Array;
@@ -143,7 +144,7 @@ self.onmessage = async (event: MessageEvent<CtSegJob | { type: "stop" }>) => {
     } catch (e) {
       if (backend !== "webgpu" || (e instanceof DOMException && e.name === "AbortError")) throw e;
       // A WebGPU problem must not end the segmentation: continue on the CPU.
-      note = `WebGPU-Fehler (${e instanceof Error ? e.message.slice(0, 120) : String(e)}) – weiter auf der CPU`;
+      note = t("WebGPU-Fehler ({v}) – weiter auf der CPU", { v: e instanceof Error ? e.message.slice(0, 120) : String(e) });
       backend = "wasm";
       labels = await run(backend);
     }

@@ -1,0 +1,20 @@
+/** English texts: edit. Key = German source text. */
+export const edit: Record<string, string> = {
+  "Gauß-Glättung, FWHM {v} mm": "Gaussian smoothing, FWHM {v} mm",
+  "Gespiegelt ({v})": "Flipped ({v})",
+  "Kopf↔Fuß": "Head↔Foot",
+  "Kugel r = {v} mm": "Sphere r = {v} mm",
+  "Quader {v} mm": "Box {v} mm",
+  "Rechts↔Links": "Right↔Left",
+  "Resampling auf {v} mm": "Resampled to {v} mm",
+  "Um {v}° gedreht (axial)": "Rotated by {v}° (axial)",
+  "VOI-Maske passt nicht zur Volumengröße.": "VOI mask does not match the volume size.",
+  "Werte auf [{v}, {v2}] begrenzt": "Values clamped to [{v}, {v2}]",
+  "Werte in [{v}, {v2}] auf {v3} gesetzt": "Values in [{v}, {v2}] set to {v3}",
+  "Werte × {v} + {v2}": "Values × {v} + {v2}",
+  "Werte ≤ {v} auf {v2} gesetzt": "Values ≤ {v} set to {v2}",
+  "Werte ≥ {v} auf {v2} gesetzt": "Values ≥ {v} set to {v2}",
+  "Zugeschnitten auf {v} × {v2} × {v3} Voxel": "Cropped to {v} × {v2} × {v3} voxels",
+  "auf {v} gesetzt": "set to {v}",
+  "{shape}: Werte {where} {action}": "{shape}: values {where} {action}",
+};

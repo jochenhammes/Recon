@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { computeHistogram } from "../analysis/stats";
 import { formatCount, formatValue } from "./format";
 
+import { t } from "../i18n";
 export interface HistogramProps {
   data: Float32Array;
   /** Optional value (raw units) to mark with a vertical line (e.g. the edit threshold). */
@@ -65,7 +66,7 @@ export function Histogram({ data, marker, scale: valueScale = 1 }: HistogramProp
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         className="histogram-svg"
         role="img"
-        aria-label="Histogramm der Werteverteilung"
+        aria-label={t("Histogramm der Werteverteilung")}
         onMouseLeave={() => setHover(null)}
         onMouseMove={(e) => {
           const rect = e.currentTarget.getBoundingClientRect();
@@ -101,8 +102,8 @@ export function Histogram({ data, marker, scale: valueScale = 1 }: HistogramProp
       </svg>
       <div className="histogram-readout">
         {hovered !== null
-          ? `[${fv(hist.edges[hovered])} … ${fv(hist.edges[hovered + 1])}${hovered === hist.counts.length - 1 ? "]" : ")"}: ${formatCount(hist.counts[hovered])} Voxel`
-          : `max. ${formatCount(maxCount)} Voxel pro Bin${logScale ? " (log. Skala)" : ""}`}
+          ? t("[{v} … {v2}{v3}: {v4} Voxel", { v: fv(hist.edges[hovered]), v2: fv(hist.edges[hovered + 1]), v3: hovered === hist.counts.length - 1 ? "]" : ")", v4: formatCount(hist.counts[hovered]) })
+          : t("max. {v} Voxel pro Bin{v2}", { v: formatCount(maxCount), v2: logScale ? ` (${t("log. Skala")})` : "" })}
       </div>
     </div>
   );

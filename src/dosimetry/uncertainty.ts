@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 /**
  * Uncertainty of the absorbed dose after the EANM guidance (Gear et al., EJNMMI Physics 2018): independent relative
  * contributions added in quadrature. The dose is D = TIA · E / m with TIA ∝ counts / (CF · RC):
@@ -34,11 +35,11 @@ export interface DoseUncertainty {
 export function doseUncertainty(o: { doseGy: number; tia: number; tiaSd?: number; rcApplied: boolean; inputs?: UncertaintyInputs }): DoseUncertainty | undefined {
   if (!Number.isFinite(o.doseGy)) return undefined;
   const parts: UncertaintyPart[] = [];
-  if (o.tiaSd !== undefined && o.tia > 0) parts.push({ label: "Kurvenfit", rel: o.tiaSd / o.tia });
+  if (o.tiaSd !== undefined && o.tia > 0) parts.push({ label: t("Kurvenfit"), rel: o.tiaSd / o.tia });
   const i = o.inputs ?? {};
-  if (i.calibrationPct) parts.push({ label: "Kalibrierung", rel: i.calibrationPct / 100 });
-  if (o.rcApplied && i.rcPct) parts.push({ label: "Recovery", rel: i.rcPct / 100 });
-  if (i.volumePct) parts.push({ label: "Volumen/Masse", rel: i.volumePct / 100 });
+  if (i.calibrationPct) parts.push({ label: t("Kalibrierung"), rel: i.calibrationPct / 100 });
+  if (o.rcApplied && i.rcPct) parts.push({ label: t("Recovery"), rel: i.rcPct / 100 });
+  if (i.volumePct) parts.push({ label: t("Volumen/Masse"), rel: i.volumePct / 100 });
   if (!parts.length) return undefined;
   const rel = Math.sqrt(parts.reduce((s, p) => s + p.rel * p.rel, 0));
   return { rel, sdGy: rel * o.doseGy, parts };

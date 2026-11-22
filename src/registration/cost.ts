@@ -1,11 +1,12 @@
+import { tk } from "../i18n";
 /** Similarity measures between a fixed (reference) and a moving image, evaluated on sample points. */
 export type CostName = "nmi" | "mi" | "cr" | "ncc";
 
 export const COST_LABELS: Record<CostName, string> = {
-  nmi: "Normalisierte Mutual Information (SPM-Standard)",
+  nmi: tk("Normalisierte Mutual Information (SPM-Standard)"),
   mi: "Mutual Information",
   cr: "Correlation Ratio (FLIRT, intermodal)",
-  ncc: "Normalisierte Kreuzkorrelation (gleiche Modalität)",
+  ncc: tk("Normalisierte Kreuzkorrelation (gleiche Modalität)"),
 };
 
 /**

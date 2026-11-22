@@ -3,6 +3,7 @@ import { concatBytes } from "../export/bytes";
 import { IMPLICIT_VR_LE, type ValueOverride, encodeElementBytes, formatDS, sequenceValue, stringValue } from "../export/dicomRewriter";
 import type { HeaderEdit } from "./headerModel";
 
+import { t } from "../i18n";
 /** Radionuclides offered in the header editor (half-life in s, positron branching fraction). */
 export interface Nuclide {
   id: string;
@@ -102,7 +103,7 @@ const tagNum = (t: string) => parseInt(t.slice(1), 16);
  */
 export function radiopharmaceuticalSequence(file: { bytes: Uint8Array; dataSet: DataSet; transferSyntax?: string }, choice: NuclideChoice): ValueOverride {
   const n = NUCLIDES.find((x) => x.id === choice.nuclide);
-  if (!n) throw new Error(`Unbekanntes Nuklid ${choice.nuclide}.`);
+  if (!n) throw new Error(t("Unbekanntes Nuklid {nuclide}.", { nuclide: choice.nuclide }));
   const explicit = file.transferSyntax !== IMPLICIT_VR_LE;
   const seq = file.dataSet.elements[RP_SEQUENCE];
   const items = seq?.items ?? [];

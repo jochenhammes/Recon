@@ -1,6 +1,7 @@
 import { ChevronRight, Eye, EyeOff, MoreHorizontal, PenLine } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
+import { t } from "../i18n";
 export interface DatasetRow {
   id: string;
   /** Modality code/label (PT, CT, MR, Labels, …). */
@@ -52,7 +53,7 @@ export function DatasetList({
                 <button
                   className="dataset-row-main"
                   aria-expanded={expanded}
-                  title={`${r.title} – Details ${expanded ? "ausblenden" : "anzeigen"}`}
+                  title={t("{title} – Details {v}", { title: r.title, v: expanded ? "ausblenden" : "anzeigen" })}
                   onClick={() =>
                     !single &&
                     setOpen((o) => {
@@ -71,12 +72,12 @@ export function DatasetList({
                       <span>{r.name}</span>
                     </span>
                     {r.date && (
-                      <span className="dataset-row-date" title={`Aufnahme: ${r.date.full}`}>
+                      <span className="dataset-row-date" title={t("Aufnahme: {full}", { full: r.date.full })}>
                         {r.date.short}
                       </span>
                     )}
                   </span>
-                  {r.isBase && !single && <span className="role-badge reference">Basis</span>}
+                  {r.isBase && !single && <span className="role-badge reference">{t("Basis")}</span>}
                   {r.notes.map((n) => (
                     <span key={n} className="row-note">
                       {n}
@@ -88,7 +89,7 @@ export function DatasetList({
                     <button
                       className={`icon-btn small${r.isShown ? " on" : ""}`}
                       disabled={r.isBase}
-                      title={r.isBase ? "Basis der Ansicht (immer angezeigt)" : r.isShown ? "Ausblenden" : "Im Viewer einblenden"}
+                      title={r.isBase ? t("Basis der Ansicht (immer angezeigt)") : r.isShown ? "Ausblenden" : t("Im Viewer einblenden")}
                       aria-label={r.isShown ? "Ausblenden" : "Einblenden"}
                       onClick={() => onToggleShown(r.id)}
                     >
@@ -97,8 +98,8 @@ export function DatasetList({
                     <button
                       className={`icon-btn small${r.isActive ? " on" : ""}`}
                       aria-pressed={r.isActive}
-                      title={r.isActive ? "Aktiv: Analyse, Bearbeiten, Header und Export beziehen sich auf diesen Datensatz" : "Für Analyse, Bearbeiten, Header und Export wählen"}
-                      aria-label="Aktiv setzen"
+                      title={r.isActive ? t("Aktiv: Analyse, Bearbeiten, Header und Export beziehen sich auf diesen Datensatz") : t("Für Analyse, Bearbeiten, Header und Export wählen")}
+                      aria-label={t("Aktiv setzen")}
                       onClick={() => onActivate(r.id)}
                     >
                       <PenLine size={14} />
@@ -109,8 +110,8 @@ export function DatasetList({
                   open={menu === r.id}
                   onOpenChange={(o) => setMenu(o ? r.id : null)}
                   items={[
-                    ...(!r.isBase && !single ? [{ label: "Als Basis der Ansicht", action: () => onMakeBase(r.id) }] : []),
-                    { label: "Datensatz entfernen", action: () => onRemove(r.id), danger: true },
+                    ...(!r.isBase && !single ? [{ label: t("Als Basis der Ansicht"), action: () => onMakeBase(r.id) }] : []),
+                    { label: t("Datensatz entfernen"), action: () => onRemove(r.id), danger: true },
                   ]}
                 />
               </div>
@@ -121,7 +122,7 @@ export function DatasetList({
       </ul>
       {rows.length > 1 && (
         <p className="tool-hint dataset-legend">
-          <Eye size={11} /> eingeblendet · <PenLine size={11} /> aktiv (Analyse, Bearbeiten, Export)
+          <Eye size={11} /> {t("eingeblendet ·")} <PenLine size={11} /> aktiv (Analyse, Bearbeiten, Export)
         </p>
       )}
     </section>
@@ -145,7 +146,7 @@ function RowMenu({ open, onOpenChange, items }: { open: boolean; onOpenChange: (
   }, [open, onOpenChange]);
   return (
     <div className="row-menu" ref={ref}>
-      <button className="icon-btn small" aria-haspopup="menu" aria-expanded={open} title="Weitere Aktionen" aria-label="Weitere Aktionen" onClick={() => onOpenChange(!open)}>
+      <button className="icon-btn small" aria-haspopup="menu" aria-expanded={open} title={t("Weitere Aktionen")} aria-label={t("Weitere Aktionen")} onClick={() => onOpenChange(!open)}>
         <MoreHorizontal size={14} />
       </button>
       {open && (

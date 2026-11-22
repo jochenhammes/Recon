@@ -5,6 +5,7 @@ import { INTERPOLATION_LABELS, type Interpolation } from "../resample/resample";
 import type { Normalization } from "../normalization/model";
 import type { TemplateKind } from "../normalization/templates";
 
+import { t } from "../i18n";
 export interface Option {
   id: string;
   label: string;
@@ -70,7 +71,7 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
   return (
     <>
       <Card
-        title={<>1 · Normalisierung</>}
+        title={<>{t("1 · Normalisierung")}</>}
         info={
           <>
             <p>
@@ -84,14 +85,13 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
               Vorlage oder MNI 2009c in 1 mm (das Verformungsfeld wird dafür interpoliert; braucht etwa achtmal so viel Speicher je Datensatz).
             </p>
             <p>
-              Alle anderen Datensätze werden über ihre Koregistrierung mit diesem Datensatz mitgenommen – PET also vorher im Bereich
-              „Koregistrierung“ auf das CT/MRT registrieren.
+              {t("Alle anderen Datensätze werden über ihre Koregistrierung mit diesem Datensatz mitgenommen – PET also vorher im Bereich „Koregistrierung“ auf das CT/MRT registrieren.")}
             </p>
             <p>Kostenfunktion: {props.costLabel}. Startpunkt per Schwerpunkt und Rotationsraster. Nichtlinear nur bei gleichem Kontrast von Datensatz und Vorlage.</p>
           </>
         }
         done={!!normalization && !running}
-        status={running ? { text: "läuft", tone: "run" } : normalization ? { text: normalization.kind === "affine" ? "✓ affin" : normalization.kind === "nonlinear" ? "✓ nichtlinear" : "✓ Feld", tone: "ok" } : null}
+        status={running ? { text: t("läuft"), tone: "run" } : normalization ? { text: normalization.kind === "affine" ? "✓ affin" : normalization.kind === "nonlinear" ? "✓ nichtlinear" : "✓ Feld", tone: "ok" } : null}
       >
         <label className="field">
           Grundlage (Patientendatensatz)
@@ -105,7 +105,7 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
         </label>
         <div className="norm-fields">
           <label className="field">
-            Kontrast
+            {t("Kontrast")}
             <select value={props.subjectKind} disabled={running} onChange={(e) => props.onSubjectKindChange(e.target.value as TemplateKind)}>
               {(Object.keys(KIND_LABEL) as TemplateKind[]).map((k) => (
                 <option key={k} value={k}>
@@ -115,7 +115,7 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
             </select>
           </label>
           <label className="field">
-            Vorlage
+            {t("Vorlage")}
             <select value={props.templateId ?? ""} disabled={running} onChange={(e) => props.onTemplateChange(e.target.value)}>
               {props.templates.map((t) => (
                 <option key={t.id} value={t.id}>
@@ -126,43 +126,43 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
           </label>
         </div>
         <label className="field">
-          Ausgaberaster
+          {t("Ausgaberaster")}
           <select value={props.outputGrid} disabled={running} onChange={(e) => props.onOutputGridChange(e.target.value as "template" | "1mm")}>
             <option value="template">wie Vorlage{props.templateResolutionMm ? ` (${String(props.templateResolutionMm).replace(".", ",")} mm)` : ""}</option>
             <option value="1mm">MNI 2009c, 1 mm</option>
           </select>
         </label>
         {props.outputGrid === "1mm" && props.transferCandidates.length > 3 && (
-          <InfoText details="Jeder Datensatz in 1 mm braucht etwa 35 MB Arbeitsspeicher (193 × 229 × 193 Voxel), dynamische Serien entsprechend mehr.">Viel Speicher bei vielen Datensätzen</InfoText>
+          <InfoText details={t("Jeder Datensatz in 1 mm braucht etwa 35 MB Arbeitsspeicher (193 × 229 × 193 Voxel), dynamische Serien entsprechend mehr.")}>{t("Viel Speicher bei vielen Datensätzen")}</InfoText>
         )}
         {template && template.kind !== props.subjectKind && (
-          <InfoText warn details={`Vorlage (${KIND_LABEL[template.kind]}) passt nicht zum Kontrast (${KIND_LABEL[props.subjectKind]}) – nur affin mit Mutual Information.`}>
-            Vorlage passt nicht zum Kontrast
+          <InfoText warn details={t("Vorlage ({v}) passt nicht zum Kontrast ({v2}) – nur affin mit Mutual Information.", { v: KIND_LABEL[template.kind], v2: KIND_LABEL[props.subjectKind] })}>
+            {t("Vorlage passt nicht zum Kontrast")}
           </InfoText>
         )}
         {props.subjectKind === "CT" && (
-          <InfoText details="CT: nur Kopf-CT (Sichtfeld Kopf); bei Ganzkörper-CT vorher auf den Kopf zuschneiden (Bearbeiten → VOI/Zuschnitt).">Nur Kopf-CT</InfoText>
+          <InfoText details={t("CT: nur Kopf-CT (Sichtfeld Kopf); bei Ganzkörper-CT vorher auf den Kopf zuschneiden (Bearbeiten → VOI/Zuschnitt).")}>{t("Nur Kopf-CT")}</InfoText>
         )}
-        <div className="segmented-control" role="group" aria-label="Methode">
+        <div className="segmented-control" role="group" aria-label={t("Methode")}>
           <button className={props.method === "affine" ? "active" : ""} disabled={running} onClick={() => props.onMethodChange("affine")}>
             Affin (12)
           </button>
           <button
             className={props.method === "nonlinear" ? "active" : ""}
             disabled={running || !props.nonlinearAvailable}
-            title={props.nonlinearAvailable ? undefined : "Nur bei gleichem Kontrast von Datensatz und Vorlage"}
+            title={props.nonlinearAvailable ? undefined : t("Nur bei gleichem Kontrast von Datensatz und Vorlage")}
             onClick={() => props.onMethodChange("nonlinear")}
           >
-            Affin + nichtlinear
+            {t("Affin + nichtlinear")}
           </button>
         </div>
         {props.method === "nonlinear" && props.nonlinearAvailable && (
           <label className="field">
-            Regularisierung
+            {t("Regularisierung")}
             <select value={props.regularization} disabled={running} onChange={(e) => props.onRegularizationChange(e.target.value as Regularization)}>
-              <option value="light">leicht (mehr Verformung)</option>
-              <option value="medium">mittel (Standard)</option>
-              <option value="heavy">stark (glatter)</option>
+              <option value="light">{t("leicht (mehr Verformung)")}</option>
+              <option value="medium">{t("mittel (Standard)")}</option>
+              <option value="heavy">{t("stark (glatter)")}</option>
             </select>
           </label>
         )}
@@ -174,7 +174,7 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
         )}
         {!running ? (
           <button className="primary-btn" disabled={!props.subjectId || !props.templateId} onClick={props.onStart}>
-            Normalisieren und alle Datensätze übertragen
+            {t("Normalisieren und alle Datensätze übertragen")}
           </button>
         ) : (
           <>
@@ -183,7 +183,7 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
             </div>
             <p className="tool-hint">{props.progress ? `${props.progress.stage} · ${props.progress.detail}` : "Vorbereitung …"}</p>
             <button className="secondary-btn" onClick={props.onCancel}>
-              Abbrechen
+              {t("Abbrechen")}
             </button>
           </>
         )}
@@ -193,7 +193,7 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
             {normalization.templateName}
             {normalization.cost && ` (${normalization.cost.name}: ${normalization.cost.before.toFixed(3)} → ${normalization.cost.after.toFixed(3)})`}
             {normalization.warp &&
-              `; nichtlinear: max. Verschiebung ${normalization.warp.maxDisplacementMm.toFixed(1)} mm, Restfehler ${(100 * (normalization.warp.costAfter / normalization.warp.costBefore)).toFixed(0)} % des Ausgangswerts`}
+              t("; nichtlinear: max. Verschiebung {v} mm, Restfehler {v2} % des Ausgangswerts", { v: normalization.warp.maxDisplacementMm.toFixed(1), v2: (100 * (normalization.warp.costAfter / normalization.warp.costBefore)).toFixed(0) })}
           </p>
         )}
         {normalization?.warp && normalization.warp.foldedFraction > 0 && (
@@ -206,9 +206,9 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
 
       {normalization && (
         <Card
-          title={<>2 · Datensätze im Standardraum</>}
-          info="Alle Datensätze des Patientenraums werden über ihre Koregistrierung und die Normalisierung in den Standardraum resampelt (Labelbilder mit nächstem Nachbarn, dynamische Serien Frame für Frame) und als neue Datensätze angelegt. Eine erneute Übertragung ersetzt die älteren Kopien. Danach: Atlas-Auswertung (Centiloid & SUVR, Analyse → Label-Analyse, Kinetik) oder Export."
-          status={props.transferBusy ? { text: "läuft", tone: "run" } : props.transferred.length ? { text: `✓ ${props.transferred.length}`, tone: "ok" } : null}
+          title={<>{t("2 · Datensätze im Standardraum")}</>}
+          info={t("Alle Datensätze des Patientenraums werden über ihre Koregistrierung und die Normalisierung in den Standardraum resampelt (Labelbilder mit nächstem Nachbarn, dynamische Serien Frame für Frame) und als neue Datensätze angelegt. Eine erneute Übertragung ersetzt die älteren Kopien. Danach: Atlas-Auswertung (Centiloid & SUVR, Analyse → Label-Analyse, Kinetik) oder Export.")}
+          status={props.transferBusy ? { text: t("läuft"), tone: "run" } : props.transferred.length ? { text: `✓ ${props.transferred.length}`, tone: "ok" } : null}
         >
           {props.transferred.length > 0 && (
             <ul className="plain-list">
@@ -218,7 +218,7 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
             </ul>
           )}
           <details className="kin-frames">
-            <summary>Erneut übertragen / Auswahl</summary>
+            <summary>{t("Erneut übertragen / Auswahl")}</summary>
             {props.transferCandidates.map((c) => (
               <label key={c.id} className="checkbox-field">
                 <input
@@ -235,13 +235,13 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
               <select value={interp} disabled={props.transferBusy} onChange={(e) => setInterp(e.target.value as Interpolation)}>
                 {(Object.keys(INTERPOLATION_LABELS) as Interpolation[]).map((m) => (
                   <option key={m} value={m}>
-                    {INTERPOLATION_LABELS[m]}
+                    {t(INTERPOLATION_LABELS[m])}
                   </option>
                 ))}
               </select>
             </label>
             <button className="secondary-btn" disabled={props.transferBusy || ids.length === 0} onClick={() => props.onTransfer(ids, interp)}>
-              {props.transferBusy ? "Wird übertragen …" : "Übertragen"}
+              {props.transferBusy ? t("Wird übertragen …") : t("Übertragen")}
             </button>
           </details>
           {props.transferStatus && <p className="tool-hint">{props.transferStatus}</p>}

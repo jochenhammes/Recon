@@ -6,6 +6,7 @@ import { type AnonymizeContext, type AnonymizeOptions, addAnonymizationOverrides
 import { generateUid } from "./uid";
 import { type HeaderEdit, applyHeaderEdits } from "../header/headerModel";
 
+import { t } from "../i18n";
 export type DicomSource = Extract<VolumeSource, { kind: "dicom" }>;
 
 export interface EditedDicomOptions {
@@ -72,7 +73,7 @@ export function buildEditedDicomFiles(volume: Volume3D, source: DicomSource, opt
   const totalFrames = source.files.reduce((s, f) => s + f.nFrames, 0);
   const first = source.files[0].dataSet;
   if (totalFrames !== volume.nz || first.uint16("x00280010") !== volume.ny || first.uint16("x00280011") !== volume.nx)
-    throw new Error("Das Voxelraster wurde verändert (Crop/Drehen/Resampling) und passt nicht mehr zu den Original-DICOM-Dateien.");
+    throw new Error(t("Das Voxelraster wurde verändert (Crop/Drehen/Resampling) und passt nicht mehr zu den Original-DICOM-Dateien."));
 
   const encodedFiles = source.files.map((file) =>
     encodePixels(volume.data.subarray(file.zStart * sliceSize, (file.zStart + file.nFrames) * sliceSize), file.encoding),
@@ -94,16 +95,16 @@ export function buildEditedDicomFiles(volume: Volume3D, source: DicomSource, opt
   const files = source.files.map((file, i) => {
     const { overrides, warning } = buildFileOverrides(file, encodedFiles[i], seriesUid, series, opts, anon);
     applyHeaderEdits(overrides, opts.headerEdits, i, file);
-    if (warning) warnings.push(anon ? `Datei ${i + 1}: ${warning.slice(file.fileName.length + 2)}` : warning);
-    const name = anon ? `IM${String(i + 1).padStart(5, "0")}.dcm` : uniqueName(file.fileName, usedNames);
+    if (warning) warnings.push(anon ? t("Datei {v}: {v2}", { v: i + 1, v2: warning.slice(file.fileName.length + 2) }) : warning);
+    const name = anon ? t("IM{v}.dcm", { v: String(i + 1).padStart(5, "0") }) : uniqueName(file.fileName, usedNames);
     return { name, bytes: rewriteDicom(file, overrides) };
   });
   const snapped = encodedFiles.filter((e) => e.snapped);
   if (snapped.length > 0) {
     const maxError = Math.max(...snapped.map((e) => e.maxError));
     warnings.unshift(
-      `Neuer Wert in ${snapped.length} von ${encodedFiles.length} Datei(en) auf das Original-Werteraster gerundet ` +
-        `(max. Abweichung ${formatDS(maxError)}); Skalierung unverändert.`,
+      t("Neuer Wert in {length} von {length2} Datei(en) auf das Original-Werteraster gerundet ", { length: snapped.length, length2: encodedFiles.length }) +
+        t("(max. Abweichung {v}); Skalierung unverändert.", { v: formatDS(maxError) }),
     );
   }
   return { files, warnings };
@@ -162,7 +163,7 @@ function buildFileOverrides(
 
   if (dataSet.elements[T.PixelData]?.encapsulatedPixelData) {
     overrides.set(T.TransferSyntaxUid, stringValue("UI", EXPLICIT_VR_LE));
-    notes.push("komprimierte Pixeldaten unkomprimiert gespeichert");
+    notes.push(t("komprimierte Pixeldaten unkomprimiert gespeichert"));
   }
   overrides.set(T.PixelData, { vr: enc.bitsAllocated === 8 ? "OB" : "OW", value: encoded.bytes });
 
@@ -177,8 +178,8 @@ function buildFileOverrides(
       overrides.set(T.RescaleIntercept, stringValue("DS", formatDS(enc.intercept)));
     }
     notes.push(
-      `Skalierung angepasst (Slope ${formatDS(enc.slope)}, Intercept ${formatDS(enc.intercept)}, ` +
-        `${enc.bitsStored} bit, max. Rundungsabweichung ${formatDS(encoded.maxError)})`,
+      t("Skalierung angepasst (Slope {v}, Intercept {v2}, ", { v: formatDS(enc.slope), v2: formatDS(enc.intercept) }) +
+        t("{bitsStored} bit, max. Rundungsabweichung {v})", { bitsStored: enc.bitsStored, v: formatDS(encoded.maxError) }),
     );
   }
 
@@ -220,7 +221,7 @@ function buildFileOverrides(
   }
   if (anon) {
     // Free-text descriptions may name the site or scanner model.
-    overrides.set(T.SeriesDescription, stringValue("LO", `ANONYMISIERT${opts.seriesDescriptionSuffix ?? ""}`.slice(0, 64)));
+    overrides.set(T.SeriesDescription, stringValue("LO", t("ANONYMISIERT{v}", { v: opts.seriesDescriptionSuffix ?? "" }).slice(0, 64)));
   } else if (opts.seriesDescriptionSuffix) {
     const desc = `${(dataSet.string(T.SeriesDescription) ?? "").trim()}${opts.seriesDescriptionSuffix}`.trim().slice(0, 64);
     overrides.set(T.SeriesDescription, stringValue("LO", desc));

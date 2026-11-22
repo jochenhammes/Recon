@@ -11,6 +11,7 @@ import { formatValue } from "../components/format";
 import { lutTable } from "../viewer/volume";
 import type { Option } from "./NormalizationPanel";
 
+import { tr } from "../i18n";
 export interface LabelSetOption extends Option {
   atlas: AtlasInfo;
 }
@@ -117,7 +118,7 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
     const url = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = withPatientId(`Labelanalyse_${current.datasetLabel.replace(/[äöüÄÖÜß]/g, umlaut).replace(/[^A-Za-z0-9_.-]+/g, "_")}.csv`);
+    a.download = withPatientId(tr("Labelanalyse_{v}.csv", { v: current.datasetLabel.replace(/[äöüÄÖÜß]/g, umlaut).replace(/[^A-Za-z0-9_.-]+/g, "_") }));
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -145,7 +146,7 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
     if (!labelSet) return;
     setHInfo(null);
     if (!all) {
-      if (current) download(histCsv(current), `Histogramme_${safe(current.datasetLabel)}.csv`, "text/csv;charset=utf-8");
+      if (current) download(histCsv(current), tr("Histogramme_{v}.csv", { v: safe(current.datasetLabel) }), "text/csv;charset=utf-8");
       return;
     }
     // One CSV per dataset (each with its own unit and, without a fixed range, its own bin range).
@@ -154,12 +155,12 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
     for (const t of props.targets) {
       try {
         const r = t.id === current?.targetId ? current : props.compute(labelSet.id, t.id);
-        files.push({ name: withPatientId(`Histogramme_${safe(r.datasetLabel)}.csv`), bytes: new TextEncoder().encode(histCsv(r)) });
+        files.push({ name: withPatientId(tr("Histogramme_{v}.csv", { v: safe(r.datasetLabel) })), bytes: new TextEncoder().encode(histCsv(r)) });
       } catch {
         skipped.push(t.label);
       }
     }
-    if (files.length) download(buildZip(files), `Histogramme_${safe(labelSet.label)}.zip`, "application/zip");
+    if (files.length) download(buildZip(files), tr("Histogramme_{v}.zip", { v: safe(labelSet.label) }), "application/zip");
     setHInfo(`${files.length} CSV-Datei(en) exportiert${skipped.length ? `; ohne Überlappung mit den Labels übersprungen: ${skipped.join(", ")}` : ""}.`);
   }
 
@@ -174,7 +175,7 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
   const fv = (v: number) => (Number.isFinite(v) ? formatValue(v) : "–");
 
   return (
-    <Card title={<>Label-Analyse</>} info={
+    <Card title={<>{tr("Label-Analyse")}</>} info={
           <>
             <p>
               Statistik und Histogramm eines Datensatzes je Region einer Segmentierung oder eines Atlas (z. B. CT-Organe auf dem PET, Hirnatlas auf einem
@@ -188,7 +189,7 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
       <div className="button-row">
         <AtlasPicker busy={props.cerebraLoading} onLoad={props.onLoadCerebra} />
         <button className="secondary-btn" onClick={() => fileInput.current?.click()}>
-          AAL3 / eigene Labels …
+          {tr("AAL3 / eigene Labels …")}
         </button>
         <input
           ref={fileInput}
@@ -214,18 +215,18 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
       >
         AAL3:{" "}
         <a href={AAL_URL} target="_blank" rel="noreferrer">
-          herunterladen
+          {tr("herunterladen")}
         </a>{" "}
         und die ZIP hier auswählen.
       </InfoText>
       {props.loadError && <div className="error-banner">{props.loadError}</div>}
 
       {props.labelSets.length === 0 ? (
-        <InfoText details="Labels entstehen durch die CT-Organsegmentierung (Bereich „Segmentierung & MTV“), einen Atlas (Bereich „Analyse“ bzw. „Standardraum“) oder ein geladenes Labelbild.">Noch keine Labels</InfoText>
+        <InfoText details={tr("Labels entstehen durch die CT-Organsegmentierung (Bereich „Segmentierung & MTV“), einen Atlas (Bereich „Analyse“ bzw. „Standardraum“) oder ein geladenes Labelbild.")}>{tr("Noch keine Labels")}</InfoText>
       ) : (
         <>
           <label className="field">
-            Labels
+            {tr("Labels")}
             <select value={labelSet?.id ?? ""} onChange={(e) => setSetId(e.target.value)}>
               {props.labelSets.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -236,15 +237,15 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
           </label>
           {labelSet && unnamed(labelSet.atlas) && (
             <div className="warning-banner">
-              <span title="Diese Labels haben keine Namen (z. B. mit einer älteren Version exportiert). Namen zuordnen:">Labels ohne Namen – zuordnen:</span>
+              <span title={tr("Diese Labels haben keine Namen (z. B. mit einer älteren Version exportiert). Namen zuordnen:")}>{tr("Labels ohne Namen – zuordnen:")}</span>
               <div className="button-row">
                 {Math.max(...labelSet.atlas.labels.keys()) <= 117 && (
                   <button className="secondary-btn" onClick={() => props.onAssignNames(labelSet.id, "totalseg")}>
-                    TotalSegmentator-Organnamen zuweisen
+                    {tr("TotalSegmentator-Organnamen zuweisen")}
                   </button>
                 )}
                 <button className="secondary-btn" onClick={() => tableInput.current?.click()}>
-                  Labeltabelle laden …
+                  {tr("Labeltabelle laden …")}
                 </button>
                 <input
                   ref={tableInput}
@@ -261,7 +262,7 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
             </div>
           )}
           <label className="field">
-            Datensatz
+            {tr("Datensatz")}
             <select value={target?.id ?? ""} onChange={(e) => setTargetId(e.target.value)}>
               {props.targets.map((t) => (
                 <option key={t.id} value={t.id}>
@@ -271,7 +272,7 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
             </select>
           </label>
           <button className="primary-btn" disabled={!labelSet || !target || busy} onClick={run}>
-            {busy ? "Wird ausgewertet …" : "Regionen auswerten"}
+            {busy ? tr("Wird ausgewertet …") : tr("Regionen auswerten")}
           </button>
         </>
       )}
@@ -281,10 +282,10 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
         <>
           {current.note && <p className="tool-hint">{current.note}</p>}
           <div className="label-hist-head">
-            <strong>{selected.size === 0 ? "Histogramm: alle Regionen" : `Histogramm: ${selected.size === 1 ? current.stats.find((s) => selected.has(s.index))?.name : `${selected.size} Regionen`}`}</strong>
+            <strong>{selected.size === 0 ? tr("Histogramm: alle Regionen") : `Histogramm: ${selected.size === 1 ? current.stats.find((s) => selected.has(s.index))?.name : `${selected.size} Regionen`}`}</strong>
             {selected.size > 0 && (
               <button className="link-btn" onClick={() => setSelected(new Set())}>
-                Auswahl aufheben
+                {tr("Auswahl aufheben")}
               </button>
             )}
           </div>
@@ -300,13 +301,13 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
 
           <div className="button-row">
             <button className="secondary-btn" onClick={downloadCsv}>
-              Tabelle als CSV
+              {tr("Tabelle als CSV")}
             </button>
           </div>
-          <h4 className="subheading">Histogramme je Label exportieren</h4>
+          <h4 className="subheading">{tr("Histogramme je Label exportieren")}</h4>
           <div className="inline-fields hist-export-fields">
             <label className="field">
-              Bins
+              {tr("Bins")}
               <select value={hBins} onChange={(e) => setHBins(Number(e.target.value))}>
                 {[16, 32, 64, 100, 128, 256].map((b) => (
                   <option key={b} value={b}>
@@ -316,24 +317,24 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
               </select>
             </label>
             <label className="field">
-              von
-              <input placeholder="auto" value={hRange.min} onChange={(e) => setHRange({ ...hRange, min: e.target.value })} />
+              {tr("von")}
+              <input placeholder={tr("auto")} value={hRange.min} onChange={(e) => setHRange({ ...hRange, min: e.target.value })} />
             </label>
             <label className="field">
-              bis
-              <input placeholder="auto" value={hRange.max} onChange={(e) => setHRange({ ...hRange, max: e.target.value })} />
+              {tr("bis")}
+              <input placeholder={tr("auto")} value={hRange.max} onChange={(e) => setHRange({ ...hRange, max: e.target.value })} />
             </label>
             <label className="field">
-              Werte
+              {tr("Werte")}
               <select value={hRelative ? "rel" : "abs"} onChange={(e) => setHRelative(e.target.value === "rel")}>
-                <option value="abs">Anzahl Voxel</option>
-                <option value="rel">Anteil %</option>
+                <option value="abs">{tr("Anzahl Voxel")}</option>
+                <option value="rel">{tr("Anteil %")}</option>
               </select>
             </label>
           </div>
           <div className="button-row">
             <button className="secondary-btn" onClick={() => exportHistograms(false)}>
-              Histogramme als CSV
+              {tr("Histogramme als CSV")}
             </button>
             {props.targets.length > 1 && (
               <button className="secondary-btn" onClick={() => exportHistograms(true)}>
@@ -349,11 +350,11 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
               </>
             }
           >
-            Eine Zeile je Label, eine Spalte je Bin.
+            {tr("Eine Zeile je Label, eine Spalte je Bin.")}
           </InfoText>
           {hInfo && <p className="tool-hint">{hInfo}</p>}
-          <input className="label-search" type="search" placeholder="Region suchen …" value={query} onChange={(e) => setQuery(e.target.value)} />
-          <div className="segmented-control" role="group" aria-label="Sortierung">
+          <input className="label-search" type="search" placeholder={tr("Region suchen …")} value={query} onChange={(e) => setQuery(e.target.value)} />
+          <div className="segmented-control" role="group" aria-label={tr("Sortierung")}>
             {(["index", "name", "mean", "volume"] as SortKey[]).map((k) => (
               <button key={k} className={sort === k ? "active" : ""} onClick={() => setSort(k)}>
                 {k === "index" ? "Nr." : k === "name" ? "Name" : k === "mean" ? "Mittel ↓" : "Volumen ↓"}
@@ -361,25 +362,25 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
             ))}
           </div>
           <p className="tool-hint">Zeile anklicken = Region ins Histogramm (Mehrfachauswahl möglich).</p>
-          <BigTable title={`Label-Analyse – ${labelSet.label} auf ${current.datasetLabel}`} onCsv={downloadCsv}>
+          <BigTable title={tr("Label-Analyse – {label} auf {datasetLabel}", { label: labelSet.label, datasetLabel: current.datasetLabel })} onCsv={downloadCsv}>
             <table className="region-table label-stats-table">
               <thead>
                 <tr>
-                  <th>Region</th>
+                  <th>{tr("Region")}</th>
                   <th>ml</th>
-                  <th>Mittel</th>
+                  <th>{tr("Mittel")}</th>
                   <th>SD</th>
-                  <th>Varianz</th>
-                  <th>Median</th>
-                  <th>Min</th>
-                  <th>Max</th>
+                  <th>{tr("Varianz")}</th>
+                  <th>{tr("Median")}</th>
+                  <th>{tr("Min")}</th>
+                  <th>{tr("Max")}</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => {
                   const c = Math.min(255, r.index) * 3;
                   return (
-                    <tr key={r.index} className={selected.has(r.index) ? "reference-row clickable" : "clickable"} onClick={() => toggle(r.index)} title={`Label ${r.index}, ${r.voxels} Voxel`}>
+                    <tr key={r.index} className={selected.has(r.index) ? "reference-row clickable" : "clickable"} onClick={() => toggle(r.index)} title={tr("Label {index}, {voxels} Voxel", { index: r.index, voxels: r.voxels })}>
                       <td>
                         <span className="label-swatch" style={{ background: `rgb(${colors[c]},${colors[c + 1]},${colors[c + 2]})` }} />
                         {r.name}

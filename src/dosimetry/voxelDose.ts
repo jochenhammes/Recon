@@ -4,6 +4,7 @@ import { type Placed, densityFromHu, trilinear, voxelMap, voxelMl } from "./dose
 import { DECAYS_PER_MBQH, J_PER_KEV } from "./nuclideData";
 import type { DoseKernel } from "./setup";
 
+import { t } from "../i18n";
 /** One time point for the voxel dose: SPECT (counts) placed in the reference world, MBq per count, hours p.i. */
 export interface VoxelTimePoint {
   spect: Placed;
@@ -204,7 +205,7 @@ export function parseKernel(text: string, name: string, voxelMm: number, unit: "
     if (parts.length < 4 || parts.slice(0, 4).some((v) => !Number.isFinite(v))) continue;
     rows.push([Math.round(parts[0]), Math.round(parts[1]), Math.round(parts[2]), parts[3]]);
   }
-  if (!rows.length) throw new Error("Keine Kernel-Werte (Zeilen „i j k S“) gefunden.");
+  if (!rows.length) throw new Error(t("Keine Kernel-Werte (Zeilen „i j k S“) gefunden."));
   const octant = rows.every(([i, j, k]) => i >= 0 && j >= 0 && k >= 0);
   const r = Math.max(...rows.map(([i, j, k]) => Math.max(Math.abs(i), Math.abs(j), Math.abs(k))));
   const kw = 2 * r + 1;
