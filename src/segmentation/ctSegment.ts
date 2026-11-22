@@ -6,7 +6,7 @@ import type { CtSegBackend, CtSegJob } from "../workers/ctseg.worker";
 import type { SegmentProgress } from "./infer";
 import { type ModelMeta, normalizeForModel, rasGrid } from "./preprocess";
 
-import { workerOptions } from "../i18n/lang";
+import { withLang } from "../i18n/lang";
 import { tr, tk } from "../i18n";
 /** CT segmentation models shipped with the app (ONNX, top-k output). */
 export interface CtModelInfo {
@@ -181,7 +181,7 @@ export function runCtSegmentation(ct: Volume3D, backend: CtSegBackend, onProgres
         stopAll();
         let last: SegmentProgress | null = null;
         let lastAt = Date.now();
-        worker = new Worker(new URL("../workers/ctseg.worker.ts", import.meta.url), workerOptions());
+        worker = withLang(new Worker(new URL("../workers/ctseg.worker.ts", import.meta.url), { type: "module" }));
         worker.onmessage = (e: MessageEvent<{ type: string; progress?: SegmentProgress; labels?: Uint8Array; backend?: string; note?: string; error?: string; abort?: boolean }>) => {
           const m = e.data;
           if (m.type === "progress" && m.progress) {

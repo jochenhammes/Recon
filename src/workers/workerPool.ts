@@ -2,7 +2,7 @@ import type { ReconParams } from "../recon/volume";
 import { sliceSinogramRows, type Sinogram } from "../recon/sinogram";
 import type { ReconstructRequestMessage, WorkerResponseMessage } from "./types";
 
-import { workerOptions } from "../i18n/lang";
+import { withLang } from "../i18n/lang";
 import { t } from "../i18n";
 export interface ReconstructedVolumeData {
   data: Float32Array;
@@ -13,7 +13,7 @@ export interface ReconstructedVolumeData {
 const MAX_WORKERS = 8;
 
 function makeWorker(): Worker {
-  return new Worker(new URL("./reconstruction.worker.ts", import.meta.url), workerOptions());
+  return withLang(new Worker(new URL("./reconstruction.worker.ts", import.meta.url), { type: "module" }));
 }
 
 /**

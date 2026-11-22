@@ -1,7 +1,7 @@
 import type { WarpJob } from "../workers/warp.worker";
 import { type WarpInput, type WarpOptions, type WarpProgress, type WarpResult, estimateWarp } from "./warp";
 
-import { workerOptions } from "../i18n/lang";
+import { withLang } from "../i18n/lang";
 import { t } from "../i18n";
 export interface WarpRun {
   promise: Promise<WarpResult>;
@@ -14,7 +14,7 @@ export function runWarp(input: WarpInput, options: WarpOptions, onProgress?: (p:
   if (typeof Worker === "undefined") {
     return { promise: Promise.resolve().then(() => estimateWarp(input, options, onProgress)), cancel: () => {} };
   }
-  const worker = new Worker(new URL("../workers/warp.worker.ts", import.meta.url), workerOptions());
+  const worker = withLang(new Worker(new URL("../workers/warp.worker.ts", import.meta.url), { type: "module" }));
   let rejectFn: (e: unknown) => void = () => {};
   const promise = new Promise<WarpResult>((resolve, reject) => {
     rejectFn = reject;

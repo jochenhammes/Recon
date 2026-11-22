@@ -8,9 +8,6 @@ export type Lang = "de" | "en";
 const KEY = "recon-studio-lang";
 
 function initial(): Lang {
-  // Web workers get the language of the app in their name ("lang:en"), see workerOptions().
-  const wname = typeof window === "undefined" && typeof self !== "undefined" ? (self as { name?: string }).name : undefined;
-  if (wname?.startsWith("lang:")) return wname.slice(5) === "en" ? "en" : "de";
   try {
     const saved = localStorage.getItem(KEY);
     if (saved === "de" || saved === "en") return saved;
@@ -51,5 +48,19 @@ export function subscribeLang(f: () => void): () => void {
 /** Locale for numbers and dates in the UI (CSV keeps the German format on purpose). */
 export const locale = (): string => (current === "de" ? "de-DE" : "en-GB");
 
-/** Options for `new Worker(…)`: module type and the current language (read by the worker's copy of this module). */
-export const workerOptions = (): WorkerOptions => ({ type: "module", name: `lang:${current}` });
+// Web workers: every message from the app carries the app language (`__lang`, see withLang()); read it before the
+// worker's own handler runs (this listener is registered first, at import time).
+if (typeof window === "undefined" && typeof self !== "undefined" && typeof (self as { addEventListener?: unknown }).addEventListener === "function") {
+  self.addEventListener("message", (e: MessageEvent) => {
+    const l = (e.data as { __lang?: unknown } | null)?.__lang;
+    if (l === "de" || l === "en") current = l;
+  });
+}
+
+/** Wraps a worker so that every object message carries the current app language for the worker's `t()`. */
+export function withLang<W extends Worker>(w: W): W {
+  const post = w.postMessage.bind(w) as (m: unknown, t?: Transferable[] | StructuredSerializeOptions) => void;
+  w.postMessage = ((m: unknown, t?: Transferable[] | StructuredSerializeOptions) =>
+    post(m && typeof m === "object" && !Array.isArray(m) && !ArrayBuffer.isView(m) && !(m instanceof ArrayBuffer) ? { ...(m as object), __lang: current } : m, t)) as W["postMessage"];
+  return w;
+}

@@ -4,7 +4,7 @@ import type { Volume3D } from "../viewer/volume";
 import type { RegistrationJob } from "../workers/registration.worker";
 import { type CoregImage, type CoregOptions, type CoregProgress, type CoregResult, coregister } from "./coregister";
 
-import { workerOptions } from "../i18n/lang";
+import { withLang } from "../i18n/lang";
 import { t } from "../i18n";
 export interface RegistrationRun {
   promise: Promise<CoregResult>;
@@ -46,7 +46,7 @@ export function runCoregistration(fixed: Volume3D, moving: Volume3D, options: Co
   if (typeof Worker === "undefined") {
     return { promise: Promise.resolve().then(() => coregister(prepFixed(), prepareCoregImage(moving, options.levels), options, onProgress)), cancel: () => {} };
   }
-  const worker = new Worker(new URL("../workers/registration.worker.ts", import.meta.url), workerOptions());
+  const worker = withLang(new Worker(new URL("../workers/registration.worker.ts", import.meta.url), { type: "module" }));
   let rejectFn: (e: unknown) => void = () => {};
   const promise = new Promise<CoregResult>((resolve, reject) => {
     rejectFn = reject;
