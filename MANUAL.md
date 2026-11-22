@@ -416,8 +416,9 @@ Bereich **Centiloid & SUVR** (Leiste: *SUVR*), Karte **Centiloid**.
 
 ## 8. Kinetik (dynamisches PET)
 
-Referenzregion-Modelle für dynamische Hirn-PET-Daten, ohne Blutentnahme. Nachbau ausgewählter Teile des MATLAB-Pakets der
-Arbeitsgruppe ([ghaefner/kinetic-modeling](https://github.com/ghaefner/kinetic-modeling)):
+Referenzregion-Modelle für dynamische Hirn-PET-Daten, ohne Blutentnahme. Nachbau ausgewählter Teile eines MATLAB-Pakets der
+wissenschaftlichen Arbeitsgruppe MMNI der Universität zu Köln, deren Alumnus der Autor dieser App ist
+([github.com/ghaefner/kinetic-modeling](https://github.com/ghaefner/kinetic-modeling)):
 
 - **Patlak (Referenz)** für irreversibel bindende Tracer (z. B. FDOPA): Ki_ref in 1/min aus der Steigung von
   C/C_ref gegen ∫C_ref/C_ref ab einer Startzeit t*.

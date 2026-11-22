@@ -276,7 +276,7 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
       <Card title={<>1 · Dynamische Serie</>} info={
             <>
               Kinetische Modellierung mit Referenzregion (ohne Blutentnahme): Patlak für irreversibel bindende Tracer (z. B. FDOPA, FDG) und SRTM für
-              reversibel bindende Tracer (Rezeptorliganden, Amyloid). Nach dem MATLAB-Paket der Arbeitsgruppe (github.com/ghaefner/kinetic-modeling).
+              reversibel bindende Tracer (Rezeptorliganden, Amyloid). Portierung eines MATLAB-Pakets der wissenschaftlichen Arbeitsgruppe MMNI der Universität zu Köln, deren Alumnus der Autor dieser App ist (github.com/ghaefner/kinetic-modeling).
             </>
           } done={!!dyn?.inMni} status={info ? { text: `${info.frames.length} Frames${dyn?.inMni ? " · MNI" : ""}`, tone: dyn?.inMni ? "ok" : "info" } : { text: "keine Daten", tone: "warn" }}>
         {api.dynamics.length === 0 ? (

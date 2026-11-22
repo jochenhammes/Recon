@@ -1,7 +1,7 @@
 /**
  * Time–activity curves of dynamic PET. Frame values are frame averages (decay corrected); times in minutes.
  *
- * Unlike the group's MATLAB code (github.com/ghaefner/kinetic-modeling), which integrates with the trapezoidal rule
+ * Unlike the MATLAB code of the MMNI group, University of Cologne (github.com/ghaefner/kinetic-modeling), which integrates with the trapezoidal rule
  * over frame indices × a constant frame length, the real frame start times and durations are used here, so
  * protocols with short early and long late frames are integrated correctly.
  */

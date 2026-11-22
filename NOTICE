@@ -11,7 +11,8 @@ Derived work
 -------------------------------------------------------------------------------
 
 The kinetic models (Patlak with reference region, SRTM) in src/kinetics are a
-TypeScript port of the MATLAB package "kinetic-modeling" of the working group
+TypeScript port of a MATLAB package of the MMNI research group at the
+University of Cologne, of which the author of this app is an alumnus
 (https://github.com/ghaefner/kinetic-modeling), used with permission.
 
 -------------------------------------------------------------------------------
