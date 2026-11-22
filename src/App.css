@@ -3043,9 +3043,25 @@ select.dos-unit {
 }
 .lang-toggle {
   display: inline-flex;
+  margin-bottom: 0;
+}
+/* Title bar: all actions the same height. */
+.header-actions > .secondary-btn,
+.header-actions > .icon-btn,
+.header-actions > .lang-toggle {
+  height: 30px;
+  box-sizing: border-box;
+  margin: 0;
+}
+.header-actions > .icon-btn {
+  min-width: 30px;
 }
 .lang-toggle button {
-  padding: 4px 8px;
+  height: 100%;
+  box-sizing: border-box;
+}
+.lang-toggle button {
+  padding: 0 9px;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
