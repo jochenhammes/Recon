@@ -1,3 +1,4 @@
+import { AtlasPicker } from "./BrainCatalog";
 import { useMemo, useRef, useState } from "react";
 import { umlaut, withPatientId } from "../core/exportName";
 import { BigTable } from "./BigTable";
@@ -17,7 +18,8 @@ export interface RegionResult {
 
 export interface AtlasPanelProps {
   atlases: AtlasOption[];
-  onLoadBundled: () => void;
+  /** Loads a bundled atlas of the brain catalogue. */
+  onLoadBundled: (id: string) => void;
   bundledLoading: boolean;
   /** Label image (NIfTI) and optional label table (TXT/CSV/TSV/LUT). */
   onLoadOwn: (files: File[]) => void;
@@ -101,9 +103,7 @@ export function AtlasPanel(props: AtlasPanelProps) {
           </>
         }>
       <div className="button-row">
-        <button className="secondary-btn" disabled={props.bundledLoading} onClick={props.onLoadBundled}>
-          {props.bundledLoading ? "Wird geladen …" : "CerebrA-Atlas laden"}
-        </button>
+        <AtlasPicker busy={props.bundledLoading} onLoad={props.onLoadBundled} />
         <button className="secondary-btn" onClick={() => fileInput.current?.click()}>
           Eigener Atlas …
         </button>

@@ -68,7 +68,7 @@ export async function loadBundledAtlas(): Promise<LoadedDataset> {
     }),
   ]);
   const d = createDataset(img.volume, { kind: "nifti", fileName: "CerebrA_MNI152NLin2009cAsym_res-02_dseg.nii.gz", nifti: img.nifti }, BUNDLED_CEREBRA.name);
-  return { ...d, atlas: { name: BUNDLED_CEREBRA.name, labels: parseLabelTable(table), attribution: BUNDLED_CEREBRA.attribution } };
+  return { ...d, catalogId: "cerebra-2", atlas: { name: BUNDLED_CEREBRA.name, labels: parseLabelTable(table), attribution: BUNDLED_CEREBRA.attribution } };
 }
 
 /** Atlas from a label image; without a table the regions are named by their index. */

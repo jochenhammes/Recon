@@ -1,3 +1,4 @@
+import { AtlasPicker } from "./BrainCatalog";
 import { useMemo, useRef, useState } from "react";
 import { umlaut, withPatientId } from "../core/exportName";
 import { BigTable } from "./BigTable";
@@ -31,7 +32,8 @@ export interface LabelAnalysisProps {
   defaultTargetId: string | null;
   defaultLabelSetId: string | null;
   compute: (labelSetId: string, targetId: string) => LabelAnalysisResult;
-  onLoadCerebra: () => void;
+  /** Loads a bundled brain atlas (catalogue id). */
+  onLoadCerebra: (id: string) => void;
   cerebraLoading: boolean;
   /** Label image (NIfTI) with optional table, or a ZIP (e.g. AAL3 download). */
   onLoadOwn: (files: File[]) => void;
@@ -184,9 +186,7 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
           </>
         }>
       <div className="button-row">
-        <button className="secondary-btn" disabled={props.cerebraLoading} onClick={props.onLoadCerebra}>
-          {props.cerebraLoading ? "Wird geladen …" : "Hirnatlas CerebrA (MNI)"}
-        </button>
+        <AtlasPicker busy={props.cerebraLoading} onLoad={props.onLoadCerebra} />
         <button className="secondary-btn" onClick={() => fileInput.current?.click()}>
           AAL3 / eigene Labels …
         </button>

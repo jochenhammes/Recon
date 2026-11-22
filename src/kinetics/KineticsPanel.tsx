@@ -1,3 +1,4 @@
+import { AtlasPicker } from "../ui/BrainCatalog";
 import { useEffect, useMemo, useState } from "react";
 import { umlaut, withPatientId } from "../core/exportName";
 import { BigTable } from "../ui/BigTable";
@@ -29,7 +30,8 @@ export interface KineticsApi {
   addMaps: (sourceId: string, maps: { label: string; data: Float32Array; window: [number, number]; visible?: boolean }[]) => { id: string; label: string }[];
   /** Shows a dataset as the top overlay. */
   showDataset: (id: string) => void;
-  loadCerebra: () => void;
+  /** Loads a bundled brain atlas (catalogue id). */
+  loadCerebra: (id: string) => void;
   atlasBusy: boolean;
   /** Reports the running step (for the activity indicator); null when idle. */
   onActivity?: (a: { label: string; fraction: number | null } | null) => void;
@@ -419,9 +421,7 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
       {dyn && info && dyn.inMni && (
         <Card title={<>4 · Referenzregion und Modell</>} status={result ? { text: `✓ ${result.model === "patlak" ? "Patlak" : "SRTM"}`, tone: "ok" } : null}>
           <div className="button-row">
-            <button className="secondary-btn" disabled={api.atlasBusy} onClick={api.loadCerebra}>
-              {api.atlasBusy ? "Wird geladen …" : "CerebrA-Atlas laden"}
-            </button>
+            <AtlasPicker busy={api.atlasBusy} onLoad={api.loadCerebra} />
           </div>
           {api.atlases.length === 0 ? (
             <p className="tool-hint">Zuerst einen Hirnatlas laden (CerebrA oder AAL3 im Bereich „Analyse“).</p>

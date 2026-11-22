@@ -49,7 +49,7 @@ export async function loadBundledMni(): Promise<LoadedDataset> {
   const m = mask.volume.data;
   const binary = new Float32Array(m.length);
   for (let i = 0; i < m.length; i++) binary[i] = m[i] > 0.5 ? 1 : 0;
-  return { ...dataset, template: { name: BUNDLED_MNI.name, kind: "T1", mask: binary, attribution: BUNDLED_MNI.attribution } };
+  return { ...dataset, catalogId: "mni-t1-2", template: { name: BUNDLED_MNI.name, kind: "T1", mask: binary, attribution: BUNDLED_MNI.attribution } };
 }
 
 /**
@@ -122,5 +122,5 @@ export async function loadBundledPetTemplate(id: (typeof BUNDLED_PET_TEMPLATES)[
   const img = await fetchNifti(t.file);
   const d = createDataset(img.volume, { kind: "nifti", fileName: t.file.split("/").pop()!, nifti: img.nifti }, t.name);
   // The transmission template is matched as a whole head (bone carries the information): no brain mask.
-  return { ...d, template: { name: t.name, kind: t.kind, mask: t.kind === "CT" ? null : maskFromBase(img.volume.data), attribution: SPM_TEMPLATE_ATTRIBUTION } };
+  return { ...d, catalogId: t.id, template: { name: t.name, kind: t.kind, mask: t.kind === "CT" ? null : maskFromBase(img.volume.data), attribution: SPM_TEMPLATE_ATTRIBUTION } };
 }

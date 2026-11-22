@@ -54,7 +54,11 @@ import { buildNiftiFile } from "./export/niftiWriter";
 import { type CentiloidCalibration, acquisitionWindow, centiloidFromMeans, guessTracer, windowWarning } from "./centiloid/centiloid";
 import { type CentiloidVois, VOI_LABELS, type VoiName, loadVois, voiMeans, voiVolumeMl } from "./centiloid/vois";
 import { AtlasPanel, type RegionResult } from "./ui/AtlasPanel";
-import { atlasFromLabels, loadBundledAtlas, parseLabelTable, pickAtlasEntries, regionStats } from "./atlas/atlas";
+import { atlasFromLabels, parseFslAtlasXml, parseLabelTable, pickAtlasEntries, regionStats } from "./atlas/atlas";
+import { bundledEntry, identifyUserFiles } from "./brain/catalog";
+import { loadBundledEntry } from "./brain/load";
+import { cacheUserFiles, cachedEntryIds, cachedUserFiles, removeCachedEntry } from "./brain/userCache";
+import { BrainCatalog } from "./ui/BrainCatalog";
 import { parseXmlLabelTable } from "./atlas/labelNifti";
 import { LabelAnalysis, type LabelAnalysisResult } from "./ui/LabelAnalysis";
 import { listZip } from "./core/unzip";
@@ -75,7 +79,7 @@ import { type RegRow, type RegStatusKind, RegistrationSetup } from "./ui/Registr
 import { shortLabel } from "./core/shortLabel";
 import { RegistrationPanel } from "./ui/RegistrationPanel";
 import { CT_PRESETS, acquisitionTime, datasetModality, formatAcquisitionTime, defaultDisplay, isAnatomical, middleEllipsis, modalityLabel, rawUnitLabel, shortName, suvForSource, unitSource } from "./dataset/describe";
-import { BUNDLED_MNI, BUNDLED_PET_TEMPLATES, SPM_TEMPLATE_ATTRIBUTION, SPM_TEMPLATE_LICENSE, type TemplateKind, loadBundledMni, loadBundledPetTemplate, loadPetTemplate } from "./normalization/templates";
+import { BUNDLED_MNI, BUNDLED_PET_TEMPLATES, type TemplateKind, loadBundledMni, loadBundledPetTemplate, loadPetTemplate } from "./normalization/templates";
 import { AnalysisPanel } from "./components/AnalysisPanel";
 import { type BrushState, FilterSection, type GeometryAction, GeometrySection, type GeometryTarget, HistorySection, ValueSection, VoiSection, type VoiTool } from "./components/EditTools";
 import { type GroupTarget, groupEditFor, referenceCenter, rotationSense } from "./edit/groupGeometry";
@@ -752,31 +756,34 @@ function App() {
     </Card>
   );
 
-  const [templateBusy, setTemplateBusy] = useState(false);
   const [atlasBusy, setAtlasBusy] = useState(false);
   const [atlasError, setAtlasError] = useState<string | null>(null);
 
-  async function addBundledTemplate() {
-    setTemplateBusy(true);
-    setError(null);
-    try {
-      addDataset(await loadBundledMni());
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setTemplateBusy(false);
-    }
-  }
+  const [catalogBusy, setCatalogBusy] = useState<string | null>(null);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [cachedCatalog, setCachedCatalog] = useState<string[]>([]);
+  useEffect(() => {
+    void cachedEntryIds().then(setCachedCatalog);
+  }, []);
+  const loadedCatalog = useMemo(() => new Set(entries.map((e) => e.dataset.catalogId).filter((x): x is string => !!x)), [entries]);
 
-  async function addBundledPetTemplate(id: (typeof BUNDLED_PET_TEMPLATES)[number]["id"]) {
-    setTemplateBusy(true);
-    setError(null);
+  /** Adds a bundled catalogue entry (template, tissue map or atlas) as dataset; probability maps as hot overlay. */
+  async function addCatalogEntry(id: string): Promise<Entry | undefined> {
+    const e = bundledEntry(id);
+    if (!e) return undefined;
+    const existing = entries.find((x) => x.dataset.catalogId === id);
+    if (existing) return existing;
+    setCatalogBusy(id);
+    setCatalogError(null);
     try {
-      addDataset(await loadBundledPetTemplate(id));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const entry = addDataset(await loadBundledEntry(e));
+      if (e.group === "tpm") setEntries((prev) => prev.map((x) => (x.id === entry.id ? { ...x, display: { window: [0.2, 1], lut: "hot", opacity: 0.5, visible: x.display.visible } } : x)));
+      return entry;
+    } catch (err) {
+      setCatalogError(err instanceof Error ? err.message : String(err));
+      return undefined;
     } finally {
-      setTemplateBusy(false);
+      setCatalogBusy(null);
     }
   }
 
@@ -1945,19 +1952,49 @@ function App() {
   }
 
   // ── Atlas / SUVR ──
-  async function addBundledAtlas() {
+  async function addBundledAtlas(id = "cerebra-1") {
+    const e = bundledEntry(id);
+    if (!e || entries.some((x) => x.dataset.catalogId === id)) return;
     setAtlasBusy(true);
     setAtlasError(null);
     try {
-      addDataset(await loadBundledAtlas());
-    } catch (e) {
-      setAtlasError(e instanceof Error ? e.message : String(e));
+      addDataset(await loadBundledEntry(e));
+    } catch (err) {
+      setAtlasError(err instanceof Error ? err.message : String(err));
     } finally {
       setAtlasBusy(false);
     }
   }
 
-  async function addOwnAtlas(input: File[]) {
+  /** User-downloaded catalogue files (Harvard-Oxford, Brainnetome, …): recognised by name, stored in the browser. */
+  async function addUserCatalogFiles(files: File[]) {
+    setCatalogError(null);
+    const ok = await addOwnAtlas(files, setCatalogError);
+    if (ok?.catalogId && (await cacheUserFiles(ok.catalogId, ok.files))) setCachedCatalog(await cachedEntryIds());
+  }
+
+  async function loadCachedCatalog(id: string) {
+    const files = await cachedUserFiles(id);
+    if (!files) {
+      setCatalogError("Die gespeicherten Dateien sind nicht mehr vorhanden.");
+      setCachedCatalog(await cachedEntryIds());
+      return;
+    }
+    setCatalogBusy(id);
+    try {
+      await addOwnAtlas(files, setCatalogError);
+    } finally {
+      setCatalogBusy(null);
+    }
+  }
+
+  /**
+   * Loads a label image (+ table) or a ZIP as atlas. Files of a catalogue entry the user downloads (e.g. FSL's
+   * Harvard-Oxford) are recognised by name and get the entry's name, table format and attribution.
+   * Returns the catalogue id and the files used, or undefined on failure.
+   */
+  async function addOwnAtlas(input: File[], onError: (msg: string | null) => void = setAtlasError): Promise<{ catalogId?: string; files: File[] } | undefined> {
+    const setAtlasError = onError;
     setAtlasError(null);
     let files = input;
     const zip = input.find((f) => /\.zip$/i.test(f.name));
@@ -1970,23 +2007,33 @@ function App() {
         files = [await toFile(picked.image), ...(picked.table ? [await toFile(picked.table)] : [])];
       } catch (e) {
         setAtlasError(e instanceof Error ? e.message : String(e));
-        return;
+        return undefined;
       }
     }
-    const image = files.find((f) => /\.nii(\.gz)?$/i.test(f.name));
-    const table = files.find((f) => f !== image);
+    const known = identifyUserFiles(files.map((f) => f.name));
+    const image = known ? files.find((f) => f.name === known.image)! : files.find((f) => /\.nii(\.gz)?$/i.test(f.name));
+    const table = known ? files.find((f) => f.name === known.table) : files.find((f) => f !== image);
     if (!image) {
       setAtlasError("Bitte das Labelbild (NIfTI) mit auswählen.");
-      return;
+      return undefined;
+    }
+    if (known?.entry.table && !table) {
+      setAtlasError(`${known.entry.name}: bitte die Labeltabelle mit auswählen (${known.entry.instructions})`);
+      return undefined;
     }
     try {
       const loaded = await loadVolumeFromFiles([image]);
-      const labels = table ? parseLabelTable(await table.text()) : undefined;
+      const text = table ? await table.text() : undefined;
+      const labels = text === undefined ? undefined : known?.entry.tableFormat === "fsl-xml" || /\.xml$/i.test(table!.name) ? parseFslAtlasXml(text) : parseLabelTable(text);
       if (table && !labels?.size) throw new Error(`In „${table.name}“ wurden keine Labels erkannt.`);
-      const d = createDataset(loaded.volume, loaded.source, image.name);
-      addDataset({ ...d, atlas: labels || !loaded.atlas ? atlasFromLabels(loaded.volume.data, image.name.replace(/\.nii(\.gz)?$/i, ""), labels) : loaded.atlas });
+      const d = createDataset(loaded.volume, loaded.source, known ? known.entry.name : image.name);
+      const atlas = labels || !loaded.atlas ? atlasFromLabels(loaded.volume.data, known ? known.entry.name : image.name.replace(/\.nii(\.gz)?$/i, ""), labels) : loaded.atlas;
+      if (known) atlas.attribution = `${known.entry.attribution} Lizenz: ${known.entry.license.name}.`;
+      addDataset({ ...d, atlas, catalogId: known?.entry.id });
+      return { catalogId: known?.entry.id, files: [image, ...(table ? [table] : [])] };
     } catch (e) {
       setAtlasError(e instanceof Error ? e.message : String(e));
+      return undefined;
     }
   }
 
@@ -2757,40 +2804,18 @@ function App() {
         }}
       />
       <details className="card collapsible">
-        <summary>Standardraum-Vorlage</summary>
-        <InfoText details="Vorlage für die räumliche Normalisierung im Bereich Standardraum (MNI): mitgelieferte MNI-/SPM-Vorlagen oder eine eigene Vorlage.">Für die Normalisierung</InfoText>
-        <button
-          className="secondary-btn"
-          disabled={templateBusy || entries.some((e) => e.dataset.template?.name === BUNDLED_MNI.name)}
-          onClick={() => void addBundledTemplate()}
-        >
-          {templateBusy ? "Wird geladen …" : `${BUNDLED_MNI.name} laden`}
-        </button>
-        <p className="hint template-attribution">
-          {BUNDLED_MNI.attribution}{" "}
-          <a href={BUNDLED_MNI.license} target="_blank" rel="noreferrer">
-            Lizenz
-          </a>
-        </p>
-        <div className="template-buttons">
-          {BUNDLED_PET_TEMPLATES.map((t) => (
-            <button
-              key={t.id}
-              className="secondary-btn"
-              title={t.hint}
-              disabled={templateBusy || entries.some((e) => e.dataset.template?.name === t.name)}
-              onClick={() => void addBundledPetTemplate(t.id)}
-            >
-              {t.name} laden
-            </button>
-          ))}
-        </div>
-        <p className="hint template-attribution">
-          {SPM_TEMPLATE_ATTRIBUTION}{" "}
-          <a href={SPM_TEMPLATE_LICENSE} target="_blank" rel="noreferrer">
-            Lizenz
-          </a>
-        </p>
+        <summary>Vorlagen &amp; Atlanten (Hirn, MNI)</summary>
+        <BrainCatalog
+          loaded={loadedCatalog}
+          busyId={catalogBusy}
+          onLoad={(id) => void (bundledEntry(id)?.group === "atlas" ? addBundledAtlas(id) : addCatalogEntry(id))}
+          onUserFiles={(f) => void addUserCatalogFiles(f)}
+          cached={cachedCatalog}
+          onLoadCached={(id) => void loadCachedCatalog(id)}
+          onRemoveCached={(id) => void removeCachedEntry(id).then(() => cachedEntryIds().then(setCachedCatalog))}
+          error={catalogError}
+        />
+        <p className="hint">Eigene Vorlagen:</p>
         <VolumeUploadPanel single title="Eigene T1-Vorlage (NIfTI)" description="z. B. aus SPM oder CAT12." onLoaded={(l, n) => addOwnTemplate(l, n, "T1")} />
         <label className="field">
           Eigene PET-Vorlage (NIfTI; 4D = adaptive Vorlage: amyloid-negativ, amyloid-positiv)
@@ -3622,7 +3647,7 @@ function App() {
   act(tumorBusy && { id: "tumor", label: "Segmentierung & MTV", detail: "Segmentierung", tab: "tumor" });
   act(fusionBusy && { id: "fusion", label: "Fusionsexport", tab: "view" });
   act(editBusy && { id: "edit", label: "Bearbeiten", tab: "edit" });
-  act((templateBusy || atlasBusy) && { id: "bundled", label: templateBusy ? "Vorlage laden" : "Atlas laden", tab: templateBusy ? "normalization" : "analysis" });
+  act((catalogBusy || atlasBusy) && { id: "bundled", label: catalogBusy ? "Vorlage laden" : "Atlas laden", tab: catalogBusy ? "data" : "analysis" });
   act(exportActivity && { id: "export", label: "Export", detail: exportActivity, tab: "export" });
   act(tripleBusy && { id: "triple", label: "Triple-Window-CT", detail: tripleStatus ?? undefined, tab: "edit" });
   act(imcalcBusy && { id: "imcalc", label: "IMCALC", detail: imcalcBusy, tab: "imcalc" });
