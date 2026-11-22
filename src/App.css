@@ -3041,3 +3041,12 @@ select.dos-unit {
 .atlas-picker select {
   max-width: 260px;
 }
+.lang-toggle {
+  display: inline-flex;
+}
+.lang-toggle button {
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}

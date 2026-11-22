@@ -2,10 +2,11 @@ import type { Volume3D } from "../viewer/volume";
 import type { TumorJob } from "../workers/tumor.worker";
 import { type SegmentOptions, type TumorSegmentation, segmentLesions } from "./segment";
 
+import { workerOptions } from "../i18n/lang";
 /** Lesion segmentation in a worker (falls back to synchronous execution). */
 export function runTumorSegmentation(volume: Volume3D, options: SegmentOptions): Promise<TumorSegmentation> {
   if (typeof Worker === "undefined") return Promise.resolve().then(() => segmentLesions(volume, options));
-  const worker = new Worker(new URL("../workers/tumor.worker.ts", import.meta.url), { type: "module" });
+  const worker = new Worker(new URL("../workers/tumor.worker.ts", import.meta.url), workerOptions());
   return new Promise((resolve, reject) => {
     worker.onmessage = (e: MessageEvent<{ type: string; result?: TumorSegmentation; error?: string }>) => {
       worker.terminate();

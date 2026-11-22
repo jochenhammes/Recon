@@ -2,6 +2,7 @@ import { Volume3D } from "../viewer/volume";
 import type { EditJob, EditJobResult } from "../workers/editJob";
 import { type EditOp, applyEdit } from "./operations";
 
+import { workerOptions } from "../i18n/lang";
 let worker: Worker | null = null;
 let nextId = 1;
 const pending = new Map<number, (r: EditJobResult) => void>();
@@ -9,7 +10,7 @@ const pending = new Map<number, (r: EditJobResult) => void>();
 function getWorker(): Worker | null {
   if (typeof Worker === "undefined") return null;
   if (!worker) {
-    worker = new Worker(new URL("../workers/edit.worker.ts", import.meta.url), { type: "module" });
+    worker = new Worker(new URL("../workers/edit.worker.ts", import.meta.url), workerOptions());
     worker.onmessage = (e: MessageEvent<EditJobResult>) => {
       pending.get(e.data.id)?.(e.data);
       pending.delete(e.data.id);

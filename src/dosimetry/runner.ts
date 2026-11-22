@@ -1,6 +1,7 @@
 import type { Placed } from "./dose";
 import type { DosimetryWorkerMessage, PlainPlaced, VoxelDoseJob } from "../workers/dosimetry.worker";
 
+import { workerOptions } from "../i18n/lang";
 export interface VoxelDoseRun {
   promise: Promise<{ dose: Float32Array; led?: Float32Array }>;
   cancel: () => void;
@@ -10,7 +11,7 @@ export const plain = (p: Placed): PlainPlaced => ({ data: p.volume.data, nx: p.v
 
 /** Voxel TIA and dose map in a worker (the page stays responsive); `led` = local-deposition map when a kernel is used. */
 export function runVoxelDose(job: Omit<VoxelDoseJob, "type">, onProgress: (stage: string, fraction: number) => void): VoxelDoseRun {
-  const worker = new Worker(new URL("../workers/dosimetry.worker.ts", import.meta.url), { type: "module" });
+  const worker = new Worker(new URL("../workers/dosimetry.worker.ts", import.meta.url), workerOptions());
   let reject: (e: unknown) => void = () => {};
   const promise = new Promise<{ dose: Float32Array; led?: Float32Array }>((resolve, rej) => {
     reject = rej;

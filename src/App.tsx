@@ -59,6 +59,8 @@ import { BUNDLED, bundledEntry, defaultTemplateId, identifyUserFiles } from "./b
 import { loadBundledEntry } from "./brain/load";
 import { cacheUserFiles, cachedEntryIds, cachedUserFiles, removeCachedEntry } from "./brain/userCache";
 import { BrainCatalog } from "./ui/BrainCatalog";
+import { LangToggle } from "./ui/LangToggle";
+import { useLang } from "./i18n";
 import { parseXmlLabelTable } from "./atlas/labelNifti";
 import { LabelAnalysis, type LabelAnalysisResult } from "./ui/LabelAnalysis";
 import { listZip } from "./core/unzip";
@@ -234,6 +236,8 @@ function writeUnitPreference(mode: UnitMode) {
 }
 
 function App() {
+  // Re-render the whole app when the language changes (all texts go through t()).
+  useLang();
   const [projectionSet, setProjectionSet] = useState<SpectProjectionSet | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [referenceId, setReferenceId] = useState<string | null>(null);
@@ -3827,6 +3831,7 @@ function App() {
           <button className={`icon-btn${manualOpen ? " active" : ""}`} title="Handbuch" aria-label="Handbuch öffnen" aria-pressed={manualOpen} onClick={() => setManualOpen((o) => !o)}>
             ?
           </button>
+          <LangToggle />
         </>
       }
       headerInfo={

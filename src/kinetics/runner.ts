@@ -1,5 +1,6 @@
 import type { KineticsJob } from "../workers/kinetics.worker";
 
+import { workerOptions } from "../i18n/lang";
 export interface KineticsRun<T> {
   promise: Promise<T>;
   cancel: () => void;
@@ -7,7 +8,7 @@ export interface KineticsRun<T> {
 
 /** Runs one kinetics job in its own worker (progress as done/total). */
 export function runKineticsJob<T>(job: KineticsJob, onProgress?: (done: number, total: number) => void): KineticsRun<T> {
-  const worker = new Worker(new URL("../workers/kinetics.worker.ts", import.meta.url), { type: "module" });
+  const worker = new Worker(new URL("../workers/kinetics.worker.ts", import.meta.url), workerOptions());
   let rejectFn: (e: unknown) => void = () => {};
   const promise = new Promise<T>((resolve, reject) => {
     rejectFn = reject;
