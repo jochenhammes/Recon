@@ -9,6 +9,7 @@ import { Card } from "./Card";
 import { EDITABLE_VRS, type HeaderEdit, type HeaderRow, headerRows, lockReason, validateValue } from "../header/headerModel";
 
 import { t } from "../i18n";
+import { T } from "../i18n/T";
 export interface HeaderPanelProps {
   dataset: LoadedDataset;
   onEditsChange: (edits: HeaderEdit[]) => void;
@@ -70,12 +71,12 @@ export function HeaderPanel({ dataset, onEditsChange }: HeaderPanelProps) {
       <section className="card">
         {files.length > 1 && (
           <label className="field">
-            Datei {fileIndex + 1} von {files.length} · {file.fileName}
+            {t("Datei {v} von {length} · {fileName}", { v: fileIndex + 1, length: files.length, fileName: file.fileName })}
             <input type="range" min={0} max={files.length - 1} value={fileIndex} onChange={(e) => setFileIndex(Number(e.target.value))} />
           </label>
         )}
         <label className="field">
-          Suche (Tag, Name oder Wert)
+          {t("Suche (Tag, Name oder Wert)")}
           <input type="text" value={query} placeholder={t("z. B. 0010,0010 oder Patient")} onChange={(e) => setQuery(e.target.value)} />
         </label>
         <InfoText details={t("Gesperrt sind Tags, die der Export selbst setzt (Pixeldaten, Geometrie, Instanz-UIDs, Meta-Header).")}>{t("Änderungen wirken beim DICOM-Export.")}</InfoText>
@@ -326,13 +327,10 @@ function NuclideCard({ dataSet, edits, onChange }: { dataSet: import("dicom-pars
       info={
         <>
           <p>
-            Ändert das Radionuklid der Serie in der <em>{t("Radiopharmaceutical Information Sequence")}</em> (0054,0016): Nuklid-Code (0054,0300), Halbwertszeit
-            (0018,1075) und Positronenanteil (0018,1076), optional das Radiopharmazeutikum (0018,0031). Dosis, Injektionszeit und alle übrigen Angaben
-            bleiben unverändert.
+            <T k="Ändert das Radionuklid der Serie in der {em}Radiopharmaceutical Information Sequence{/em} (0054,0016): Nuklid-Code (0054,0300), Halbwertszeit (0018,1075) und Positronenanteil (0018,1076), optional das Radiopharmazeutikum (0018,0031). Dosis, Injektionszeit und alle übrigen Angaben bleiben unverändert." em={(c) => <em>{c}</em>} />
           </p>
           <p>
-            Wirkt beim DICOM-Export auf alle Dateien der Serie und sofort auf die SUV-Berechnung in der App (Zerfallskorrektur mit der neuen
-            Halbwertszeit). Der Nuklid-Code ist der SNOMED-CT-Code aus dem DICOM-Standard (Schema „SCT“, z. B. 77004003 „^18^Fluorine“); für Tb-161 gibt es dort keinen Code, es wird das private Schema „99RECON“ verwendet.
+            {t("Wirkt beim DICOM-Export auf alle Dateien der Serie und sofort auf die SUV-Berechnung in der App (Zerfallskorrektur mit der neuen Halbwertszeit). Der Nuklid-Code ist der SNOMED-CT-Code aus dem DICOM-Standard (Schema „SCT“, z. B. 77004003 „^18^Fluorine“); für Tb-161 gibt es dort keinen Code, es wird das private Schema „99RECON“ verwendet.")}
           </p>
         </>
       }
@@ -357,7 +355,7 @@ function NuclideCard({ dataSet, edits, onChange }: { dataSet: import("dicom-pars
         Wird geschrieben: {n.meaning} ({n.code ? `SCT ${n.code}` : "privater Code"}) · Halbwertszeit {fmtHl(n.halfLifeSec)} · Positronenanteil {n.positronFraction.toLocaleString("de-DE")}
       </p>
       <label className="field">
-        Radiopharmazeutikum (optional, z. B. PSMA-1007)
+        {t("Radiopharmazeutikum (optional, z. B. PSMA-1007)")}
         <input type="text" value={pharma} maxLength={64} placeholder={cur.radiopharmaceutical ?? ""} onChange={(e) => setPharma(e.target.value)} />
       </label>
       <div className="button-row">

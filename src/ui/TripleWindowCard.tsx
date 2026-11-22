@@ -5,6 +5,7 @@ import { Card } from "./Card";
 import type { Option } from "./NormalizationPanel";
 
 import { t } from "../i18n";
+import { T } from "../i18n/T";
 export interface TripleWindowRequest {
   ctId: string;
   organId: string;
@@ -65,13 +66,10 @@ export function TripleWindowCard(props: {
       info={
         <>
           <p>
-            Künstlicher CT-Datensatz für den schnellen anatomischen Überblick in <strong>{t("einem")}</strong> Fenster: Alle Voxel stehen im Weichteilfenster; Voxel
-            der Lungen (inkl. Trachea) werden so umgerechnet, dass sie wie im Lungenfenster erscheinen, Voxel des Skeletts wie im Knochenfenster.
+            <T k="Künstlicher CT-Datensatz für den schnellen anatomischen Überblick in {b}einem{/b} Fenster: Alle Voxel stehen im Weichteilfenster; Voxel der Lungen (inkl. Trachea) werden so umgerechnet, dass sie wie im Lungenfenster erscheinen, Voxel des Skeletts wie im Knochenfenster." b={(c) => <strong>{c}</strong>} />
           </p>
           <p>
-            Grundlage ist die Organkarte der CT-Segmentierung (Bereich Segmentierung & MTV, 3-mm-Raster). Damit an den Grenzen keine Treppen entstehen, werden
-            Lungen- und Skelettmaske weichgezeichnet (Kantenglättung) und für jedes CT-Voxel interpoliert; die Fenster gehen über ±0,75 mm weich
-            ineinander über. Optional markiert ein schwarzer Rand die Grenze (Lunge: beidseits, Knochen: außen; 0 mm = ohne). Die Werte sind keine echten HU mehr – nicht für Messungen oder Diagnostik verwenden.
+            {t("Grundlage ist die Organkarte der CT-Segmentierung (Bereich Segmentierung & MTV, 3-mm-Raster). Damit an den Grenzen keine Treppen entstehen, werden Lungen- und Skelettmaske weichgezeichnet (Kantenglättung) und für jedes CT-Voxel interpoliert; die Fenster gehen über ±0,75 mm weich ineinander über. Optional markiert ein schwarzer Rand die Grenze (Lunge: beidseits, Knochen: außen; 0 mm = ohne). Die Werte sind keine echten HU mehr – nicht für Messungen oder Diagnostik verwenden.")}
           </p>
         </>
       }
@@ -106,19 +104,19 @@ export function TripleWindowCard(props: {
             <span>{t("Breite")}</span>
           </div>
           {row("soft", "Weichteil (Basis)")}
-          {row("lung", "Lunge")}
-          {row("bone", "Knochen")}
+          {row("lung", t("Lunge"))}
+          {row("bone", t("Knochen"))}
           <label className="field">
-            Kantenglättung (mm, FWHM)
+            {t("Kantenglättung (mm, FWHM)")}
             <input value={smoothMm} disabled={props.busy} onChange={(e) => setSmoothMm(e.target.value)} />
           </label>
           <div className="imcalc-coeffs">
             <label className="field">
-              Schwarzer Rand Lunge (mm)
+              {t("Schwarzer Rand Lunge (mm)")}
               <input value={lungMm} disabled={props.busy} onChange={(e) => setLungMm(e.target.value)} />
             </label>
             <label className="field">
-              Schwarzer Rand Knochen (mm)
+              {t("Schwarzer Rand Knochen (mm)")}
               <input value={boneMm} disabled={props.busy} onChange={(e) => setBoneMm(e.target.value)} />
             </label>
           </div>

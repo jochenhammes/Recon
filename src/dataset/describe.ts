@@ -23,7 +23,7 @@ export const MODALITIES: { code: string; label: string }[] = [
   { code: "PT", label: "PET" },
   { code: "NM", label: "SPECT" },
   { code: "CT", label: "CT" },
-  { code: "MR", label: "MRT" },
+  { code: "MR", label: tk("MRT") },
   { code: "OT", label: tk("Sonstige") },
 ];
 

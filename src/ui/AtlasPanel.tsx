@@ -103,8 +103,7 @@ export function AtlasPanel(props: AtlasPanelProps) {
           <>
             <p>Regionale Mittelwerte eines Datensatzes im Standardraum (z. B. des übertragenen PET) und SUVR = Regionsmittel / Mittel der Referenzregion.</p>
             <p>
-              Eigener Atlas: Labelbild (NIfTI, im Standardraum) und optional die Labeltabelle (TXT/CSV/TSV, FSL-/FreeSurfer-LUT, ITK-SNAP) zusammen
-              auswählen – oder direkt die ZIP-Datei, z. B. AAL3 von der GIN-Seite (gin.cnrs.fr/en/tools/aal).
+              {t("Eigener Atlas: Labelbild (NIfTI, im Standardraum) und optional die Labeltabelle (TXT/CSV/TSV, FSL-/FreeSurfer-LUT, ITK-SNAP) zusammen auswählen – oder direkt die ZIP-Datei, z. B. AAL3 von der GIN-Seite (gin.cnrs.fr/en/tools/aal).")}
             </p>
           </>
         }>
@@ -135,7 +134,7 @@ export function AtlasPanel(props: AtlasPanelProps) {
             <select value={atlas.id} onChange={(e) => setAtlasId(e.target.value)}>
               {props.atlases.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.label} ({a.atlas.labels.size} Regionen)
+                  {a.label} ({t("{n} Regionen", { n: a.atlas.labels.size })})
                 </option>
               ))}
             </select>
@@ -156,7 +155,7 @@ export function AtlasPanel(props: AtlasPanelProps) {
             <select value={effectiveMode} onChange={(e) => setRefMode(e.target.value)}>
               {presets.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.label} ({p.indices.size})
+                  {t(p.label)} ({p.indices.size})
                 </option>
               ))}
               <option value="custom">{t("Eigene Auswahl …")}</option>
@@ -175,7 +174,7 @@ export function AtlasPanel(props: AtlasPanelProps) {
           </label>
           {effectiveMode === "custom" && (
             <label className="field">
-              Regionen (Strg/⌘ für Mehrfachauswahl)
+              {t("Regionen (Strg/⌘ für Mehrfachauswahl)")}
               <select
                 multiple
                 size={8}

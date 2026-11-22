@@ -139,16 +139,15 @@ export function ExportPanel({ items, activeId, onActivity }: ExportPanelProps) {
         info={
           <>
             <p>
-              Datensätze anhaken, Format und Raum wählen. Eine Datei wird direkt gespeichert, mehrere als ein ZIP (DICOM-Serien je in einem Ordner).
-              Ist im Bereich „Daten“ eine Patient-ID eingetragen, beginnen NIfTI-Dateien (und das ZIP) damit.
+              {t("Datensätze anhaken, Format und Raum wählen. Eine Datei wird direkt gespeichert, mehrere als ein ZIP (DICOM-Serien je in einem Ordner). Ist im Bereich „Daten“ eine Patient-ID eingetragen, beginnen NIfTI-Dateien (und das ZIP) damit.")}
             </p>
             <p>
               <strong>{t("Eigenes Raster")}</strong>
               {t(": kein Resampling, jeder Datensatz behält Matrix und Voxelgröße (das PET bleibt in seiner Auflösung). Bei NIfTI steht die Koregistrierung im Header (sform/qform) – in SPM, FSL oder 3D Slicer liegen die Dateien deckungsgleich. DICOM-Serien behalten die Original-Lage.")}
             </p>
             <p>
-              <strong>{t("Raster von …")}</strong>: alle Datensätze werden über ihre Registrierung in das Raster eines Datensatzes resampelt (wahlweise mit
-              eigener Matrix oder Voxelgröße); Labelbilder immer mit nächstem Nachbarn.
+              <strong>{t("Raster von …")}</strong>
+              {t(": alle Datensätze werden über ihre Registrierung in das Raster eines Datensatzes resampelt (wahlweise mit eigener Matrix oder Voxelgröße); Labelbilder immer mit nächstem Nachbarn.")}
             </p>
             <p>{t("DICOM aus DICOM-Quellen: alle Header-Daten des Originals bleiben erhalten, neue UIDs, ImageType DERIVED. Andere Quellen: Secondary Capture.")}</p>
           </>
@@ -199,7 +198,7 @@ export function ExportPanel({ items, activeId, onActivity }: ExportPanelProps) {
               {t("Eigenes Raster")}
             </button>
             <button className={spaceMode === "resampled" ? "active" : ""} disabled={working} onClick={() => setSpaceMode("resampled")}>
-              Raster von … (Resampling)
+              {t("Raster von … (Resampling)")}
             </button>
           </div>
         </div>
@@ -281,7 +280,7 @@ export function ExportPanel({ items, activeId, onActivity }: ExportPanelProps) {
               </p>
             )}
             <label className="field">
-              Interpolation (Labelbilder: nächster Nachbar)
+              {t("Interpolation (Labelbilder: nächster Nachbar)")}
               <select value={method} disabled={working} onChange={(e) => setMethod(e.target.value as Interpolation)}>
                 {(Object.keys(INTERPOLATION_LABELS) as Interpolation[]).map((m) => (
                   <option key={m} value={m}>
@@ -303,7 +302,7 @@ export function ExportPanel({ items, activeId, onActivity }: ExportPanelProps) {
           <>
             <label className="checkbox-field">
               <input type="checkbox" checked={markSeries} disabled={working} onChange={(e) => setMarkSeries(e.target.checked)} />
-              SeriesDescription um „[bearbeitet]“ ergänzen
+              {t("SeriesDescription um „[bearbeitet]“ ergänzen")}
             </label>
             <label className="checkbox-field">
               <input type="checkbox" checked={adjustWindow} disabled={working} onChange={(e) => setAdjustWindow(e.target.checked)} />
@@ -335,12 +334,12 @@ export function ExportPanel({ items, activeId, onActivity }: ExportPanelProps) {
           {anonymize && (
             <>
               <label className="field">
-                Pseudonym (Patientenname/-ID)
+                {t("Pseudonym (Patientenname/-ID)")}
                 <input type="text" value={pseudonym} onChange={(e) => setPseudonym(e.target.value)} />
               </label>
               <label className="checkbox-field">
                 <input type="checkbox" checked={retainPatientChars} onChange={(e) => setRetainPatientChars(e.target.checked)} />
-                Gewicht, Größe, Geschlecht, Alter behalten (für SUV)
+                {t("Gewicht, Größe, Geschlecht, Alter behalten (für SUV)")}
               </label>
               <InfoText details={t("Entfernt bzw. geleert werden Patientendaten (Name, ID, Geburtsdatum, Adresse …), Betreiber (Institution, Abteilung, Ärzte, Bediener, Station), Gerät (Hersteller, Modell, Seriennummern, Software, Kalibrierung), Freitexte, Auftrags-/Referenz-Sequenzen und alle Private Tags. UIDs werden ersetzt, Dateien heißen IM00001.dcm usw. Datum und Uhrzeit bleiben erhalten (für Zerfallskorrektur/SUV). Eingebrannte Beschriftungen im Bild werden nicht erkannt.")}>
                 {t("Patienten-, Geräte- und Freitextangaben werden entfernt.")}

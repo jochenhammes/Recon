@@ -45,7 +45,7 @@ export function LayerSettings({ title, display, onChange, scale, unitLabel, pres
         <select value={display.lut} onChange={(e) => onChange({ ...display, lut: e.target.value as ColorLut })}>
           {LUT_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>
-              {o.label}
+              {t(o.label)}
             </option>
           ))}
         </select>
@@ -65,13 +65,13 @@ export function LayerSettings({ title, display, onChange, scale, unitLabel, pres
       <div className="chip-row">
         {presets.map((p) => (
           <button key={p.label} className="chip-btn" onClick={() => onChange({ ...display, window: p.window })}>
-            {p.label}
+            {t(p.label)}
           </button>
         ))}
       </div>
       {showOpacity && (
         <label className="field">
-          Deckkraft {Math.round(display.opacity * 100)} %
+          {t("Deckkraft {v} %", { v: Math.round(display.opacity * 100) })}
           <input
             type="range"
             min={0}

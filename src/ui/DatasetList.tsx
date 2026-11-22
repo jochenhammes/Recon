@@ -53,7 +53,7 @@ export function DatasetList({
                 <button
                   className="dataset-row-main"
                   aria-expanded={expanded}
-                  title={t("{title} – Details {v}", { title: r.title, v: expanded ? "ausblenden" : "anzeigen" })}
+                  title={t("{title} – Details {v}", { title: r.title, v: expanded ? t("ausblenden") : t("anzeigen") })}
                   onClick={() =>
                     !single &&
                     setOpen((o) => {
@@ -89,8 +89,8 @@ export function DatasetList({
                     <button
                       className={`icon-btn small${r.isShown ? " on" : ""}`}
                       disabled={r.isBase}
-                      title={r.isBase ? t("Basis der Ansicht (immer angezeigt)") : r.isShown ? "Ausblenden" : t("Im Viewer einblenden")}
-                      aria-label={r.isShown ? "Ausblenden" : "Einblenden"}
+                      title={r.isBase ? t("Basis der Ansicht (immer angezeigt)") : r.isShown ? t("Ausblenden") : t("Im Viewer einblenden")}
+                      aria-label={r.isShown ? t("Ausblenden") : t("Einblenden")}
                       onClick={() => onToggleShown(r.id)}
                     >
                       {r.isShown ? <Eye size={14} /> : <EyeOff size={14} />}

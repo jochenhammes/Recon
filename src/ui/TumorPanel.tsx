@@ -16,8 +16,8 @@ type PresetId = "suv4" | "suv25" | "pct41" | "liver" | "psma3" | "custom" | "img
 
 const PRESETS: Record<TumorIndication, { id: PresetId; label: string }[]> = {
   lymphoma: [
-    { id: "suv4", label: "SUV ≥ 4,0 (LYSA)" },
-    { id: "suv25", label: "SUV ≥ 2,5" },
+    { id: "suv4", label: tk("SUV ≥ 4,0 (LYSA)") },
+    { id: "suv25", label: tk("SUV ≥ 2,5") },
     { id: "pct41", label: tk("41 % SUVmax je Läsion") },
     { id: "liver", label: tk("Leber: 1,5 × Mittel + 2 SD (PERCIST)") },
     { id: "custom", label: tk("Eigene SUV-Schwelle") },
@@ -142,7 +142,7 @@ export function TumorPanel(props: TumorPanelProps) {
       <Card title={<>{t("Tumorlast (metabolisches Tumorvolumen)")}</>}>
         <div className="segmented-control" role="group" aria-label={t("Indikation")}>
           <button className={indication === "lymphoma" ? "active" : ""} onClick={() => props.onIndicationChange("lymphoma")}>
-            Lymphom (FDG)
+            {t("Lymphom (FDG)")}
           </button>
           <button className={indication === "psma" ? "active" : ""} onClick={() => props.onIndicationChange("psma")}>
             PSMA
@@ -166,20 +166,20 @@ export function TumorPanel(props: TumorPanelProps) {
           <select value={active} disabled={props.busy} onChange={(e) => setPreset(e.target.value as PresetId)}>
             {presets.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.label}
+                {t(p.label)}
               </option>
             ))}
           </select>
         </label>
         {!suv && active === "imgPct" && (
           <label className="field">
-            Schwelle (% des Bildmaximums)
+            {t("Schwelle (% des Bildmaximums)")}
             <input value={imgPct} onChange={(e) => setImgPct(e.target.value)} />
           </label>
         )}
         {!suv && active === "pct41" && (
           <label className="field">
-            Läsionen erkennen ab (% des Bildmaximums)
+            {t("Läsionen erkennen ab (% des Bildmaximums)")}
             <input value={detectPct} onChange={(e) => setDetectPct(e.target.value)} />
           </label>
         )}
@@ -192,7 +192,7 @@ export function TumorPanel(props: TumorPanelProps) {
         )}
         {active === "custom" && (
           <label className="field">
-            Schwelle ({unit})
+            {t("Schwelle ({unit})", { unit })}
             <input value={customSuv} onChange={(e) => setCustomSuv(e.target.value)} />
           </label>
         )}
@@ -200,7 +200,7 @@ export function TumorPanel(props: TumorPanelProps) {
           <>
             <div className="inline-fields">
               <label className="field">
-                a (× Mittel)
+                {t("a (× Mittel)")}
                 <input value={liverA} onChange={(e) => setLiverA(e.target.value)} />
               </label>
               <label className="field">
@@ -211,7 +211,7 @@ export function TumorPanel(props: TumorPanelProps) {
             </div>
             {props.liver ? (
               <p className="tool-hint">
-                Leber {f(props.liver.mean)} ± {f(props.liver.sd)} {unit} ({f(props.liver.ml, 1)} ml) → Schwelle {f(num(liverA) * props.liver.mean + num(liverB) * props.liver.sd)} {unit}
+                {t("Leber {v} ± {v2} {unit} ({v3} ml) → Schwelle {v4} {unit2}", { v: f(props.liver.mean), v2: f(props.liver.sd), unit, v3: f(props.liver.ml, 1), v4: f(num(liverA) * props.liver.mean + num(liverB) * props.liver.sd), unit2: unit })}
               </p>
             ) : (
               <InfoText warn details={t("Leber-Referenz (PERCIST): 3-cm-Kugel-VOI (Radius 15 mm) im rechten Leberlappen – automatisch aus der CT-Lebermaske oder im Bereich „Bearbeiten“ setzen und hier übernehmen.")}>
@@ -229,12 +229,12 @@ export function TumorPanel(props: TumorPanelProps) {
           </>
         )}
         <label className="field">
-          Organmasken (CT)
+          {t("Organmasken (CT)")}
           <select value={props.organId ?? ""} disabled={props.busy} onChange={(e) => props.onOrganChange(e.target.value || null)}>
             <option value="">{t("keine")}</option>
             {props.organOptions.map((o) => (
               <option key={o.id} value={o.id}>
-                {o.label}
+                {t(o.label)}
               </option>
             ))}
           </select>
@@ -254,7 +254,7 @@ export function TumorPanel(props: TumorPanelProps) {
           <InfoText details={t("Ohne Organmasken: oben „Organe segmentieren“ (CT nötig) – dann werden Niere, Blase usw. automatisch als physiologische Anreicherung ausgeschlossen.")}>{t("Keine Organmasken")}</InfoText>
         )}
         <label className="field">
-          Mindestvolumen je Läsion (ml)
+          {t("Mindestvolumen je Läsion (ml)")}
           <input value={minMl} onChange={(e) => setMinMl(e.target.value)} />
         </label>
         <button className="primary-btn" disabled={props.busy || !m || !props.targetId} onClick={() => m && props.onRun(m, Math.max(0, num(minMl) || 0), indication)}>
@@ -270,7 +270,7 @@ export function TumorPanel(props: TumorPanelProps) {
       >
         <div className="field-row">
           <label className="field">
-            Grenze (% des Maximums)
+            {t("Grenze (% des Maximums)")}
             <input value={growPct} onChange={(e) => setGrowPct(e.target.value)} />
           </label>
           <button
@@ -338,7 +338,7 @@ export function TumorPanel(props: TumorPanelProps) {
           </div>
           {(props.mode === "add" || props.mode === "erase") && (
             <label className="field">
-              Pinselradius {props.brushMm} mm
+              {t("Pinselradius {brushMm} mm", { brushMm: props.brushMm })}
               <input type="range" min={2} max={30} value={props.brushMm} onChange={(e) => props.onBrushMmChange(Number(e.target.value))} />
             </label>
           )}
@@ -357,7 +357,7 @@ export function TumorPanel(props: TumorPanelProps) {
               CSV
             </button>
             <button className="secondary-btn" onClick={props.onExportNifti}>
-              Maske (NIfTI)
+              {t("Maske (NIfTI)")}
             </button>
             <button className="secondary-btn" title={t("Das ganze Tumorlast-Ergebnis (und den Läsionen-Datensatz) löschen")} onClick={props.onClear}>
               {t("Ergebnis löschen")}
@@ -396,7 +396,7 @@ export function TumorPanel(props: TumorPanelProps) {
                       <td>{f(l.suvMax)}</td>
                       <td>{f(l.suvPeak)}</td>
                       <td>{f(l.tlg, 1)}</td>
-                      {props.organId && <td className="organ-cell">{l.bone ? "Knochen" : (l.organ ?? "")}</td>}
+                      {props.organId && <td className="organ-cell">{l.bone ? t("Knochen") : (l.organ ?? "")}</td>}
                     </tr>
                   ))}
               </tbody>
@@ -474,7 +474,7 @@ function ReviewBox({
       </div>
       {cur ? (
         <p className="tool-hint">
-          Läsion {cur.id} ({idx + 1}/{sorted.length}) · {formatValue(cur.volumeMl)} ml · max. {formatValue(cur.suvMax)}
+          {t("Läsion {id} ({v}/{length}) · {v2} ml · max. {v3}", { id: cur.id, v: idx + 1, length: sorted.length, v2: formatValue(cur.volumeMl), v3: formatValue(cur.suvMax) })}
           {cur.bone ? " · Knochen" : cur.organ ? ` · ${cur.organ.replace(/_/g, " ")}` : ""} ·{" "}
           {cur.reviewed ? (cur.included ? t("bestätigt") : "verworfen") : cur.included ? "offen" : t("offen (ausgeschlossen)")}
         </p>
@@ -503,7 +503,7 @@ function ReviewBox({
       )}
       {cur && <p className="tool-hint review-keys">Tastatur: Enter = bestätigen · Entf = verwerfen · ←/→ = blättern</p>}
       <button className="secondary-btn" disabled={!excluded} title={t("Ausgeschlossene Läsionen endgültig entfernen, übrige nach dem Maximum neu nummerieren")} onClick={onCleanup}>
-        Bereinigen{excluded ? t(" ({excluded} ausgeschlossene entfernen)", { excluded }) : ""}
+        {t("Bereinigen")}{excluded ? t(" ({excluded} ausgeschlossene entfernen)", { excluded }) : ""}
       </button>
     </div>
   );

@@ -905,7 +905,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
         info={tr("Standard ist das Profil „Quantitativ (Bq/ml, z. B. xSPECT Quant)“: Bilder mit echten Aktivitätskonzentrationen brauchen keinen Kalibrierfaktor. Für SPECT in Counts ein Profil mit Kalibrierfaktor der Kamerakonfiguration (Kamera, Kollimator, Energiefenster, Rekonstruktion) in cps/MBq anlegen oder aus einer Phantomaufnahme bestimmen: Counts / (Aufnahmedauer × Faktor) = MBq, Zerfall während der Aufnahme korrigiert. Recovery-Koeffizienten (Kugelphantom) korrigieren den Partialvolumeneffekt kleiner Läsionen – auch bei quantitativen Bildern („Mit RC als eigenes Profil“).")}>
         <div className="field-row">
           <label className="field">
-            Nuklid{headerNuclide && headerNuclide !== nuclideId ? tr(" (Header: {headerNuclide})", { headerNuclide }) : ""}
+            {tr("Nuklid")}{headerNuclide && headerNuclide !== nuclideId ? tr(" (Header: {headerNuclide})", { headerNuclide }) : ""}
             <select value={nuclideId} onChange={(e) => set((s) => ({ ...s, nuclide: e.target.value }))}>
               {THERAPY_NUCLIDES.map((n) => (
                 <option key={n} value={n}>
@@ -915,7 +915,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
             </select>
           </label>
           <label className="field">
-            Elektronen (keV/Zerfall)
+            {tr("Elektronen (keV/Zerfall)")}
             <input type="text" inputMode="decimal" placeholder={String(DEFAULT_ENERGIES[nuclideId]?.electronKeV ?? "")} value={setup.energyOverride[nuclideId] ?? ""}
               onChange={(e) => set((s) => {
                 const v = numOrUndef(e.target.value);
@@ -980,7 +980,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
               <>
                 <p className="tool-hint">
                   Organkarte{tps[0].lesionSetId ? tr(" und Läsionen") : ""} von T1 ({byId(organIdOf(tps[0]))?.label ?? tr("keine Organkarte")}) gelten über die Registrierung für alle Zeitpunkte; eigene Labelbilder der anderen
-                  Zeitpunkte werden nicht verwendet.
+                  {tr("Zeitpunkte werden nicht verwendet.")}
                 </p>
                 {tps.slice(1).some((t) => !isRegistered(t)) && (
                   <InfoText warn details={tr("Die Labelbilder von T1 werden über die Registrierung auf die anderen Zeitpunkte übertragen. Ohne Registrierung liegen sie dort an der falschen Stelle. „Zeitpunkte registrieren“ (Karte Zeitpunkte) oder im Bereich Koregistrierung.")}>
@@ -1025,7 +1025,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                   <option value="all">{tr("alle Zeitpunkte")}</option>
                   {tpViews.map((tp, n) => (
                     <option key={tp.spectId} value={tp.spectId}>
-                      Zeitpunkt {n + 1}
+                      {tr("Zeitpunkt {v}", { v: n + 1 })}
                     </option>
                   ))}
                 </select>
@@ -1060,7 +1060,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                 {tr("Läsionen über Zeitpunkte")}
               </InfoText>
               <label className="field">
-                max. Abstand (mm)
+                {tr("max. Abstand (mm)")}
                 <input type="text" inputMode="decimal" value={maxMm} onChange={(e) => set((s) => ({ ...s, lesionLinks: { manual: s.lesionLinks?.manual ?? {}, maxMm: numOrUndef(e.target.value) ?? 20 } }))} />
               </label>
             </div>
@@ -1143,7 +1143,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                 <Chart series={chart} xLabel={tr("Zeit p.i. (h)")} yLabel={tr("{name} (MBq)", { name: sel.name })} />
                 <div className="field-row">
                   <label className="field">
-                    Modell ({sel.name})
+                    {tr("Modell ({name})", { name: sel.name })}
                     <select value={sel.opts.model} onChange={(e) => setRegion(sel.key, { model: e.target.value as TacModel | "auto" })}>
                       <option value="auto">{tr("automatisch")}</option>
                       {(Object.keys(TAC_MODEL_LABELS) as TacModel[]).map((m) => (
@@ -1154,17 +1154,17 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                     </select>
                   </label>
                   <label className="field">
-                    T_eff Population (h)
+                    {tr("T_eff Population (h)")}
                     <input type="text" inputMode="decimal" placeholder={tr("für Madsen")} value={sel.opts.teffH ?? ""} onChange={(e) => setRegion(sel.key, { teffH: numOrUndef(e.target.value) })} />
                   </label>
                 </div>
                 <div className="field-row">
                   <label className="field">
-                    α/β (Gy) für BED
+                    {tr("α/β (Gy) für BED")}
                     <input type="text" inputMode="decimal" placeholder={bedParams(sel.name, { ...sel.opts, alphaBeta: undefined }).alphaBeta?.toString() ?? "–"} value={sel.opts.alphaBeta ?? ""} onChange={(e) => setRegion(sel.key, { alphaBeta: numOrUndef(e.target.value) })} />
                   </label>
                   <label className="field">
-                    Reparatur-T½ (h)
+                    {tr("Reparatur-T½ (h)")}
                     <input type="text" inputMode="decimal" placeholder={bedParams(sel.name, { ...sel.opts, repairH: undefined }).repairH?.toString() ?? "–"} value={sel.opts.repairH ?? ""} onChange={(e) => setRegion(sel.key, { repairH: numOrUndef(e.target.value) })} />
                   </label>
                 </div>
@@ -1259,11 +1259,11 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
               </InfoText>
             <div className="field-row">
               <label className="field">
-                Vorgabe Nieren α/β (Gy)
+                {tr("Vorgabe Nieren α/β (Gy)")}
                 <input type="text" inputMode="decimal" value={setup.bed.alphaBeta} onChange={(e) => set((s) => ({ ...s, bed: { ...s.bed, alphaBeta: numOrUndef(e.target.value) ?? s.bed.alphaBeta } }))} />
               </label>
               <label className="field">
-                Reparatur-T½ (h)
+                {tr("Reparatur-T½ (h)")}
                 <input type="text" inputMode="decimal" value={setup.bed.repairHalfTimeH} onChange={(e) => set((s) => ({ ...s, bed: { ...s.bed, repairHalfTimeH: numOrUndef(e.target.value) ?? s.bed.repairHalfTimeH } }))} />
               </label>
             </div>
@@ -1307,7 +1307,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
         </div>
         <div className="field-row three">
           <label className="field">
-            Kernel-Voxel (mm)
+            {tr("Kernel-Voxel (mm)")}
             <input type="text" inputMode="decimal" placeholder={tpViews[0] ? byId(tpViews[0].spectId)?.dataset.current.geometry.spacing[0].toFixed(2) : ""} value={kernelVoxel} onChange={(e) => setKernelVoxel(e.target.value)} />
           </label>
           <label className="field">
@@ -1537,7 +1537,7 @@ function ProfileEditor({
             </label>
           </div>
           <label className="field">
-            Recovery (Volumen ml : RC; …)
+            {tr("Recovery (Volumen ml : RC; …)")}
             <input type="text" value={draft.rc} placeholder="0,5:0,3; 1,2:0,45; 26,5:0,8" onChange={(e) => setDraft({ ...draft, rc: e.target.value })} />
           </label>
           <div className="button-row">

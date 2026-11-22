@@ -87,7 +87,7 @@ export function VolumeUploadPanel({ onLoaded, title = t("Volumen laden"), descri
         />
       </div>
       <button className="link-btn" disabled={busy} onClick={() => folderRef.current?.click()}>
-        Ordner wählen (DICOM-Serie)
+        {t("Ordner wählen (DICOM-Serie)")}
       </button>
       <input
         ref={folderRef}

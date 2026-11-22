@@ -34,7 +34,7 @@ export function UploadPanel({ onLoaded }: UploadPanelProps) {
   return (
     <div className="upload-panel">
       <InfoText details={t("Multi-Frame DICOM-Datei (Modality NM) mit den Projektionen beider Detektorköpfe. Falls jeder Kopf als eigene Datei exportiert wurde, können auch zwei Dateien gleichzeitig ausgewählt werden.")}>
-        SPECT-Projektionen (DICOM NM)
+        {t("SPECT-Projektionen (DICOM NM)")}
       </InfoText>
       <div
         className="dropzone"

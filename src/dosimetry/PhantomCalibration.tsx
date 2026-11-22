@@ -85,7 +85,7 @@ export function PhantomCalibration({
       </label>
       <div className="field-row">
         <label className="field">
-          Aktivität (MBq)
+          {t("Aktivität (MBq)")}
           <input type="text" inputMode="decimal" placeholder={h?.injectedMBq !== undefined ? t("{v} (Header)", { v: formatValue(h.injectedMBq) }) : ""} value={activity} onChange={(ev) => setActivity(ev.target.value)} />
         </label>
         <label className="field">
@@ -94,13 +94,13 @@ export function PhantomCalibration({
         </label>
       </div>
       <label className="field">
-        Aufnahmedauer (s)
+        {t("Aufnahmedauer (s)")}
         <input type="text" inputMode="decimal" placeholder={h?.durationSec !== undefined ? t("{v} (Header)", { v: Math.round(h.durationSec) }) : "fehlt"} value={duration} onChange={(ev) => setDuration(ev.target.value)} />
       </label>
       {quantitative && <p className="tool-hint tool-warning">{t("Das Bild ist bereits in Bq/ml – ein Kalibrierfaktor ist dafür nicht nötig.")}</p>}
       {e && (
         <p className="tool-hint">
-          Summe {formatValue(Number(counts.toPrecision(4)))} Counts
+          {t("Summe {v} Counts", { v: formatValue(Number(counts.toPrecision(4))) })}
           {hours !== undefined ? t(" · Aufnahme {v} h nach der Aktivitätsmessung", { v: hours.toFixed(2).replace(".", ",") }) : ""}
           {decayCorrected ? ` · ${t("Bild zerfallskorrigiert")}` : ""}
         </p>

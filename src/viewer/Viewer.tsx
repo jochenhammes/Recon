@@ -668,7 +668,7 @@ function MipView({ layer, transform, onTransformChange, onWindowDrag, onDoubleCl
             }}
           />
           <button className="mini-btn" onClick={() => setRotating((r) => !r)}>
-            {rotating ? "Stop" : "Rotieren"}
+            {rotating ? "Stop" : tr("Rotieren")}
           </button>
         </>
       }
@@ -805,7 +805,7 @@ function Legend({
               }}
             >
               <i style={{ background: lutGradient(c.value) }} />
-              {c.label}
+              {tr(c.label)}
             </button>
           ))}
         </div>

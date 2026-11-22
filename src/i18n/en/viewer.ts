@@ -48,6 +48,7 @@ export const viewer: Record<string, string> = {
   "Program: {v}": "Program: {v}",
   "Rechts ziehen": "Right drag",
   "Regenbogen": "Rainbow",
+  "Rotieren": "Rotate",
   "Schicht wechseln": "Change slice",
   "Screenshot": "Screenshot",
   "Serie mit {length} Datei(en)": "Series with {length} file(s)",

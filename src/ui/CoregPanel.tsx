@@ -35,10 +35,10 @@ export function CoregSettingsForm(props: CoregSettingsFormProps) {
     <>
       <div className="segmented-control" role="group" aria-label={t("Freiheitsgrade")}>
         <button className={settings.dof === 6 ? "active" : ""} disabled={running} onClick={() => set({ dof: 6 })}>
-          Rigide (6)
+          {t("Rigide (6)")}
         </button>
         <button className={settings.dof === 12 ? "active" : ""} disabled={running} onClick={() => set({ dof: 12 })}>
-          Affin (12)
+          {t("Affin (12)")}
         </button>
       </div>
       <div className="field-row">
@@ -58,7 +58,7 @@ export function CoregSettingsForm(props: CoregSettingsFormProps) {
           <select value={preset} disabled={running} onChange={(e) => set({ levels: LEVEL_PRESETS[Number(e.target.value)].levels })}>
             {LEVEL_PRESETS.map((p, i) => (
               <option key={p.label} value={i}>
-                {p.label}
+                {t(p.label)}
               </option>
             ))}
           </select>

@@ -129,18 +129,10 @@ export function SegBenchmarkCard(props: SegBenchmarkCardProps) {
       info={
         <>
           <p>
-            Segmentiert ein CT nacheinander mit den gewählten Modellen und
-            vergleicht die Laufzeit auf diesem Rechner. Mit einem
-            Referenz-Labelbild (z. B. manuelle Segmentierung, als NIfTI mit
-            Regionentabelle geladen) wird zusätzlich der Dice-Koeffizient je
-            Struktur berechnet.
+            {t("Segmentiert ein CT nacheinander mit den gewählten Modellen und vergleicht die Laufzeit auf diesem Rechner. Mit einem Referenz-Labelbild (z. B. manuelle Segmentierung, als NIfTI mit Regionentabelle geladen) wird zusätzlich der Dice-Koeffizient je Struktur berechnet.")}
           </p>
           <p>
-            Strukturen werden über ihre Namen zugeordnet
-            (TotalSegmentator-Namen; Herzteile → Herz, „right kidney“ →
-            kidney_right usw.). Der Mittelwert nutzt nur Strukturen, die alle
-            Modelle und die Referenz enthalten. Die Referenz muss im
-            Koordinatensystem des CTs liegen.
+            {t("Strukturen werden über ihre Namen zugeordnet (TotalSegmentator-Namen; Herzteile → Herz, „right kidney“ → kidney_right usw.). Der Mittelwert nutzt nur Strukturen, die alle Modelle und die Referenz enthalten. Die Referenz muss im Koordinatensystem des CTs liegen.")}
           </p>
           <p>
             {t("Reproduzierbarer Vergleich auf öffentlichen Daten: tools/ctseg-benchmark im Repository.")}
@@ -182,7 +174,7 @@ export function SegBenchmarkCard(props: SegBenchmarkCardProps) {
             </select>
           </label>
           <div className="field">
-            Modelle
+            {t("Modelle")}
             {CT_MODELS.map((m) => (
               <label
                 key={m.id}
@@ -237,7 +229,7 @@ export function SegBenchmarkCard(props: SegBenchmarkCardProps) {
               }
             >
               {models.length} {models.length === 1 ? "Modell" : "Modelle"}{" "}
-              vergleichen
+              {t("vergleichen")}
             </button>
           ) : (
             <>

@@ -75,14 +75,10 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
         info={
           <>
             <p>
-              Räumliche Normalisierung in den MNI-Standardraum – nur für Hirnuntersuchungen. Grundlage ist ein Datensatz des Patienten: am besten
-              das T1-MRT, sonst das Hirn-PET/SPECT oder das Kopf-CT (z. B. aus dem PET/CT). Die Vorlage wird passend gewählt: T1 → MNI152-T1,
-              PET/SPECT nach dem Tracer im Header (FDG, Amyloid → PiB, FP-CIT/DaTSCAN, ¹⁸F-DOPA, Raclopride, sonst Perfusion), CT →
-              SPM-Transmissionsbild. Weitere Vorlagen in der Karte „Vorlagen &amp; Atlanten“ (Daten).
+              {t("Räumliche Normalisierung in den MNI-Standardraum – nur für Hirnuntersuchungen. Grundlage ist ein Datensatz des Patienten: am besten das T1-MRT, sonst das Hirn-PET/SPECT oder das Kopf-CT (z. B. aus dem PET/CT). Die Vorlage wird passend gewählt: T1 → MNI152-T1, PET/SPECT nach dem Tracer im Header (FDG, Amyloid → PiB, FP-CIT/DaTSCAN, ¹⁸F-DOPA, Raclopride, sonst Perfusion), CT → SPM-Transmissionsbild. Weitere Vorlagen in der Karte „Vorlagen & Atlanten“ (Daten).")}
             </p>
             <p>
-              Vorlagen in 1 mm werden für die Schätzung auf 2 mm gemittelt (gleiche Geschwindigkeit). Das Ausgaberaster ist wählbar: das der
-              Vorlage oder MNI 2009c in 1 mm (das Verformungsfeld wird dafür interpoliert; braucht etwa achtmal so viel Speicher je Datensatz).
+              {t("Vorlagen in 1 mm werden für die Schätzung auf 2 mm gemittelt (gleiche Geschwindigkeit). Das Ausgaberaster ist wählbar: das der Vorlage oder MNI 2009c in 1 mm (das Verformungsfeld wird dafür interpoliert; braucht etwa achtmal so viel Speicher je Datensatz).")}
             </p>
             <p>
               {t("Alle anderen Datensätze werden über ihre Koregistrierung mit diesem Datensatz mitgenommen – PET also vorher im Bereich „Koregistrierung“ auf das CT/MRT registrieren.")}
@@ -94,7 +90,7 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
         status={running ? { text: t("läuft"), tone: "run" } : normalization ? { text: normalization.kind === "affine" ? "✓ affin" : normalization.kind === "nonlinear" ? "✓ nichtlinear" : "✓ Feld", tone: "ok" } : null}
       >
         <label className="field">
-          Grundlage (Patientendatensatz)
+          {t("Grundlage (Patientendatensatz)")}
           <select value={props.subjectId ?? ""} disabled={running} onChange={(e) => props.onSubjectChange(e.target.value)}>
             {props.subjects.map((s) => (
               <option key={s.id} value={s.id}>
@@ -145,7 +141,7 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
         )}
         <div className="segmented-control" role="group" aria-label={t("Methode")}>
           <button className={props.method === "affine" ? "active" : ""} disabled={running} onClick={() => props.onMethodChange("affine")}>
-            Affin (12)
+            {t("Affin (12)")}
           </button>
           <button
             className={props.method === "nonlinear" ? "active" : ""}
@@ -169,7 +165,7 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
         {props.maskAvailable && (
           <label className="checkbox-field">
             <input type="checkbox" checked={props.useMask} disabled={running} onChange={(e) => props.onUseMaskChange(e.target.checked)} />
-            Nur Gehirn der Vorlage verwenden (Hirnmaske)
+            {t("Nur Gehirn der Vorlage verwenden (Hirnmaske)")}
           </label>
         )}
         {!running ? (
@@ -198,7 +194,7 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
         )}
         {normalization?.warp && normalization.warp.foldedFraction > 0 && (
           <div className="error-banner">
-            Verformung faltet sich in {(100 * normalization.warp.foldedFraction).toFixed(2)} % der Hirnvoxel (Jacobi-Determinante ≤ 0) – stärkere Regularisierung wählen.
+            {t("Verformung faltet sich in {v} % der Hirnvoxel (Jacobi-Determinante ≤ 0) – stärkere Regularisierung wählen.", { v: (100 * normalization.warp.foldedFraction).toFixed(2) })}
           </div>
         )}
         {props.error && <div className="error-banner">{props.error}</div>}
@@ -231,7 +227,7 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
               </label>
             ))}
             <label className="field">
-              Interpolation (Labelbilder immer nächster Nachbar)
+              {t("Interpolation (Labelbilder immer nächster Nachbar)")}
               <select value={interp} disabled={props.transferBusy} onChange={(e) => setInterp(e.target.value as Interpolation)}>
                 {(Object.keys(INTERPOLATION_LABELS) as Interpolation[]).map((m) => (
                   <option key={m} value={m}>

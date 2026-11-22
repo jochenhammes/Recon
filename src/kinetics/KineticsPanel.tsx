@@ -276,8 +276,7 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
     <>
       <Card title={<>{t("1 · Dynamische Serie")}</>} info={
             <>
-              Kinetische Modellierung mit Referenzregion (ohne Blutentnahme): Patlak für irreversibel bindende Tracer (z. B. FDOPA, FDG) und SRTM für
-              reversibel bindende Tracer (Rezeptorliganden, Amyloid). Portierung eines MATLAB-Pakets der wissenschaftlichen Arbeitsgruppe MMNI der Universität zu Köln, deren Alumnus der Autor dieser App ist (github.com/ghaefner/kinetic-modeling).
+              {t("Kinetische Modellierung mit Referenzregion (ohne Blutentnahme): Patlak für irreversibel bindende Tracer (z. B. FDOPA, FDG) und SRTM für reversibel bindende Tracer (Rezeptorliganden, Amyloid). Portierung eines MATLAB-Pakets der wissenschaftlichen Arbeitsgruppe MMNI der Universität zu Köln, deren Alumnus der Autor dieser App ist (github.com/ghaefner/kinetic-modeling).")}
             </>
           } done={!!dyn?.inMni} status={info ? { text: t("{length} Frames{v}", { length: info.frames.length, v: dyn?.inMni ? " · MNI" : "" }), tone: dyn?.inMni ? "ok" : "info" } : { text: t("keine Daten"), tone: "warn" }}>
         {api.dynamics.length === 0 ? (
@@ -347,7 +346,7 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
         <>
           <Card title={<>{t("2 · Bewegungskorrektur")}</>} info={t("Frames ab der Startzeit werden rigide auf die gewählte Referenz registriert; frühere Frames (wenig Signal) übernehmen die Lage des ersten registrierten Frames.")} done={!!info.motion} status={info.motion ? { text: t("✓ korrigiert"), tone: "ok" } : null}>
             <label className="field">
-              Registrieren ab (s nach Start)
+              {t("Registrieren ab (s nach Start)")}
               <input value={fromSec} disabled={!!busy} onChange={(e) => setFromSec(e.target.value)} />
             </label>
             <label className="field">
@@ -369,7 +368,7 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
                 <Chart xLabel={t("Frame-Mitte (min)")} yLabel={t("max. Verschiebung (mm)")} series={[{ label: t("Bewegung"), x: frameMids({ start: minutes(info.start), duration: minutes(info.duration) }), y: info.motion.map((m) => m.maxShiftMm), style: "both", color: "#a78bfa" }]} />
                 {maxShift! > 2 && (
                   <InfoText warn details={t("Die Bewegung wurde korrigiert; das Ergebnis bitte im Viewer prüfen (Frames durchblättern).")}>
-                    Bewegung bis {fmt(maxShift!, 1)} mm
+                    {t("Bewegung bis {v} mm", { v: fmt(maxShift!, 1) })}
                   </InfoText>
                 )}
               </>
@@ -380,8 +379,7 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
                   <p>{t("Summenbild → T1 rigide und T1 → MNI affin (wie bei Centiloid), oder ohne MRT affin auf die SPM-PET-Vorlage; danach werden alle Frames übertragen.")}</p>
                   <p>{t("Alternativ im Bereich „Standardraum“ normalisieren (Grundlage T1, PET oder CT): Die dynamische Serie wird dort mit allen anderen Datensätzen übertragen und erscheint hier oben als Serie im MNI-Raum.")}</p>
                   <p>
-                    Das Summenbild des Zeitfensters wird registriert; die Transformation gilt für alle Frames. Frühe Frames (z. B. 0–10 min) zeigen meist die
-                    Perfusion und passen gut zur SPM-PET-Vorlage, späte Frames die Tracerbindung.
+                    {t("Das Summenbild des Zeitfensters wird registriert; die Transformation gilt für alle Frames. Frühe Frames (z. B. 0–10 min) zeigen meist die Perfusion und passen gut zur SPM-PET-Vorlage, späte Frames die Tracerbindung.")}
                   </p>
                 </>
               }>
@@ -391,7 +389,7 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
                 <input value={regFrom} disabled={!!busy} onChange={(e) => setRegFrom(e.target.value)} />
               </label>
               <label className="field">
-                bis (min)
+                {t("bis (min)")}
                 <input value={regTo} placeholder={fmt((info.start.at(-1)! + info.duration.at(-1)!) / 60, 0)} disabled={!!busy} onChange={(e) => setRegTo(e.target.value)} />
               </label>
             </div>
@@ -447,15 +445,15 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
               </label>
               <div className="segmented-control" role="group" aria-label={t("Modell")}>
                 <button className={model === "srtm" ? "active" : ""} onClick={() => setModel("srtm")}>
-                  SRTM (reversibel)
+                  {t("SRTM (reversibel)")}
                 </button>
                 <button className={model === "patlak" ? "active" : ""} onClick={() => setModel("patlak")}>
-                  Patlak (irreversibel)
+                  {t("Patlak (irreversibel)")}
                 </button>
               </div>
               {model === "patlak" ? (
                 <label className="field">
-                  Startzeit t* der linearen Phase (min)
+                  {t("Startzeit t* der linearen Phase (min)")}
                   <input value={tStar} disabled={!!busy} onChange={(e) => setTStar(e.target.value)} />
                 </label>
               ) : (

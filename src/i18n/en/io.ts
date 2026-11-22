@@ -39,6 +39,7 @@ export const io: Record<string, string> = {
   "Koordinatenursprung neu gesetzt": "Coordinate origin reset",
   "Leber": "Liver",
   "Lunge": "Lung",
+  "MRT": "MRI",
   "NIfTI-Import {displayName}": "NIfTI import {displayName}",
   "Neuer Wert in {length} von {length2} Datei(en) auf das Original-Werteraster gerundet ": "New value rounded to the original value grid in {length} of {length2} file(s) ",
   "Nur Großbuchstaben, Ziffern, Leerzeichen und _ erlaubt.": "Only capital letters, digits, spaces and _ allowed.",

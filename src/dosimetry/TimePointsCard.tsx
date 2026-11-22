@@ -142,13 +142,11 @@ export function TimePointsCard(p: TimePointsCardProps) {
       info={
         <>
           <p>
-            Je Messzeitpunkt ein Funktionsbild (SPECT in Counts oder quantitativ in Bq/ml, auch PET) mit dem CT derselben Aufnahme, der Organkarte
-            (CT-Segmentierung) und optional einem Läsionsbild. Die Datensätze werden automatisch nach FrameOfReference, Studie und Aufnahmezeit
-            (DICOM-Header) zu Aufnahmen gruppiert; jede Rolle lässt sich per Auswahl ändern.
+            {t("Je Messzeitpunkt ein Funktionsbild (SPECT in Counts oder quantitativ in Bq/ml, auch PET) mit dem CT derselben Aufnahme, der Organkarte (CT-Segmentierung) und optional einem Läsionsbild. Die Datensätze werden automatisch nach FrameOfReference, Studie und Aufnahmezeit (DICOM-Header) zu Aufnahmen gruppiert; jede Rolle lässt sich per Auswahl ändern.")}
           </p>
           <p>
             Zeit p.i. = Aufnahmezeit − Injektion (beides aus dem Header, überschreibbar). Die Zeitachse zeigt alle Aufnahmen; grau = nicht als
-            Zeitpunkt verwendet (Klick: hinzufügen).
+            {t("Zeitpunkt verwendet (Klick: hinzufügen).")}
           </p>
         </>
       }
@@ -159,7 +157,7 @@ export function TimePointsCard(p: TimePointsCardProps) {
           <input type="datetime-local" value={p.injection.ms ? toLocalInput(p.injection.ms) : ""} onChange={(e) => p.onInjection({ timeMs: e.target.value ? new Date(e.target.value).getTime() : null })} />
         </label>
         <label className="field">
-          Aktivität (MBq)
+          {t("Aktivität (MBq)")}
           <input type="text" inputMode="decimal" value={p.injection.mbq ?? ""} onChange={(e) => p.onInjection({ activityMBq: numOrUndef(e.target.value) ?? null })} />
         </label>
       </div>
@@ -266,7 +264,7 @@ export function TimePointsCard(p: TimePointsCardProps) {
                     <input type="text" inputMode="decimal" placeholder={v.tH !== undefined && v.tHoursManual === undefined ? v.tH.toFixed(2) : "fehlt"} value={v.tHoursManual ?? ""} onChange={(e) => p.onUpdate(v.spectId, { tHoursManual: numOrUndef(e.target.value) })} />
                   </label>
                   <label className="field">
-                    Dauer (s)
+                    {t("Dauer (s)")}
                     <input type="text" inputMode="decimal" placeholder={v.durationSec !== undefined && v.durationSecManual === undefined ? String(Math.round(v.durationSec)) : "fehlt"} value={v.durationSecManual ?? ""} onChange={(e) => p.onUpdate(v.spectId, { durationSecManual: numOrUndef(e.target.value) })} />
                   </label>
                   <label className="checkbox-field" title={t("Bild bereits auf den Aufnahmebeginn zerfallskorrigiert")}>
@@ -337,7 +335,7 @@ export function TimePointsCard(p: TimePointsCardProps) {
       {p.views.length > 1 && (
         <>
           <button className="secondary-btn" disabled={p.busy || !p.views[0].ctId || usable < 2} onClick={p.onRegister}>
-            Zeitpunkte registrieren (CT → CT von T1)
+            {t("Zeitpunkte registrieren (CT → CT von T1)")}
           </button>
           <InfoText details={t("Rigide CT-CT-Registrierung aller Zeitpunkte auf T1; Funktionsbild und Labelbilder eines Zeitpunkts werden mitbewegt. Gleichwertig: im Bereich „Koregistrierung“ mit dem CT von T1 als Basis die CTs der übrigen Zeitpunkte starr registrieren (SPECT, Organkarte und Läsionsbild derselben Aufnahme folgen) – der Status „registriert“ wird hier erkannt. Nötig für die Voxel-Dosiskarte, für Labelbilder, die für alle Zeitpunkte gelten, und für die Zuordnung der Läsionen.")}>
             {t("Für Voxelkarte und Läsionen nötig")}

@@ -63,7 +63,7 @@ export function ReconControls({ projectionSet, busy, progress, onStart, onCancel
         <dd>
           {detectorSummaries.map((s) => (
             <div key={s.d}>
-              Kopf {s.d + 1}: {s.min.toFixed(0)}°–{s.max.toFixed(0)}°
+              {t("Kopf {v}: {v2}°–{v3}°", { v: s.d + 1, v2: s.min.toFixed(0), v3: s.max.toFixed(0) })}
               {s.unique !== s.count && <span style={{ color: "orange" }}> ({s.unique} eindeutig / {s.count} frames)</span>}
             </div>
           ))}
@@ -106,7 +106,7 @@ export function ReconControls({ projectionSet, busy, progress, onStart, onCancel
           <select value={filterType} onChange={(e) => setFilterType(e.target.value as RampFilterType)} disabled={busy}>
             {FILTERS.map((f) => (
               <option key={f.value} value={f.value}>
-                {f.label}
+                {t(f.label)}
               </option>
             ))}
           </select>

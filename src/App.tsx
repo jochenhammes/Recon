@@ -128,6 +128,7 @@ import {
 import type { SpectProjectionSet } from "./dicom/types";
 import "./App.css";
 
+import { T } from "./i18n/T";
 /**
  * A loaded dataset. `matrix` maps its own patient coordinates to the reference dataset's world
  * (identity for the reference itself); it is kept in world space so it stays valid after edits that
@@ -770,7 +771,7 @@ function App() {
           </>
         }
       >
-        Ganze Sitzung als <code>{PROJECT_EXTENSION}</code>-Datei – enthält Patientendaten.
+        <T k="Ganze Sitzung als {c}-Datei – enthält Patientendaten." c={<code>{PROJECT_EXTENSION}</code>} />
       </InfoText>
       {projectError && <div className="error-banner">{projectError}</div>}
     </Card>
@@ -2877,7 +2878,7 @@ function App() {
         <p className="hint">{tx("Eigene Vorlagen:")}</p>
         <VolumeUploadPanel single title={tx("Eigene T1-Vorlage (NIfTI)")} description={tx("z. B. aus SPM oder CAT12.")} onLoaded={(l, n) => addOwnTemplate(l, n, "T1")} />
         <label className="field">
-          Eigene PET-Vorlage (NIfTI; 4D = adaptive Vorlage: amyloid-negativ, amyloid-positiv)
+          {tx("Eigene PET-Vorlage (NIfTI; 4D = adaptive Vorlage: amyloid-negativ, amyloid-positiv)")}
           <input
             type="file"
             accept=".nii,.gz"
@@ -2974,7 +2975,7 @@ function App() {
 
   const overviewVoi = useStableVoi(
     voiMaskData && volume && activeW2v && voi && active
-      ? { mask: voiMaskData, volume, w2v: activeW2v, bounds: voiBounds, label: tx("VOI ({v}) auf {v2}", { v: voi.shape.kind === "sphere" ? "Kugel" : voi.shape.kind === "box" ? "Quader" : "gezeichnet", v2: datasetModality(active.dataset) }) }
+      ? { mask: voiMaskData, volume, w2v: activeW2v, bounds: voiBounds, label: tx("VOI ({v}) auf {v2}", { v: voi.shape.kind === "sphere" ? tx("Kugel") : voi.shape.kind === "box" ? tx("Quader") : tx("gezeichnet"), v2: datasetModality(active.dataset) }) }
       : null,
   );
   const overviewRows = useStableRows(
@@ -3362,7 +3363,7 @@ function App() {
   const tabs: ShellTab[] = [
     { id: "data", label: tx("Daten"), icon: FolderOpen, content: dataTab, badge: entries.length > 1 ? entries.length : undefined },
     { id: "view", label: tx("Ansicht"), icon: Eye, disabled: layers.length === 0, disabledReason: tx("Erst einen Datensatz laden"), content: viewTab },
-    { id: "registration", label: tx("Koregistrierung (Patientenraum)"), shortLabel: "Ko\u00adregis\u00adtrierung", icon: Crosshair, disabled: entries.length < 2, disabledReason: tx("Koregistrierung ab zwei Datensätzen"), content: registrationTab },
+    { id: "registration", label: tx("Koregistrierung (Patientenraum)"), shortLabel: tx("Ko\u00adregis\u00adtrierung"), icon: Crosshair, disabled: entries.length < 2, disabledReason: tx("Koregistrierung ab zwei Datensätzen"), content: registrationTab },
     {
       id: "normalization",
       label: tx("Standardraum (MNI, Hirn)"),
@@ -3934,7 +3935,7 @@ function App() {
             entries.length > 1 &&
             active && (
               <span className="toolbar-note">
-                Aktiv: <strong title={entryLabel(active)}>{entryShort(active, 26)}</strong>
+                {tx("Aktiv:")} <strong title={entryLabel(active)}>{entryShort(active, 26)}</strong>
               </span>
             )
           }

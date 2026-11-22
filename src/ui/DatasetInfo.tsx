@@ -47,7 +47,7 @@ export function DatasetDetails({ dataset, onModalityChange, onNameChange, origin
               <option value="">automatisch ({modalityName(autoModality(src))})</option>
               {MODALITIES.map((m) => (
                 <option key={m.code} value={m.code}>
-                  {m.label}
+                  {t(m.label)}
                 </option>
               ))}
             </select>

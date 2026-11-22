@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { Card } from "./Card";
 
 import { t } from "../i18n";
+import { T } from "../i18n/T";
 export interface DeformationFieldCardProps {
   subjectLabel: string | null;
   canExport: boolean;
@@ -17,13 +18,11 @@ export function DeformationFieldCard(props: DeformationFieldCardProps) {
   return (
     <Card title={<>{t("SPM / CAT12-Verformungsfeld")}</>} info={
           <>
-            Ein in SPM (Segment/Normalise) oder CAT12 berechnetes Feld <code>y_*.nii</code> des Subjekts übernehmen – anschließend lassen sich das T1 und
-            alle dazu coregistrierten Datensätze (z. B. das PET) darüber in den Standardraum übertragen. Das Subjekt muss das Bild sein, auf dem SPM/CAT12
-            gerechnet hat (gleiche Orientierung im Header).
+            <T k="Ein in SPM (Segment/Normalise) oder CAT12 berechnetes Feld {c}y_*.nii{/c} des Subjekts übernehmen – anschließend lassen sich das T1 und alle dazu coregistrierten Datensätze (z. B. das PET) darüber in den Standardraum übertragen. Das Subjekt muss das Bild sein, auf dem SPM/CAT12 gerechnet hat (gleiche Orientierung im Header)." c={(x) => <code>{x}</code>} />
           </>
         } defaultOpen={false} persistKey="spm-field">
       <p className="tool-hint">
-        Feld <code>y_*.nii</code> aus SPM/CAT12 übernehmen.
+        <T k="Feld {c}y_*.nii{/c} aus SPM/CAT12 übernehmen." c={(x) => <code>{x}</code>} />
       </p>
       <input
         ref={input}
@@ -38,7 +37,7 @@ export function DeformationFieldCard(props: DeformationFieldCardProps) {
       />
       <div className="button-row">
         <button className="secondary-btn" disabled={props.busy || !props.subjectLabel} onClick={() => input.current?.click()}>
-          y_*.nii laden{props.subjectLabel ? t(" (für {subjectLabel})", { subjectLabel: props.subjectLabel }) : ""}
+          {t("y_*.nii laden")}{props.subjectLabel ? t(" (für {subjectLabel})", { subjectLabel: props.subjectLabel }) : ""}
         </button>
         <button className="secondary-btn" disabled={props.busy || !props.canExport} onClick={props.onExport}>
           {t("Als y_*.nii speichern")}

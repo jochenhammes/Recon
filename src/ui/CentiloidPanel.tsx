@@ -111,7 +111,7 @@ export function CentiloidPanel(props: CentiloidPanelProps) {
           <a href="https://www.gaaindata.org/data/centiloid/Centiloid_Std_VOI.zip" target="_blank" rel="noreferrer" download>
             {t("Centiloid_Std_VOI.zip")}
           </a>{" "}
-          herunterladen und hier auswählen.
+          {t("herunterladen und hier auswählen.")}
         </InfoText>
       )}
 
@@ -120,7 +120,7 @@ export function CentiloidPanel(props: CentiloidPanelProps) {
         <select value={calId} onChange={(e) => setCalId(e.target.value)}>
           {CALIBRATIONS.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.label}
+              {t(c.label)}
             </option>
           ))}
           <option value="custom">{t("Eigene Gleichung …")}</option>
@@ -150,7 +150,7 @@ export function CentiloidPanel(props: CentiloidPanelProps) {
       ) : (
         <p className="tool-hint">
           CL = {fmt(calibration.slope, 2)} × SUVR {calibration.intercept < 0 ? "−" : "+"} {fmt(Math.abs(calibration.intercept), 2)}; Referenz:{" "}
-          {t(VOI_LABELS[calibration.reference])}; {calibration.window[0]}–{calibration.window[1]} min p. i. – {calibration.source}
+          {t(VOI_LABELS[calibration.reference])}; {calibration.window[0]}–{calibration.window[1]} min p. i. – {t(calibration.source)}
         </p>
       )}
 
@@ -160,7 +160,7 @@ export function CentiloidPanel(props: CentiloidPanelProps) {
         <select value={pet?.id ?? ""} disabled={props.running} onChange={(e) => setPetId(e.target.value)}>
           {props.pets.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.label}
+              {t(p.label)}
             </option>
           ))}
         </select>
@@ -170,7 +170,7 @@ export function CentiloidPanel(props: CentiloidPanelProps) {
         <select value={t1?.id ?? ""} disabled={props.running} onChange={(e) => setT1Id(e.target.value || null)}>
           {props.t1s.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.label}
+              {t(p.label)}
             </option>
           ))}
           <option value="">ohne MRT (PET-only{props.petTemplateLabel ? `: ${props.petTemplateLabel}` : t(" – PET-Vorlage nötig")})</option>
@@ -202,7 +202,7 @@ export function CentiloidPanel(props: CentiloidPanelProps) {
             <select value={std?.id ?? ""} disabled={props.running} onChange={(e) => setStdId(e.target.value)}>
               {props.standardTargets.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.label}
+                  {t(p.label)}
                 </option>
               ))}
             </select>

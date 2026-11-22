@@ -85,12 +85,10 @@ export function RegistrationSetup(props: RegistrationSetupProps) {
         info={
           <>
             <p>
-              Koregistrierung im Patientenraum – für alle Körperregionen: PET/SPECT (auch dynamische Serien; die Frames folgen der Registrierung
-              des Mittelbilds) werden auf CT oder MRT desselben Patienten ausgerichtet, ebenso Folgeuntersuchungen auf die Basis.
+              {t("Koregistrierung im Patientenraum – für alle Körperregionen: PET/SPECT (auch dynamische Serien; die Frames folgen der Registrierung des Mittelbilds) werden auf CT oder MRT desselben Patienten ausgerichtet, ebenso Folgeuntersuchungen auf die Basis.")}
             </p>
             <p>
-              Der Basis-Datensatz definiert den Raum – alle anderen werden darauf ausgerichtet und darin angezeigt. Datensätze derselben Aufnahme
-              (gleiche FrameOfReference, z. B. PET zum CT oder die Organkarte eines CTs) folgen ihrem Datensatz automatisch.
+              {t("Der Basis-Datensatz definiert den Raum – alle anderen werden darauf ausgerichtet und darin angezeigt. Datensätze derselben Aufnahme (gleiche FrameOfReference, z. B. PET zum CT oder die Organkarte eines CTs) folgen ihrem Datensatz automatisch.")}
             </p>
           </>
         }

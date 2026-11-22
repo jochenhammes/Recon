@@ -149,7 +149,7 @@ export function ValueSection(props: ValueSectionProps) {
         <select value={mode} onChange={(e) => changeMode(e.target.value as ValueMode)}>
           {VALUE_MODES.map((m) => (
             <option key={m.value} value={m.value}>
-              {m.label}
+              {tr(m.label)}
             </option>
           ))}
         </select>
@@ -245,9 +245,9 @@ export function VoiSection(props: VoiSectionProps) {
       <div className="segmented-control" role="group" aria-label={t("VOI-Werkzeug")}>
         {(
           [
-            ["sphere", "Kugel"],
-            ["box", "Quader"],
-            ["brush", "Pinsel"],
+            ["sphere", tr("Kugel")],
+            ["box", tr("Quader")],
+            ["brush", tr("Pinsel")],
           ] as [VoiTool, string][]
         ).map(([t, label]) => (
           <button key={t} className={tool === t ? "active" : ""} onClick={() => props.onToolChange(t)}>
@@ -258,7 +258,7 @@ export function VoiSection(props: VoiSectionProps) {
       {tool === "sphere" && (
         <>
           <label className="field">
-            Radius (mm)
+            {tr("Radius (mm)")}
             <input type="number" min={1} step={1} value={props.sphereRadius} onChange={(e) => props.onSphereRadiusChange(Number(e.target.value))} />
           </label>
           <button className="secondary-btn" onClick={props.onPlace}>
@@ -294,7 +294,7 @@ export function VoiSection(props: VoiSectionProps) {
       {tool === "brush" && (
         <>
           <label className="field">
-            Pinselradius (mm)
+            {tr("Pinselradius (mm)")}
             <input type="number" min={1} step={1} value={props.brush.radius} onChange={(e) => props.onBrushChange({ ...props.brush, radius: Number(e.target.value) })} />
           </label>
           <div className="button-row">

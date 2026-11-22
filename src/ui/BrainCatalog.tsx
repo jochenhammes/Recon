@@ -105,8 +105,7 @@ export function BrainCatalog(p: BrainCatalogProps) {
           Selbst herunterladen <span className="catalog-count">{USER_ENTRIES.length}</span>
         </summary>
         <p className="tool-hint">
-          Diese Atlanten dürfen nicht mit der App weitergegeben werden (nicht-kommerzielle Lizenz oder Registrierung). Von der Quelle laden und hier
-          auswählen – die App erkennt sie am Dateinamen, setzt Namen und Labels und speichert sie in diesem Browser für das nächste Mal.
+          {t("Diese Atlanten dürfen nicht mit der App weitergegeben werden (nicht-kommerzielle Lizenz oder Registrierung). Von der Quelle laden und hier auswählen – die App erkennt sie am Dateinamen, setzt Namen und Labels und speichert sie in diesem Browser für das nächste Mal.")}
         </p>
         <ul className="catalog-list">{USER_ENTRIES.map(userRow)}</ul>
         <button className="secondary-btn" onClick={() => fileInput.current?.click()}>

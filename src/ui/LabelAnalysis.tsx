@@ -178,11 +178,10 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
     <Card title={<>{tr("Label-Analyse")}</>} info={
           <>
             <p>
-              Statistik und Histogramm eines Datensatzes je Region einer Segmentierung oder eines Atlas (z. B. CT-Organe auf dem PET, Hirnatlas auf einem
-              PET im Standardraum). Labels auf anderem Raster werden über die Registrierung übertragen (nächster Nachbar).
+              {tr("Statistik und Histogramm eines Datensatzes je Region einer Segmentierung oder eines Atlas (z. B. CT-Organe auf dem PET, Hirnatlas auf einem PET im Standardraum). Labels auf anderem Raster werden über die Registrierung übertragen (nächster Nachbar).")}
             </p>
             <p>
-              Werte in den Einheiten des Datensatzes; Varianz in Einheit², SD und Varianz als Stichprobenwerte (n − 1).
+              {tr("Werte in den Einheiten des Datensatzes; Varianz in Einheit², SD und Varianz als Stichprobenwerte (n − 1).")}
             </p>
           </>
         }>
@@ -207,9 +206,7 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
       <InfoText
         details={
           <>
-            AAL3 (Rolls et al. 2020) wird wegen der Lizenzbedingungen nicht mitgeliefert: die ZIP-Datei herunterladen und hier direkt auswählen. Eigene
-            Labels: NIfTI-Labelbild und optional die Tabelle (TXT/TSV/CSV/LUT) zusammen auswählen. Hirnatlanten gelten nur für Datensätze im MNI-Raum
-            (Panel „Standardraum“).
+            {tr("AAL3 (Rolls et al. 2020) wird wegen der Lizenzbedingungen nicht mitgeliefert: die ZIP-Datei herunterladen und hier direkt auswählen. Eigene Labels: NIfTI-Labelbild und optional die Tabelle (TXT/TSV/CSV/LUT) zusammen auswählen. Hirnatlanten gelten nur für Datensätze im MNI-Raum (Panel „Standardraum“).")}
           </>
         }
       >
@@ -217,7 +214,7 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
         <a href={AAL_URL} target="_blank" rel="noreferrer">
           {tr("herunterladen")}
         </a>{" "}
-        und die ZIP hier auswählen.
+        {tr("und die ZIP hier auswählen.")}
       </InfoText>
       {props.loadError && <div className="error-banner">{props.loadError}</div>}
 
@@ -338,7 +335,7 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
             </button>
             {props.targets.length > 1 && (
               <button className="secondary-btn" onClick={() => exportHistograms(true)}>
-                Alle Datensätze (ZIP, je eine CSV)
+                {tr("Alle Datensätze (ZIP, je eine CSV)")}
               </button>
             )}
           </div>

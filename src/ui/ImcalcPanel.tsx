@@ -3,6 +3,7 @@ import { parseInput } from "../components/format";
 import { Card } from "./Card";
 
 import { t } from "../i18n";
+import { T } from "../i18n/T";
 export interface ImcalcDataset {
   id: string;
   label: string;
@@ -151,14 +152,11 @@ export function ImcalcPanel(props: {
         info={
           <>
             <p>
-              Voxelweise Rechnung auf Datensätzen mit <strong>{t("demselben Raster")}</strong> (gleiche Matrix und Geometrie). Ergebnisse sind neue Datensätze im
-              selben Bildraum – anzeigen, exportieren, im Projekt speichern und weiterverarbeiten wie alle anderen. Daten verschiedener Patienten vorher in
-              den Standardraum bringen.
+              <T k="Voxelweise Rechnung auf Datensätzen mit {b}demselben Raster{/b} (gleiche Matrix und Geometrie). Ergebnisse sind neue Datensätze im selben Bildraum – anzeigen, exportieren, im Projekt speichern und weiterverarbeiten wie alle anderen. Daten verschiedener Patienten vorher in den Standardraum bringen." b={(c) => <strong>{c}</strong>} />
             </p>
-            <p>Gerechnet wird in der angezeigten Einheit (SUV, wenn eingestellt; sonst Originalwerte). Dynamische Serien gehen mit ihrem Mittelbild ein.</p>
+            <p>{t("Gerechnet wird in der angezeigten Einheit (SUV, wenn eingestellt; sonst Originalwerte). Dynamische Serien gehen mit ihrem Mittelbild ein.")}</p>
             <p>
-              Linear: a·X + b · Zwei Datensätze: a·X₁ + b·X₂, X₁·X₂ oder X₁/X₂ (Division durch ≈ 0 ergibt 0) · Gruppe: voxelweiser Mittelwert und
-              Stichproben-SD (n − 1) · Z-Transformation: (Individuum − Mittelwert)/SD je Individuum; Voxel mit SD ≈ 0 ergeben 0.
+              {t("Linear: a·X + b · Zwei Datensätze: a·X₁ + b·X₂, X₁·X₂ oder X₁/X₂ (Division durch ≈ 0 ergibt 0) · Gruppe: voxelweiser Mittelwert und Stichproben-SD (n − 1) · Z-Transformation: (Individuum − Mittelwert)/SD je Individuum; Voxel mit SD ≈ 0 ergeben 0.")}
             </p>
           </>
         }

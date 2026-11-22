@@ -158,7 +158,7 @@ export function LayerToggle({
               <option value="">{t("LUT wie Datensatz")}</option>
               {LUT_CHOICES.filter((l) => l.value !== "labels").map((l) => (
                 <option key={l.value} value={l.value}>
-                  {l.label}
+                  {t(l.label)}
                 </option>
               ))}
             </select>
