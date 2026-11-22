@@ -1003,7 +1003,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                   );
                 })()}
                 {!allHaveLesions && tps.some((t) => t.lesionSetId) && (
-                  <InfoText warn details={tr("Für die Läsionen braucht jeder Zeitpunkt ein eigenes Läsionsbild (in „Segmentierung & MTV“ je SPECT segmentieren); sonst ergäben sich Kurven mit nur einem Punkt. Alternative: „Von T1 für alle“.")}>
+                  <InfoText warn details={tr("Für die Läsionen braucht jeder Zeitpunkt ein eigenes Läsionsbild (in „Segmentierung & Läsionen“ je SPECT segmentieren); sonst ergäben sich Kurven mit nur einem Punkt. Alternative: „Von T1 für alle“.")}>
                     {tr("Läsionen werden in diesem Modus nicht ausgewertet")}
                   </InfoText>
                 )}
@@ -1012,7 +1012,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
           </div>
         )}
         {labelCandidates.length === 0 && (
-          <InfoText details={tr("Organe auf dem CT segmentieren (Karte Zeitpunkte) oder Läsionen im Bereich „Segmentierung & MTV“ erzeugen; eigene Segmentierungen als NIfTI laden.")}>{tr("Noch keine Labelbilder")}</InfoText>
+          <InfoText details={tr("Organe auf dem CT segmentieren (Karte Zeitpunkte) oder Läsionen im Bereich „Segmentierung & Läsionen“ erzeugen; eigene Segmentierungen als NIfTI laden.")}>{tr("Noch keine Labelbilder")}</InfoText>
         )}
         {labelCandidates.map((e) => {
           const ls = setup.labelSets.find((l) => l.id === e.id);
@@ -1117,7 +1117,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
           </div>
         )}
         {measurementStale && (
-          <InfoText warn details={tr("Seit der letzten Messung haben sich Labelbilder geändert – z. B. Läsionen in „Segmentierung & MTV“ bestätigt oder abgewählt, eine Organkarte neu segmentiert oder die Läsionszuordnung korrigiert. Die Ergebnisse unten beruhen noch auf dem alten Stand.")}>
+          <InfoText warn details={tr("Seit der letzten Messung haben sich Labelbilder geändert – z. B. Läsionen in „Segmentierung & Läsionen“ bestätigt oder abgewählt, eine Organkarte neu segmentiert oder die Läsionszuordnung korrigiert. Die Ergebnisse unten beruhen noch auf dem alten Stand.")}>
             {tr("Labelbilder geändert – neu messen")}
           </InfoText>
         )}
@@ -1130,7 +1130,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
       <Card title={<>{tr("Kurven und Dosis")}</>} persistKey="dos-res" status={rows.length ? { text: tr("{length} Regionen", { length: rows.length }), tone: "ok" } : null}
         info={tr("Je Region: Aktivität (MBq, ggf. durch den Recovery-Koeffizienten geteilt) über der Zeit, Fit und zeitintegrierte Aktivität (TIA). Automatisch: 1 Zeitpunkt → Hänscheid (bzw. Madsen mit T_eff), 2 → monoexponentiell, ≥ 3 → biexponentiell mit Aufnahmephase, wenn die Aktivität zwischen den ersten Zeitpunkten noch steigt, sonst monoexponentiell. Die Auswaschung ist nie langsamer als der physikalische Zerfall. Dosis = TIA × Elektronenenergie / Masse (lokale Energiedeposition; Masse aus CT-Dichte). BED = D + D²·λ / ((μ + λ)·α/β) für jede Region mit α/β und Reparatur-Halbwertszeit (Region anklicken; Nieren: Vorgabe unten), mit der effektiven Halbwertszeit des Fits. D2/D50/D98 aus der Voxel-Dosiskarte.")}>
         {measurementStale && rows.length > 0 && (
-          <InfoText warn details={tr("Labelbilder haben sich seit der Messung geändert (z. B. Läsionen in „Segmentierung & MTV“ bestätigt oder abgewählt). Unter „Regionen“ erneut „Aktivitäten messen“.")}>
+          <InfoText warn details={tr("Labelbilder haben sich seit der Messung geändert (z. B. Läsionen in „Segmentierung & Läsionen“ bestätigt oder abgewählt). Unter „Regionen“ erneut „Aktivitäten messen“.")}>
             {tr("Veraltet – Labelbilder geändert")}
           </InfoText>
         )}

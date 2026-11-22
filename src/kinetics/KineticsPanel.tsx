@@ -420,7 +420,7 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
             <AtlasPicker busy={api.atlasBusy} onLoad={api.loadCerebra} />
           </div>
           {api.atlases.length === 0 ? (
-            <p className="tool-hint">{t("Zuerst einen Hirnatlas laden (CerebrA oder AAL3 im Bereich „Analyse“).")}</p>
+            <p className="tool-hint">{t("Zuerst einen Hirnatlas laden (CerebrA oder AAL3 im Bereich „VOI Analyse“).")}</p>
           ) : (
             <>
               <label className="field">

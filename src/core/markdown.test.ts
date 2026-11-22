@@ -6,7 +6,7 @@ describe("markdown for the manual", () => {
   it("makes GitHub-style anchors", () => {
     expect(slug("9. Dosimetrie (SPECT/CT)")).toBe("9-dosimetrie-spectct");
     expect(slug("9. CT-Organsegmentierung")).toBe("9-ct-organsegmentierung");
-    expect(slug("10. Segmentierung & MTV")).toBe("10-segmentierung--mtv");
+    expect(slug("10. Segmentierung & Läsionen")).toBe("10-segmentierung--läsionen");
   });
 
   it("renders headings, lists, tables, code, links, images and escapes HTML", () => {

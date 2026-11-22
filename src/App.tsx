@@ -3375,8 +3375,7 @@ function App() {
     },
     {
       id: "suvr",
-      label: tx("Centiloid & SUVR"),
-      shortLabel: "SUVR",
+      label: tx("SUVR & Centiloid"),
       icon: Gauge,
       disabled: entries.filter((e) => !e.dataset.template).length === 0,
       disabledReason: tx("Erst einen Datensatz laden"),
@@ -3401,8 +3400,8 @@ function App() {
     },
     {
       id: "tumor",
-      label: tx("Segmentierung & MTV"),
-      shortLabel: tx("Segm. & MTV"),
+      label: tx("Segmentierung & Läsionen"),
+      shortLabel: tx("Segm. & Läsionen"),
       icon: Target,
       disabled: tumorTargets.length === 0 && ctEntries.length === 0,
       disabledReason: tx("Erst ein PET oder CT laden"),
@@ -3489,7 +3488,7 @@ function App() {
     },
     {
       id: "analysis",
-      label: tx("Analyse"),
+      label: tx("VOI Analyse"),
       icon: BarChart3,
       disabled: !stats,
       disabledReason: tx("Erst einen Datensatz laden"),
@@ -3709,7 +3708,7 @@ function App() {
       tab: "tumor",
     },
   );
-  act(tumorBusy && { id: "tumor", label: tx("Segmentierung & MTV"), detail: tx("Segmentierung"), tab: "tumor" });
+  act(tumorBusy && { id: "tumor", label: tx("Segmentierung & Läsionen"), detail: tx("Segmentierung"), tab: "tumor" });
   act(fusionBusy && { id: "fusion", label: tx("Fusionsexport"), tab: "view" });
   act(editBusy && { id: "edit", label: tx("Bearbeiten"), tab: "edit" });
   act((catalogBusy || atlasBusy) && { id: "bundled", label: catalogBusy ? tx("Vorlage laden") : tx("Atlas laden"), tab: catalogBusy ? "data" : "analysis" });
@@ -3722,7 +3721,7 @@ function App() {
   act(normError && !normRunning && { id: "norm-error", label: tx("Normalisierung"), error: normError, tab: "normalization" });
   act(coregError && !coregRunning && { id: "coreg-error", label: tx("Koregistrierung"), error: coregError, tab: "registration" });
   act(centiloidError && !centiloidRunning && { id: "centiloid-error", label: tx("Centiloid"), error: centiloidError, tab: "suvr" });
-  act(tumorError && !tumorBusy && { id: "tumor-error", label: tx("Segmentierung & MTV"), error: tumorError, tab: "tumor" });
+  act(tumorError && !tumorBusy && { id: "tumor-error", label: tx("Segmentierung & Läsionen"), error: tumorError, tab: "tumor" });
   // MIP of the topmost visible functional image (not of label images or CT/MR).
   // MIP: own dataset (automatic: PET → SPECT → CT, shown datasets first) and own color table.
   const mipCandidates = [

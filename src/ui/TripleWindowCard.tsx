@@ -69,13 +69,13 @@ export function TripleWindowCard(props: {
             <T k="Künstlicher CT-Datensatz für den schnellen anatomischen Überblick in {b}einem{/b} Fenster: Alle Voxel stehen im Weichteilfenster; Voxel der Lungen (inkl. Trachea) werden so umgerechnet, dass sie wie im Lungenfenster erscheinen, Voxel des Skeletts wie im Knochenfenster." b={(c) => <strong>{c}</strong>} />
           </p>
           <p>
-            {t("Grundlage ist die Organkarte der CT-Segmentierung (Bereich Segmentierung & MTV, 3-mm-Raster). Damit an den Grenzen keine Treppen entstehen, werden Lungen- und Skelettmaske weichgezeichnet (Kantenglättung) und für jedes CT-Voxel interpoliert; die Fenster gehen über ±0,75 mm weich ineinander über. Optional markiert ein schwarzer Rand die Grenze (Lunge: beidseits, Knochen: außen; 0 mm = ohne). Die Werte sind keine echten HU mehr – nicht für Messungen oder Diagnostik verwenden.")}
+            {t("Grundlage ist die Organkarte der CT-Segmentierung (Bereich Segmentierung & Läsionen, 3-mm-Raster). Damit an den Grenzen keine Treppen entstehen, werden Lungen- und Skelettmaske weichgezeichnet (Kantenglättung) und für jedes CT-Voxel interpoliert; die Fenster gehen über ±0,75 mm weich ineinander über. Optional markiert ein schwarzer Rand die Grenze (Lunge: beidseits, Knochen: außen; 0 mm = ohne). Die Werte sind keine echten HU mehr – nicht für Messungen oder Diagnostik verwenden.")}
           </p>
         </>
       }
     >
       {props.cts.length === 0 || props.organSets.length === 0 ? (
-        <p className="tool-hint" title={t("Organkarte: Bereich „Segmentierung & MTV“ → CT-Organsegmentierung")}>{t("Benötigt CT + Organkarte")}</p>
+        <p className="tool-hint" title={t("Organkarte: Bereich „Segmentierung & Läsionen“ → CT-Organsegmentierung")}>{t("Benötigt CT + Organkarte")}</p>
       ) : (
         <>
           <label className="field">

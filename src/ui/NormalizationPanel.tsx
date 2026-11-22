@@ -204,7 +204,7 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
       {normalization && (
         <Card
           title={<>{t("2 · Datensätze im Standardraum")}</>}
-          info={t("Alle Datensätze des Patientenraums werden über ihre Koregistrierung und die Normalisierung in den Standardraum resampelt (Labelbilder mit nächstem Nachbarn, dynamische Serien Frame für Frame) und als neue Datensätze angelegt. Eine erneute Übertragung ersetzt die älteren Kopien. Danach: Atlas-Auswertung (Centiloid & SUVR, Analyse → Label-Analyse, Kinetik) oder Export.")}
+          info={t("Alle Datensätze des Patientenraums werden über ihre Koregistrierung und die Normalisierung in den Standardraum resampelt (Labelbilder mit nächstem Nachbarn, dynamische Serien Frame für Frame) und als neue Datensätze angelegt. Eine erneute Übertragung ersetzt die älteren Kopien. Danach: Atlas-Auswertung (SUVR & Centiloid, VOI Analyse → Label-Analyse, Kinetik) oder Export.")}
           status={props.transferBusy ? { text: t("läuft"), tone: "run" } : props.transferred.length ? { text: `✓ ${props.transferred.length}`, tone: "ok" } : null}
         >
           {props.transferred.length > 0 && (

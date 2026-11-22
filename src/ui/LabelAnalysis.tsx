@@ -219,7 +219,7 @@ export function LabelAnalysis(props: LabelAnalysisProps) {
       {props.loadError && <div className="error-banner">{props.loadError}</div>}
 
       {props.labelSets.length === 0 ? (
-        <InfoText details={tr("Labels entstehen durch die CT-Organsegmentierung (Bereich „Segmentierung & MTV“), einen Atlas (Bereich „Analyse“ bzw. „Standardraum“) oder ein geladenes Labelbild.")}>{tr("Noch keine Labels")}</InfoText>
+        <InfoText details={tr("Labels entstehen durch die CT-Organsegmentierung (Bereich „Segmentierung & Läsionen“), einen Atlas (Bereich „VOI Analyse“ bzw. „Standardraum“) oder ein geladenes Labelbild.")}>{tr("Noch keine Labels")}</InfoText>
       ) : (
         <>
           <label className="field">

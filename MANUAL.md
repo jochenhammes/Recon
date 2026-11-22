@@ -14,8 +14,8 @@ Beispieldaten; die Abbildung in Kapitel 9 stammt aus einer realen xSPECT/CT-Dosi
 8. [Kinetik (dynamisches PET)](#8-kinetik-dynamisches-pet)
 9. [Dosimetrie (SPECT/CT)](#9-dosimetrie-spectct)
 10. [CT-Organsegmentierung](#10-ct-organsegmentierung)
-11. [Segmentierung & MTV](#11-segmentierung--mtv)
-12. [Analyse und Label-Analyse](#12-analyse-und-label-analyse)
+11. [Segmentierung & Läsionen](#11-segmentierung--läsionen)
+12. [VOI Analyse und Label-Analyse](#12-voi-analyse-und-label-analyse)
     – [IMCALC: voxelweise Rechnung](#imcalc-voxelweise-rechnung)
 13. [Bearbeiten](#13-bearbeiten)
 14. [DICOM-Header](#14-dicom-header)
@@ -30,8 +30,8 @@ Beispieldaten; die Abbildung in Kapitel 9 stammt aus einer realen xSPECT/CT-Dosi
 
 ![Startbildschirm](docs/images/01-start.jpg)
 
-- **Linke Leiste**: die Arbeitsbereiche *Daten, Ansicht, Koregistrierung, Standardraum, Centiloid & SUVR (SUVR), Kinetik,
-  Dosimetrie, Segmentierung & MTV, Analyse, IMCALC, Bearbeiten, Header, Export*. Ein Klick auf den aktiven Bereich klappt das Seitenpanel ein und aus
+- **Linke Leiste**: die Arbeitsbereiche *Daten, Ansicht, Koregistrierung, Standardraum, SUVR & Centiloid, Kinetik,
+  Dosimetrie, Segmentierung & Läsionen, VOI Analyse, IMCALC, Bearbeiten, Header, Export*. Ein Klick auf den aktiven Bereich klappt das Seitenpanel ein und aus
   (ebenso das Symbol unten links). Ausgegraute Bereiche nennen im Tooltip den Grund (z. B. „Header nur für DICOM“).
   Beim Wechsel des Bereichs bleibt alles erhalten – laufende Berechnungen, Ergebnisse, aufgeklappte Karten.
 - **Seitenpanel**: Die Breite lässt sich am rechten Rand mit der Maus ziehen (Doppelklick = Standardbreite; mit
@@ -50,7 +50,7 @@ Beispieldaten; die Abbildung in Kapitel 9 stammt aus einer realen xSPECT/CT-Dosi
   - **SUV | Counts/Bq/ml** (nur sichtbar, wenn ein Datensatz SUV-Angaben im Header hat) schaltet für die ganze App um,
     ob PET/SPECT als SUV oder mit den Originalwerten aus dem Header (Counts, Bq/ml) angezeigt und ausgewertet werden –
     Viewer, Farbskala, Analyse, Bearbeiten. Die Wahl bleibt im Browser gespeichert; ohne Wahl wird beim Laden eines PET
-    mit SUV-Angaben SUV eingestellt. Segmentierung & MTV rechnet unabhängig davon immer in SUV, die Dosimetrie immer mit
+    mit SUV-Angaben SUV eingestellt. Segmentierung & Läsionen rechnet unabhängig davon immer in SUV, die Dosimetrie immer mit
     Counts bzw. Bq/ml.
   Die **Farbskala** unten links zeigt für jede sichtbare Ebene Farbtabelle und Fenster (Min/Max in SUV, HU, BP_ND …) und
   bei Labelbildern die Region unter dem Cursor; sie erscheint auch im Screenshot. Sie ist zugleich Bedienelement:
@@ -110,7 +110,7 @@ Alles wird lokal im Browser berechnet; Daten werden nirgendwohin hochgeladen.
      *automatisch* nimmt den Wert aus dem DICOM-Header bzw. die Erkennung. NIfTI-Dateien enthalten keine Modalität –
      Recon Studio erkennt sie aus einer BIDS-JSON-Datei, dem Dateinamen (`_pet`, `_T1w`, `ct`, `spect` …),
      dynamischen Daten (→ PET) oder dem Wertebereich (Luft und Knochen → CT). Davon hängen u. a. CT-Fensterpresets, SUV
-     und die Vorauswahl in Registrierung, Centiloid und Segmentierung & MTV ab. Beim DICOM-Export wird die gewählte
+     und die Vorauswahl in Registrierung, Centiloid und Segmentierung & Läsionen ab. Beim DICOM-Export wird die gewählte
      Modalität in den Header (0008,0060) geschrieben.
    - **Als Basis der Ansicht** (Details oder ⋯): jeder Datensatz, gleich welcher Modalität, kann Basis sein.
    - **Schlagwort** eintragen (z. B. *Baseline*, *Follow-up*, *CT nativ*) – es erscheint überall in Auswahllisten,
@@ -177,7 +177,7 @@ Bereich **Ansicht** – eine Karte je angezeigter Ebene (oben = oberste Ebene):
 Label-Ebenen werden ohne Interpolation (nächster Nachbar) dargestellt.
 
 **Ebenen-Schnellwahl im Viewer:** Der Knopf **Ebenen** oben rechts im Viewer blendet eine kleine Liste über den
-Schnittbildern ein – in jedem Bereich, z. B. während Kinetik, Segmentierung & MTV oder Analyse. Häkchen = Ebene sichtbar,
+Schnittbildern ein – in jedem Bereich, z. B. während Kinetik, Segmentierung & Läsionen oder Analyse. Häkchen = Ebene sichtbar,
 Regler = Deckkraft. Datensätze unter *nicht eingeblendet* werden per Häkchen als Overlay hinzugefügt. Der **Papierkorb**
 am Zeilenende entfernt einen Datensatz: erster Klick → *Löschen?*, zweiter Klick innerhalb von 3 s bestätigt. Der Knopf
 schaltet die Liste wieder aus; der Zustand bleibt gespeichert. Mit Datumsangaben im Header ist die Liste **nach
@@ -338,7 +338,7 @@ atlasbasiert auswerten oder im Standardraum speichern.
 
 ![Regionale SUVR mit CerebrA](docs/images/16-atlas-suvr.png)
 
-1. Bereich **Centiloid & SUVR** (Leiste: *SUVR*), Karte **Atlas & SUVR**: Atlas aus der Liste wählen und
+1. Bereich **SUVR & Centiloid** (Leiste: *SUVR & Centiloid*), Karte **Atlas & SUVR**: Atlas aus der Liste wählen und
    *Atlas laden* (Standard CerebrA 1 mm; außerdem Schaefer 2018, Thalamuskerne) oder *Eigener Atlas …*
    (Labelbild + Tabelle, oder direkt die AAL3-ZIP-Datei von [gin.cnrs.fr](https://www.gin.cnrs.fr/en/tools/aal/)).
    Ist der Atlas feiner als der Datensatz (1-mm-Atlas, 2-mm-PET), erhält jedes Voxel das häufigste Label seiner
@@ -394,7 +394,7 @@ Herkunft, Lizenzen und Aufbereitung aller Daten: [Hirnvorlagen-Quellen.md](Hirnv
 
 ![Centiloid-Karte](docs/images/17-centiloid.png)
 
-Bereich **Centiloid & SUVR** (Leiste: *SUVR*), Karte **Centiloid**.
+Bereich **SUVR & Centiloid** (Leiste: *SUVR & Centiloid*), Karte **Centiloid**.
 
 1. **Centiloid-VOIs laden …**: `Centiloid_Std_VOI.zip` von GAAIN herunterladen (Link in der Karte) und die ZIP-Datei
    direkt auswählen. Die VOIs werden wegen der GAAIN-Nutzungsbedingungen nicht mitgeliefert.
@@ -457,7 +457,7 @@ Ebenenkarte eines dynamischen Datensatzes den Regler **Zeit**:
      Dort wird die dynamische Serie mit allen anderen Datensätzen Frame für Frame übertragen; Schritt 3 entfällt dann,
      und die Serie im MNI-Raum ist unter *1 · Dynamische Serie* direkt wählbar.
 5. **4 · Referenzregion und Modell**:
-   1. Atlas laden bzw. wählen (*CerebrA-Atlas laden*; AAL3 über den Bereich *Analyse*).
+   1. Atlas laden bzw. wählen (*CerebrA-Atlas laden*; AAL3 über den Bereich *VOI Analyse*).
    2. **Referenzregion** wählen: Kleinhirnrinde (Standard), Kleinhirn gesamt oder Pons.
    3. Modell wählen: **SRTM** oder **Patlak** (dazu t* in Minuten, Standard 15).
    4. Optional *Parameterkarten anlegen*, dann **Berechnen**.
@@ -545,7 +545,7 @@ SPECT/PET je Zeitpunkt ──► Aktivität (MBq) je Region ──► Zeit-Aktiv
 | SPECT (oder PET) | Rekonstruktion des Geräts mit CT-Schwächungs-, Streu- und Auflösungskorrektur (z. B. OSEM), als DICOM. In **Counts** (Einheit CNTS) mit Kalibrierfaktor oder quantitativ in **Bq/ml** (BQML). Die eigene SPECT-Rekonstruktion der App ist dafür *nicht* geeignet. |
 | CT | Das CT derselben Aufnahme (Dichte für die Masse, Organsegmentierung, Registrierung). Ohne CT wird mit 1 g/ml gerechnet. |
 | Organkarte | Aus der CT-Organsegmentierung der App oder eigene Segmentierung (NIfTI mit Regionsnamen). |
-| Läsionsbild | Optional, aus *Segmentierung & MTV* (nur bestätigte Läsionen) oder eigene Segmentierung. |
+| Läsionsbild | Optional, aus *Segmentierung & Läsionen* (nur bestätigte Läsionen) oder eigene Segmentierung. |
 
 Üblich sind 3–4 Zeitpunkte (z. B. 4, 24, 48, 96–168 h p.i.); mit 1 Zeitpunkt rechnet die App nach Hänscheid oder
 Madsen, mit 2 monoexponentiell.
@@ -578,7 +578,7 @@ bestimmbar (Schritt 6). Optional Recovery-Koeffizienten (RC) aus einem Kugelphan
    alle Dosimetrie-Einstellungen.
 
 **Schritt 2 – Organe segmentieren** (auf T1; je Zeitpunkt nur für „Organkarte je Zeitpunkt“)
-1. Bereich **Segmentierung & MTV** → Karte *CT-Organsegmentierung*: CT wählen, Modell wählen, *Organe segmentieren*
+1. Bereich **Segmentierung & Läsionen** → Karte *CT-Organsegmentierung*: CT wählen, Modell wählen, *Organe segmentieren*
    ([Abschnitt 10](#10-ct-organsegmentierung)). Alternativ direkt in der Dosimetrie in der Zeitpunkt-Karte bei
    *Organe* auf *segmentieren*.
    - **TotalSegmentator 3 mm** (Standard, 117 Strukturen) passt für jedes CT.
@@ -592,7 +592,7 @@ bestimmbar (Schritt 6). Optional Recovery-Koeffizienten (RC) aus einem Kugelphan
    segmentieren*).
 4. Ergebnis kurz prüfen (Overlay im Viewer, Karte *Regionen*): Nieren, Leber, Milz vollständig?
 
-**Schritt 3 – Läsionen festlegen** (optional, im Bereich *Segmentierung & MTV*)
+**Schritt 3 – Läsionen festlegen** (optional, im Bereich *Segmentierung & Läsionen*)
 1. Unter *Tumorlast* das **SPECT** (bzw. PET) des Zeitpunkts wählen. Ohne SUV gelten die Schwellen in Counts bzw. Bq/ml:
    *41 % des Läsionsmaximums* (Erkennung ab x % des Bildmaximums), *Anteil des Bildmaximums*, *Leber-basiert* oder
    eine *eigene Schwelle*. Die App zeigt Bildmaximum und resultierende Schwelle an.
@@ -739,7 +739,7 @@ bestimmbar (Schritt 6). Optional Recovery-Koeffizienten (RC) aus einem Kugelphan
    Faltung per FFT, Dichteskalierung ρ_Wasser/ρ. Zusätzlich wird die lokale Deposition gerechnet:
    **Methodenvergleich** je Region (mittlere Dosis lokal / Kernel, Δ %).
 4. *Dosiskarte berechnen*: läuft im Hintergrund, *Abbrechen* möglich. Ergebnis als Datensatz **„Dosis (Gy)“** über
-   dem SPECT (anzeigen, in *Analyse* auswerten, im Bereich *Export* als NIfTI speichern – als DICOM nur ohne
+   dem SPECT (anzeigen, in *VOI Analyse* auswerten, im Bereich *Export* als NIfTI speichern – als DICOM nur ohne
    Original-Header) und das DVH je Region.
 
 **Schritt 10 – Bericht und Export**
@@ -792,7 +792,7 @@ bestimmbar (Schritt 6). Optional Recovery-Koeffizienten (RC) aus einem Kugelphan
 | BED zeigt „–“ | keine α/β und Reparatur-Halbwertszeit für diese Region (oder keine T_eff) | Zeile anklicken und Werte eintragen |
 | Kernel wird abgelehnt | Voxelgröße des Kernels ≠ Voxelgröße des SPECT | Kernel in der passenden Voxelgröße verwenden |
 | 1,5-mm-Organmodell bricht ab | CT zu groß für den Browser-Speicher | 3-mm-Modell oder CT zuschneiden (*Bearbeiten → VOI → Auf VOI zuschneiden*) |
-| Läsion fehlt in der Dosimetrie | in *Segmentierung & MTV* nicht bestätigt oder ohne Partner zu T1 | dort bestätigen bzw. Zuordnung in *Regionen* korrigieren, neu messen |
+| Läsion fehlt in der Dosimetrie | in *Segmentierung & Läsionen* nicht bestätigt oder ohne Partner zu T1 | dort bestätigen bzw. Zuordnung in *Regionen* korrigieren, neu messen |
 
 ### 9.7 Grenzen
 
@@ -818,7 +818,7 @@ et al. (ein Zeitpunkt); Lanconelli et al., Phys Med Biol 2012 (Voxel-S-Werte); I
 
 ![Segmentierung läuft](docs/images/20-ct-segmentierung-laeuft.jpg)
 
-1. CT laden, Bereich **Segmentierung & MTV** öffnen.
+1. CT laden, Bereich **Segmentierung & Läsionen** öffnen.
 2. Karte **CT-Organsegmentierung**: CT und **Modell** wählen → **Organe segmentieren**.
    - **TotalSegmentator „total“ 3 mm** (Standard, ≈ 66 MB): 117 Strukturen – Organe, Knochen, Gefäße, Muskeln.
    - **TotalSegmentator Organe 1,5 mm** (≈ 125 MB): 24 Organe auf feinerem Raster, etwas genauer (v. a. Nebennieren,
@@ -837,7 +837,7 @@ et al. (ein Zeitpunkt); Lanconelli et al., Phys Med Biol 2012 (Voxel-S-Werte); I
 
 4. **Regionsliste** (Karte *Regionen* unter dem MTV-Ergebnis bzw. in der Ebenenkarte im Bereich *Ansicht*): Suche, Häkchen blenden Regionen ein/aus (*alle* / *keine* / *nur Treffer*), Klick auf eine Region
    setzt das Fadenkreuz hinein; Volumen je Region in ml.
-5. Die Organe stehen danach in Segmentierung & MTV und Label-Analyse zur Verfügung und lassen sich als NIfTI exportieren
+5. Die Organe stehen danach in Segmentierung & Läsionen und Label-Analyse zur Verfügung und lassen sich als NIfTI exportieren
    (Regionsnamen bleiben beim Wiederladen erhalten).
 
 ### Modellvergleich
@@ -857,11 +857,11 @@ fast vollständiges Versagen).
 
 ---
 
-## 11. Segmentierung & MTV
+## 11. Segmentierung & Läsionen
 
 ![Einstellungen Tumorlast](docs/images/22-tumorlast-einstellungen.jpg)
 
-1. PET (und optional CT mit Organsegmentierung) laden; Bereich **Segmentierung & MTV**.
+1. PET (und optional CT mit Organsegmentierung) laden; Bereich **Segmentierung & Läsionen**.
 2. Indikation wählen: **Lymphom (FDG)** oder **PSMA** – setzt passende Methoden und Ausschlussorgane.
 3. **PET / SPECT** wählen. Bei DICOM mit Dosis/Gewicht wird in SUV gerechnet. Ohne SUV (z. B. Therapie-SPECT in
    Counts) gelten die Schwellen in der Einheit des Bildes: *41 % des Läsionsmaximums* (Erkennung ab einem Anteil des
@@ -903,9 +903,9 @@ fast vollständiges Versagen).
 
 ---
 
-## 12. Analyse und Label-Analyse
+## 12. VOI Analyse und Label-Analyse
 
-Bereich **Analyse**.
+Bereich **VOI Analyse**.
 
 **Große Tabellen**: Der Knopf **⤢** über jeder Ergebnistabelle (hier, in Atlas & SUVR, Centiloid, Kinetik und
 Tumorlast) öffnet sie groß über dem Viewer – mit Suche, Sortierung per Klick auf den Spaltenkopf und **CSV**-Export.
@@ -948,7 +948,7 @@ Hinweis: Die macOS-Vorschau (Leertaste) zeigt solche CSV-Dateien unvollständig 
 
 ### IMCALC: voxelweise Rechnung
 
-Bereich **IMCALC** (Leiste zwischen *Analyse* und *Bearbeiten*). Jedes Ergebnis ist ein **neuer Datensatz** im
+Bereich **IMCALC** (Leiste zwischen *VOI Analyse* und *Bearbeiten*). Jedes Ergebnis ist ein **neuer Datensatz** im
 Bildraum der Eingaben – anzeigen, exportieren (NIfTI, mit Patient-ID), im Projekt speichern und weiterverarbeiten
 (Label-Analyse, Atlas/SUVR, erneut IMCALC).
 

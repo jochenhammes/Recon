@@ -61,7 +61,7 @@ export const kinetics: Record<string, string> = {
   "Zeile anklicken = Kurve und Fit der Region anzeigen.": "Click a row = show curve and fit of the region.",
   "Zeit (min)": "Time (min)",
   "Zeit-Aktivitäts-Kurve": "Time–activity curve",
-  "Zuerst einen Hirnatlas laden (CerebrA oder AAL3 im Bereich „Analyse“).": "Load a brain atlas first (CerebrA or AAL3 in the “Analysis” area).",
+  "Zuerst einen Hirnatlas laden (CerebrA oder AAL3 im Bereich „VOI Analyse“).": "Load a brain atlas first (CerebrA or AAL3 in the “VOI analysis” area).",
   "bis (min)": "to (min)",
   "einblenden": "show",
   "keine Daten": "no data",
