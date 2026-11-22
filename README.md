@@ -71,6 +71,8 @@ behalten ihre eigenen Lizenzen (siehe unten).
 
 Forschungswerkzeug, kein zertifiziertes Medizinprodukt – nicht für Diagnose oder Therapieentscheidungen.
 
+Impressum und Datenschutzerklärung: [Handbuch, Abschnitt 18](MANUAL.md#18-impressum-und-datenschutz) (auch in der App über „?“).
+
 ## Mitgelieferte Daten und Lizenzen
 
 - `public/templates/`: MNI ICBM 152 Nonlinear Asymmetrical 2009c in 1 und 2 mm, T2 und GM/WM/CSF in 1 mm (Fonov et al.

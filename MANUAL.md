@@ -21,6 +21,8 @@ Beispieldaten; die Abbildung in Kapitel 9 stammt aus einer realen xSPECT/CT-Dosi
 14. [DICOM-Header](#14-dicom-header)
 15. [Export](#15-export)
 16. [Tipps und Fehlerbehebung](#16-tipps-und-fehlerbehebung)
+17. [Lizenz](#17-lizenz)
+18. [Impressum und Datenschutz](#18-impressum-und-datenschutz)
 
 ---
 
@@ -1088,3 +1090,135 @@ Bereich **Export**, Karte **Dateien exportieren**:
 - **Lange Dateinamen** im Panel: Schlagworte vergeben – sie ersetzen die Namen in Auswahllisten weitgehend.
 - **Datensatz nach dem Laden nicht sichtbar**: Er wurde absichtlich nicht eingeblendet (andere Region, zweites PET …) –
   über **Ebenen** oder das Auge in der Datensatzliste einblenden.
+
+---
+
+## 17. Lizenz
+
+Recon Studio ist freie Software unter der **Apache License 2.0**, Copyright 2026 Jochen Hammes. Die App darf – auch
+kommerziell – genutzt, verändert und weitergegeben werden, solange Lizenztext und Hinweise (`LICENSE`, `NOTICE`)
+erhalten bleiben. Die Lizenz enthält eine Patentlizenz der Beitragenden und einen Ausschluss von Gewährleistung und
+Haftung.
+
+- Lizenztext: [LICENSE](https://github.com/jochenhammes/Recon/blob/main/LICENSE)
+- Hinweise zu Drittkomponenten, Modellgewichten und Daten:
+  [NOTICE](https://github.com/jochenhammes/Recon/blob/main/NOTICE); vollständige Lizenztexte der mitgelieferten
+  Bibliotheken: [THIRD-PARTY-LICENSES.txt](https://github.com/jochenhammes/Recon/blob/main/public/THIRD-PARTY-LICENSES.txt)
+- **Mitgelieferte Daten behalten ihre eigenen Lizenzen**: Modellgewichte der CT-Segmentierung (TotalSegmentator:
+  Apache 2.0; MOOSE: CC BY 4.0), Hirnvorlagen und Atlanten (u. a. MNI/McGill, SPM12 GPL v2+, CC0, MIT, CC BY 4.0;
+  Übersicht in [Abschnitt 6.4](#64-vorlagen-und-atlanten-katalog) und in
+  [Hirnvorlagen-Quellen.md](https://github.com/jochenhammes/Recon/blob/main/Hirnvorlagen-Quellen.md)). Bei
+  Veröffentlichungen bitte die dort genannten Arbeiten zitieren.
+- Die Kinetikmodelle sind eine Portierung des MATLAB-Pakets der Arbeitsgruppe
+  ([ghaefner/kinetic-modeling](https://github.com/ghaefner/kinetic-modeling)).
+- Quellcode: [github.com/jochenhammes/Recon](https://github.com/jochenhammes/Recon)
+
+**Forschungswerkzeug, kein Medizinprodukt.** Recon Studio ist nicht nach der Medizinprodukte-Verordnung (MDR)
+zertifiziert und darf nicht für Diagnose, Therapieentscheidungen oder Dosisberechnungen am Patienten verwendet werden.
+Alle Ergebnisse sind von Fachpersonal mit zugelassener Software zu prüfen.
+
+---
+
+## 18. Impressum und Datenschutz
+
+### Impressum
+
+Angaben gemäß § 5 Digitale-Dienste-Gesetz (DDG):
+
+PD Dr. Jochen Hammes\
+Heinrich-Kock-Weg 3\
+22529 Hamburg
+
+E-Mail: [reconstudio@jhammes.de](mailto:reconstudio@jhammes.de)
+
+Recon Studio ist ein privates, nicht-kommerzielles Projekt. Inhaltlich verantwortlich: PD Dr. Jochen Hammes
+(Anschrift wie oben).
+
+**Haftung:** Die App und dieses Handbuch werden mit Sorgfalt erstellt, aber ohne Gewähr für Richtigkeit,
+Vollständigkeit und Aktualität. Für Inhalte externer Links sind ausschließlich deren Betreiber verantwortlich; zum
+Zeitpunkt der Verlinkung waren keine Rechtsverstöße erkennbar.
+
+### Datenschutzerklärung
+
+**1. Verantwortlicher**
+
+PD Dr. Jochen Hammes, Heinrich-Kock-Weg 3, 22529 Hamburg, E-Mail
+[reconstudio@jhammes.de](mailto:reconstudio@jhammes.de).
+
+**2. Grundsatz: Ihre Bilddaten verlassen Ihren Rechner nicht**
+
+Recon Studio ist eine Webanwendung, die **vollständig in Ihrem Browser** läuft. Alle Dateien, die Sie laden (DICOM,
+NIfTI, Projektdateien, Atlanten), und alle Berechnungen (Rekonstruktion, Registrierung, Segmentierung, Dosimetrie usw.)
+werden ausschließlich lokal auf Ihrem Gerät verarbeitet. Es gibt **keinen Server, an den Bilddaten, Patientendaten,
+Ergebnisse oder Eingaben übertragen werden**. Der Anbieter erhält davon keine Kenntnis.
+
+Recon Studio verwendet **keine Cookies, keine Nutzerkonten, keine Analyse- oder Tracking-Dienste, keine Werbung** und
+lädt zur Laufzeit keine Inhalte von Drittanbietern (keine externen Schriften, Skripte oder Bibliotheken). Alle
+Programmteile, Modelle, Vorlagen und Atlanten werden von derselben Adresse wie die App geladen.
+
+**3. Hosting (GitHub Pages)**
+
+Die App wird über GitHub Pages bereitgestellt (GitHub, Inc., 88 Colin P. Kelly Jr. Street, San Francisco, CA 94107,
+USA, ein Tochterunternehmen der Microsoft Corporation). Beim Aufruf der Seite und beim Nachladen von Programmteilen
+verarbeitet GitHub technisch notwendige Verbindungsdaten, insbesondere Ihre IP-Adresse, Datum und Uhrzeit des Abrufs,
+die abgerufene Datei sowie Browser- und Betriebssystemangaben, und speichert sie in Server-Protokollen, um die Seite
+auszuliefern und die Sicherheit des Dienstes zu gewährleisten. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO
+(berechtigtes Interesse an einer sicheren und zuverlässigen Bereitstellung der App). Dabei kann eine Übermittlung in die
+USA stattfinden; GitHub stützt sie nach eigenen Angaben auf das EU-US Data Privacy Framework und
+EU-Standardvertragsklauseln. Der Anbieter hat keinen Zugriff auf diese Protokolle. Einzelheiten:
+[GitHub General Privacy Statement](https://docs.github.com/de/site-policy/privacy-policies/github-general-privacy-statement).
+
+**4. Speicherung im Browser (Local Storage, Cache Storage, Service Worker)**
+
+Damit die App funktioniert und Einstellungen erhalten bleiben, speichert sie Daten **nur lokal in Ihrem Browser**;
+diese werden nicht übertragen:
+
+- *Local Storage*: Oberflächeneinstellungen (z. B. geöffnete Karten, Breite der Seitenleiste, Ebenen- und
+  Skalenanzeige, Einheit SUV/Counts, gewählter Rechenweg und Modell der CT-Segmentierung) sowie selbst angelegte
+  Kamera-Profile der Dosimetrie.
+- *Cache Storage*: die Modelle der CT-Segmentierung (damit sie nicht bei jedem Aufruf neu geladen werden) und Atlanten,
+  die Sie selbst von deren Quelle heruntergeladen und in die App geladen haben.
+- *Service Worker*: Ein kleines Hilfsskript (coi-serviceworker) setzt beim Laden der Seite Sicherheits-Header, damit die
+  Segmentierung mehrere Prozessorkerne nutzen kann. Es verarbeitet keine personenbezogenen Daten.
+
+Rechtsgrundlage ist § 25 Abs. 2 Nr. 2 TDDDG (unbedingt erforderlich für den von Ihnen gewünschten Dienst). Sie können
+diese Daten jederzeit über die Einstellungen Ihres Browsers löschen („Websitedaten löschen“); selbst geladene Atlanten
+auch in der App über *entfernen*. Geladene Bilddaten werden **nicht** im Browser gespeichert – sie sind nach dem
+Schließen oder Neuladen der Seite verloren, sofern Sie sie nicht selbst als Projekt oder Export speichern.
+
+**5. Projektdateien und Exporte**
+
+Projektdateien (`.recon`), Exporte (DICOM, NIfTI, CSV, Berichte) und Screenshots werden auf Ihre Veranlassung in Ihrem
+Browser erzeugt und lokal gespeichert. Sie können personenbezogene und Gesundheitsdaten enthalten (z. B. DICOM-Header,
+Patient-ID). Für deren Weitergabe und Aufbewahrung sind Sie selbst verantwortlich; der DICOM-Export bietet eine
+Anonymisierung.
+
+**6. Verarbeitung von Patientendaten durch Nutzer**
+
+Wenn Sie mit Recon Studio Bilddaten von Patientinnen und Patienten verarbeiten, sind Sie bzw. Ihre Einrichtung dafür
+datenschutzrechtlich verantwortlich. Da keine Daten an den Anbieter oder an Dritte übermittelt werden, findet keine
+Auftragsverarbeitung durch den Anbieter statt. Beachten Sie die Regeln Ihrer Einrichtung für die Verarbeitung von
+Gesundheitsdaten auf dem verwendeten Gerät und im verwendeten Browser.
+
+**7. Kontakt per E-Mail**
+
+Wenn Sie per E-Mail Kontakt aufnehmen, werden Ihre Angaben (E-Mail-Adresse, Inhalt der Nachricht) zur Bearbeitung der
+Anfrage verarbeitet (Art. 6 Abs. 1 lit. f DSGVO, bei vertragsbezogenen Anfragen lit. b) und gelöscht, sobald sie nicht
+mehr benötigt werden. Bitte senden Sie **keine Patientendaten** per E-Mail.
+
+**8. Externe Links**
+
+Das Handbuch und die App enthalten Links zu externen Seiten (z. B. GitHub, Quellen von Atlanten und Vorlagen). Daten
+werden an diese Anbieter erst übertragen, wenn Sie einen Link anklicken; dann gelten deren Datenschutzbestimmungen.
+
+**9. Ihre Rechte**
+
+Sie haben das Recht auf Auskunft (Art. 15 DSGVO), Berichtigung (Art. 16), Löschung (Art. 17), Einschränkung der
+Verarbeitung (Art. 18), Datenübertragbarkeit (Art. 20) und Widerspruch gegen Verarbeitungen auf Grundlage von
+Art. 6 Abs. 1 lit. f DSGVO (Art. 21). Wenden Sie sich dazu an die oben genannte E-Mail-Adresse. Außerdem können Sie
+sich bei einer Datenschutz-Aufsichtsbehörde beschweren (Art. 77 DSGVO), z. B. beim Hamburgischen Beauftragten für
+Datenschutz und Informationsfreiheit, Ludwig-Erhard-Straße 22, 20459 Hamburg.
+
+**10. Stand**
+
+November 2026. Diese Erklärung wird angepasst, wenn sich die App oder die Rechtslage ändert.

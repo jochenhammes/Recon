@@ -135,8 +135,9 @@ export function renderMarkdown(md: string, o: MarkdownOptions = {}): string {
     // Paragraph: until a blank line or another block.
     const para: string[] = [];
     while (i < lines.length && lines[i].trim() && !/^(#{1,6})\s/.test(lines[i]) && !listItem.test(lines[i]) && !/^\s*```/.test(lines[i]) && !(isTableRow(lines[i]) && isTableRow(lines[i + 1] ?? "")) && !/^\s*---+\s*$/.test(lines[i]))
-      para.push(lines[i++].trim());
-    if (para.length) out.push(`<p>${inline(para.join(" "), o)}</p>`);
+      para.push(/ {2,}$/.test(lines[i]) ? lines[i++].trim() + "\\" : lines[i++].trim());
+    // A trailing backslash (or two spaces) is a hard line break, as in CommonMark.
+    if (para.length) out.push(`<p>${inline(para.map((l, k) => (k < para.length - 1 && /\\$/.test(l) ? l.slice(0, -1) + "\uE001" : l)).join(" "), o).replace(/\uE001 ?/g, "<br>")}</p>`);
     else i++;
   }
   return out.join("\n");

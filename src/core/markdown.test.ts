@@ -56,3 +56,11 @@ describe("markdown for the manual", () => {
     expect(html).toContain("9-dosimetrie-spectct");
   });
 });
+
+describe("hard line breaks", () => {
+  it("turns a trailing backslash or two spaces into <br>", async () => {
+    const { renderMarkdown } = await import("./markdown");
+    expect(renderMarkdown("Name\\\nStraße 1  \nOrt")).toBe("<p>Name<br>Straße 1<br>Ort</p>");
+    expect(renderMarkdown("a\nb")).toBe("<p>a b</p>");
+  });
+});
