@@ -1109,8 +1109,9 @@ Haftung.
   Übersicht in [Abschnitt 6.4](#64-vorlagen-und-atlanten-katalog) und in
   [Hirnvorlagen-Quellen.md](https://github.com/jochenhammes/Recon/blob/main/Hirnvorlagen-Quellen.md)). Bei
   Veröffentlichungen bitte die dort genannten Arbeiten zitieren.
-- Die Kinetikmodelle sind eine Portierung des MATLAB-Pakets der Arbeitsgruppe
-  ([ghaefner/kinetic-modeling](https://github.com/ghaefner/kinetic-modeling)).
+- Die Kinetikmodelle sind eine Portierung eines MATLAB-Pakets der wissenschaftlichen Arbeitsgruppe MMNI der Universität
+  zu Köln, deren Alumnus der Autor dieser App ist
+  ([github.com/ghaefner/kinetic-modeling](https://github.com/ghaefner/kinetic-modeling)).
 - Quellcode: [github.com/jochenhammes/Recon](https://github.com/jochenhammes/Recon)
 
 **Forschungswerkzeug, kein Medizinprodukt.** Recon Studio ist nicht nach der Medizinprodukte-Verordnung (MDR)
