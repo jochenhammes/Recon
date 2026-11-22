@@ -3,7 +3,7 @@ import { type FrameTiming, cumulativeIntegral, frameMid } from "./tac";
 /**
  * Reference-tissue Patlak plot (Patlak & Blasberg, J Cereb Blood Flow Metab 1985;5:584–590) for irreversibly
  * trapped tracers: for t ≥ t*,  C(t)/C_ref(t) = Ki_ref · ∫₀ᵗC_ref/C_ref(t) + V.  Slope Ki_ref in 1/min.
- * As calcPatlak.m of the group's MATLAB code, with real frame times.
+ * As calcPatlak.m of the MATLAB code of the MMNI group, University of Cologne, with real frame times.
  */
 export interface PatlakFit {
   ki: number;
