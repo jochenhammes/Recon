@@ -8,7 +8,6 @@ export const analysis: Record<string, string> = {
   "Aufnahme {v}–{v2} min p. i., Kalibrierung gilt für {a}–{b} min p. i.": "Acquisition {v}–{v2} min p. i., calibration applies to {a}–{b} min p. i.",
   "Bins": "Bins",
   "CerebrA (Manera et al. 2020, Sci Data 7:237), CC0 1.0; erstellt auf MNI-ICBM2009c symmetrisch, für Recon Studio auf das 2-mm-Raster der asymmetrischen Vorlage übertragen.": "CerebrA (Manera et al. 2020, Sci Data 7:237), CC0 1.0; created on the symmetric MNI-ICBM2009c, transferred to the 2 mm grid of the asymmetric template for Recon Studio.",
-  "Datensatz": "Dataset",
   "Die Datensätze haben unterschiedlich viele Voxel.": "The datasets have different numbers of voxels.",
   "Die Kortex-VOI (voi_ctx) fehlt.": "The cortex VOI (voi_ctx) is missing.",
   "Einheit": "Unit",

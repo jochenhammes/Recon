@@ -147,7 +147,7 @@ export function LayerToggle({
           <div className="layer-toggle-sep">MIP</div>
           <div className="layer-mip">
             <select value={mip.value ?? ""} aria-label={t("Datensatz der MIP")} onChange={(e) => mip.onChange(e.target.value || null)}>
-              <option value="">automatisch ({mip.autoLabel})</option>
+              <option value="">{t("automatisch ({name})", { name: mip.autoLabel })}</option>
               {mip.options.map((o) => (
                 <option key={o.id} value={o.id} title={o.title}>
                   {o.label}

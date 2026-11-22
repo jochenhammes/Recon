@@ -2,7 +2,7 @@ import { useState } from "react";
 import { parseInput } from "../components/format";
 import { Card } from "./Card";
 
-import { t } from "../i18n";
+import { t, tk } from "../i18n";
 import { T } from "../i18n/T";
 export interface ImcalcDataset {
   id: string;
@@ -27,8 +27,8 @@ type Mode = ImcalcJob["kind"];
 
 const MODES: [Mode, string][] = [
   ["linear", "Linear"],
-  ["pair", "Zwei Datensätze"],
-  ["group", "Gruppe"],
+  ["pair", tk("Zwei Datensätze")],
+  ["group", tk("Gruppe")],
   ["z", "Z-Transformation"],
 ];
 
@@ -182,7 +182,7 @@ export function ImcalcPanel(props: {
 
         {mode === "linear" && ds.length > 0 && (
           <>
-            {select(lin?.id, setLinId, ds, "Datensatz X")}
+            {select(lin?.id, setLinId, ds, t("Datensatz X"))}
             <div className="inline-fields imcalc-coeffs">
               <label className="field">
                 a
@@ -193,13 +193,13 @@ export function ImcalcPanel(props: {
                 <input value={linB} disabled={props.busy} onChange={(e) => setLinB(e.target.value)} />
               </label>
             </div>
-            <p className="tool-hint imcalc-formula">Ergebnis = a · X + b</p>
+            <p className="tool-hint imcalc-formula">{t("Ergebnis = a · X + b")}</p>
           </>
         )}
 
         {mode === "pair" && ds.length > 0 && (
           <>
-            {select(d1?.id, setP1, ds, "Datensatz X₁")}
+            {select(d1?.id, setP1, ds, t("Datensatz X₁"))}
             {select(d2?.id, setP2, sameGrid(d1?.gridKey).filter((d) => d.id !== d1?.id), t("Datensatz X₂ (gleiches Raster)"))}
             <div className="segmented-control" role="group" aria-label={t("Verknüpfung")}>
               {(
@@ -260,7 +260,7 @@ export function ImcalcPanel(props: {
             )}
             {hint && <p className="tool-hint">{hint}</p>}
             <button className="primary-btn" disabled={props.busy || !job} onClick={() => job && props.onRun(job)}>
-              {props.busy ? t("Wird berechnet …") : mode === "z" && zs.length > 1 ? t("{length} Z-Karten berechnen", { length: zs.length }) : "Berechnen"}
+              {props.busy ? t("Wird berechnet …") : mode === "z" && zs.length > 1 ? t("{length} Z-Karten berechnen", { length: zs.length }) : t("Berechnen")}
             </button>
           </>
         )}

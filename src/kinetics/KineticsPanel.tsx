@@ -323,7 +323,7 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
                     </tbody>
                   </table>
                   <label className="field">
-                    Frame-Dauern in Sekunden ({info.frames.length} Frames): ein Wert für alle, eine Liste oder Anzahl×Dauer; Start = Summe der vorherigen
+                    {t("Frame-Dauern in Sekunden ({n} Frames): ein Wert für alle, eine Liste oder Anzahl×Dauer; Start = Summe der vorherigen", { n: info.frames.length })}
                     <input
                       value={durText}
                       placeholder={t("z. B. 60  oder  6x10, 3x20, 2x30, 2x60, 2x150, 10x300")}
@@ -385,7 +385,7 @@ export function KineticsPanel({ api }: { api: KineticsApi }) {
               }>
             <div className="inline-fields hist-export-fields">
               <label className="field">
-                Registrierungsbild: Summe von (min)
+                {t("Registrierungsbild: Summe von (min)")}
                 <input value={regFrom} disabled={!!busy} onChange={(e) => setRegFrom(e.target.value)} />
               </label>
               <label className="field">

@@ -56,7 +56,7 @@ export function AlignCard(props: AlignCardProps) {
       )}
       <div className="segmented-control align-tabs" role="tablist">
         {TABS.map((t) => (
-          <button key={t.id} role="tab" aria-selected={props.tab === t.id} className={props.tab === t.id ? "active" : ""} title={t.title} onClick={() => props.onTabChange(t.id)}>
+          <button key={t.id} role="tab" aria-selected={props.tab === t.id} className={props.tab === t.id ? "active" : ""} title={tr(t.title)} onClick={() => props.onTabChange(t.id)}>
             {tr(t.label)}
             {t.sub && <small className="tab-sub">{t.sub}</small>}
           </button>

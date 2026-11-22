@@ -85,7 +85,7 @@ export function CentiloidPanel(props: CentiloidPanelProps) {
       />
       <div className="button-row">
         <button className="secondary-btn" onClick={() => fileInput.current?.click()}>
-          {props.voisLoaded ? "VOIs ersetzen …" : "Centiloid-VOIs laden …"}
+          {props.voisLoaded ? t("VOIs ersetzen …") : t("Centiloid-VOIs laden …")}
         </button>
         {props.voisLoaded && (
           <button className="secondary-btn" onClick={props.onShowVois}>
@@ -99,11 +99,11 @@ export function CentiloidPanel(props: CentiloidPanelProps) {
         <InfoText
           details={
             <>
-              Die VOIs werden nicht mitgeliefert (GAAIN-Nutzungsbedingungen: persönliche, nicht-kommerzielle Nutzung) – siehe{" "}
+              {t("Die VOIs werden nicht mitgeliefert (GAAIN-Nutzungsbedingungen: persönliche, nicht-kommerzielle Nutzung) – siehe")}{" "}
               <a href="https://www.gaain.org/centiloid-project" target="_blank" rel="noreferrer">
                 {t("Centiloid Project")}
               </a>
-              . Die heruntergeladene ZIP-Datei direkt hier auswählen.
+              {t(". Die heruntergeladene ZIP-Datei direkt hier auswählen.")}
             </>
           }
         >
@@ -173,7 +173,7 @@ export function CentiloidPanel(props: CentiloidPanelProps) {
               {t(p.label)}
             </option>
           ))}
-          <option value="">ohne MRT (PET-only{props.petTemplateLabel ? `: ${props.petTemplateLabel}` : t(" – PET-Vorlage nötig")})</option>
+          <option value="">{t("ohne MRT (PET-only{suffix})", { suffix: props.petTemplateLabel ? `: ${props.petTemplateLabel}` : t(" – PET-Vorlage nötig") })}</option>
         </select>
       </label>
       <p className="tool-hint">

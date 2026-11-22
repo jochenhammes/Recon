@@ -145,8 +145,7 @@ export function TimePointsCard(p: TimePointsCardProps) {
             {t("Je Messzeitpunkt ein Funktionsbild (SPECT in Counts oder quantitativ in Bq/ml, auch PET) mit dem CT derselben Aufnahme, der Organkarte (CT-Segmentierung) und optional einem Läsionsbild. Die Datensätze werden automatisch nach FrameOfReference, Studie und Aufnahmezeit (DICOM-Header) zu Aufnahmen gruppiert; jede Rolle lässt sich per Auswahl ändern.")}
           </p>
           <p>
-            Zeit p.i. = Aufnahmezeit − Injektion (beides aus dem Header, überschreibbar). Die Zeitachse zeigt alle Aufnahmen; grau = nicht als
-            {t("Zeitpunkt verwendet (Klick: hinzufügen).")}
+            {t("Zeit p.i. = Aufnahmezeit − Injektion (beides aus dem Header, überschreibbar). Die Zeitachse zeigt alle Aufnahmen; grau = nicht als Zeitpunkt verwendet (Klick: hinzufügen).")}
           </p>
         </>
       }
@@ -303,7 +302,7 @@ export function TimePointsCard(p: TimePointsCardProps) {
 
       {p.unassigned.length > 0 && (
         <details className="dos-unassigned">
-          <summary>Nicht zugeordnet ({p.unassigned.length})</summary>
+          <summary>{t("Nicht zugeordnet ({n})", { n: p.unassigned.length })}</summary>
           <p className="tool-hint">{t("Ohne Datum oder Bezug zu einer Aufnahme (z. B. NIfTI). Einem Zeitpunkt zuordnen:")}</p>
           {p.unassigned.map((u) => (
             <div key={u.id} className="dos-unassigned-row">

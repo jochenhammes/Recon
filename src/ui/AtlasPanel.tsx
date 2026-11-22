@@ -101,7 +101,7 @@ export function AtlasPanel(props: AtlasPanelProps) {
   return (
     <Card title={<>Atlas &amp; SUVR</>} info={
           <>
-            <p>Regionale Mittelwerte eines Datensatzes im Standardraum (z. B. des übertragenen PET) und SUVR = Regionsmittel / Mittel der Referenzregion.</p>
+            <p>{t("Regionale Mittelwerte eines Datensatzes im Standardraum (z. B. des übertragenen PET) und SUVR = Regionsmittel / Mittel der Referenzregion.")}</p>
             <p>
               {t("Eigener Atlas: Labelbild (NIfTI, im Standardraum) und optional die Labeltabelle (TXT/CSV/TSV, FSL-/FreeSurfer-LUT, ITK-SNAP) zusammen auswählen – oder direkt die ZIP-Datei, z. B. AAL3 von der GIN-Seite (gin.cnrs.fr/en/tools/aal).")}
             </p>
@@ -198,7 +198,7 @@ export function AtlasPanel(props: AtlasPanelProps) {
       {current && (
         <>
           <p className="tool-hint">
-            Referenz: {refLabel} – Mittel {fmtVal(refMean)} {current.unit}
+            {t("Referenz: {refLabel} – Mittel {v} {unit}", { refLabel, v: fmtVal(refMean), unit: current.unit })}
             {!Number.isFinite(refMean) && t(" (keine Voxel in der Referenzregion)")}
           </p>
           <div className="button-row">

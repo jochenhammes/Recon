@@ -185,7 +185,7 @@ export function TumorPanel(props: TumorPanelProps) {
         )}
         {!suv && (active === "imgPct" || active === "pct41") && props.rawMax > 0 && (
           <p className="tool-hint">
-            Bildmaximum {formatValue(Number(props.rawMax.toPrecision(4)))} {unit} → Schwelle{" "}
+            {t("Bildmaximum {v} {unit} → Schwelle", { v: formatValue(Number(props.rawMax.toPrecision(4))), unit })}{" "}
             {formatValue(Number((((active === "imgPct" ? num(imgPct) : num(detectPct)) / 100) * props.rawMax).toPrecision(4)))} {unit}
             {active === "pct41" ? t(" zur Erkennung, dann 41 % des Maximums je Läsion") : ""}
           </p>
@@ -282,7 +282,7 @@ export function TumorPanel(props: TumorPanelProps) {
             {t("Läsion am Fadenkreuz hinzufügen")}
           </button>
         </div>
-        <p className="tool-hint">Grenze relativ zum Maximum der Läsion ({suv ? "SUV" : unit}); üblich 40–50 %.</p>
+        <p className="tool-hint">{t("Grenze relativ zum Maximum der Läsion ({unit}); üblich 40–50 %.", { unit: suv ? "SUV" : unit })}</p>
       </Card>
 
       {b && (

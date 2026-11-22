@@ -204,7 +204,7 @@ export function ExportPanel({ items, activeId, onActivity }: ExportPanelProps) {
         </div>
         {spaceMode === "native" && (
           <p className="tool-hint">
-            Kein Resampling.{" "}
+            {t("Kein Resampling.")}{" "}
             {format === "nifti"
               ? anyRegistered
                 ? t("Registrierungen werden in den NIfTI-Header geschrieben.")
@@ -312,7 +312,7 @@ export function ExportPanel({ items, activeId, onActivity }: ExportPanelProps) {
         )}
 
         <button className="primary-btn" disabled={working || chosen.length === 0 || !settings} onClick={() => void run()}>
-          {working ? t("Export läuft …") : chosen.length > 1 ? t("{length} Datensätze exportieren (ZIP)", { length: chosen.length }) : "Exportieren"}
+          {working ? t("Export läuft …") : chosen.length > 1 ? t("{length} Datensätze exportieren (ZIP)", { length: chosen.length }) : t("Exportieren")}
         </button>
         {status && <p className="tool-hint">{status}</p>}
         {messages.length > 0 && (

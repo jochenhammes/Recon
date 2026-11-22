@@ -44,7 +44,7 @@ export function DatasetDetails({ dataset, onModalityChange, onNameChange, origin
               title={t("Modalität für Anzeige, Auswertung und Export – automatisch aus DICOM-Header bzw. Erkennung, oder hier wählen.")}
               onChange={(e) => onModalityChange(e.target.value || undefined)}
             >
-              <option value="">automatisch ({modalityName(autoModality(src))})</option>
+              <option value="">{t("automatisch ({name})", { name: modalityName(autoModality(src)) })}</option>
               {MODALITIES.map((m) => (
                 <option key={m.code} value={m.code}>
                   {t(m.label)}

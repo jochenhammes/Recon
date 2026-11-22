@@ -1,3 +1,4 @@
+import { fmtNum } from "../components/format";
 import { useState } from "react";
 import { InfoText } from "./Info";
 import { Card } from "./Card";
@@ -83,7 +84,7 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
             <p>
               {t("Alle anderen Datensätze werden über ihre Koregistrierung mit diesem Datensatz mitgenommen – PET also vorher im Bereich „Koregistrierung“ auf das CT/MRT registrieren.")}
             </p>
-            <p>Kostenfunktion: {props.costLabel}. Startpunkt per Schwerpunkt und Rotationsraster. Nichtlinear nur bei gleichem Kontrast von Datensatz und Vorlage.</p>
+            <p>{t("Kostenfunktion: {cost}. Startpunkt per Schwerpunkt und Rotationsraster. Nichtlinear nur bei gleichem Kontrast von Datensatz und Vorlage.", { cost: props.costLabel })}</p>
           </>
         }
         done={!!normalization && !running}
@@ -124,7 +125,7 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
         <label className="field">
           {t("Ausgaberaster")}
           <select value={props.outputGrid} disabled={running} onChange={(e) => props.onOutputGridChange(e.target.value as "template" | "1mm")}>
-            <option value="template">wie Vorlage{props.templateResolutionMm ? ` (${String(props.templateResolutionMm).replace(".", ",")} mm)` : ""}</option>
+            <option value="template">{t("wie Vorlage")}{props.templateResolutionMm ? ` (${fmtNum(props.templateResolutionMm, 1)} mm)` : ""}</option>
             <option value="1mm">MNI 2009c, 1 mm</option>
           </select>
         </label>

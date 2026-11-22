@@ -5,7 +5,7 @@ import type { Vec3 } from "../core/geometry";
 import { type EditOp, type ValueRule, type VoiAction, changesGrid, countAffected, describeEdit } from "../edit/operations";
 import type { VoiStats } from "../edit/voi";
 import type { Volume3D } from "../viewer/volume";
-import { formatCount, formatValue, parseInput } from "./format";
+import { formatCount, formatValue, parseInput, fmtNum } from "./format";
 
 import { t, tk, tr } from "../i18n";
 /** Above this fraction of affected voxels the user must confirm the edit. */
@@ -33,7 +33,7 @@ function AffectedHint({ affected, total }: { affected: number | null; total: num
   const large = fraction > LARGE_EDIT_FRACTION;
   return (
     <p className={large ? "tool-hint tool-warning" : "tool-hint"}>
-      Betroffen: {formatCount(affected)} Voxel ({(fraction * 100).toLocaleString("de-DE", { maximumFractionDigits: 2 })} %)
+      {tr("Betroffen: {n} Voxel ({p} %)", { n: formatCount(affected), p: fmtNum(fraction * 100, 2) })}
       {large ? t(" – ungewöhnlich viel, bitte Grenzwerte und Einheit prüfen.") : ""}
     </p>
   );
@@ -156,7 +156,7 @@ export function ValueSection(props: ValueSectionProps) {
       </label>
       {(mode === "ge" || mode === "le") && (
         <label className="field">
-          Grenzwert ({mode === "ge" ? "≥" : "≤"}){unit}
+          {tr("Grenzwert")} ({mode === "ge" ? "≥" : "≤"}){unit}
           <input type="text" inputMode="decimal" value={threshold} onChange={(e) => props.onThresholdChange(e.target.value)} />
           <input
             type="range"

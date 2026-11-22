@@ -1392,7 +1392,7 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
 }
 
 function profileNote(p: CameraProfile | undefined) {
-  return p?.note ? <p className="tool-hint">Kalibrierung: {p.note}</p> : null;
+  return p?.note ? <p className="tool-hint">{tr("Kalibrierung: {note}", { note: tr(p.note) })}</p> : null;
 }
 
 const labelHashes = new WeakMap<Float32Array, number>();

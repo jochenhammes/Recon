@@ -375,7 +375,7 @@ export function Viewer(props: ViewerProps) {
           </button>
           {props.layerPanel && (
             <button className={layersOpen ? "active" : ""} aria-pressed={layersOpen} title={tr("Ebenen ein-/ausblenden")} onClick={toggleLayers}>
-              <Layers size={13} /> Ebenen
+              <Layers size={13} /> {tr("Ebenen")}
             </button>
           )}
           <button className={helpOpen ? "active" : ""} aria-pressed={helpOpen} aria-label={tr("Maus- und Tastenbedienung")} title={tr("Maus- und Tastenbedienung")} onClick={() => setHelpOpen((o) => !o)}>

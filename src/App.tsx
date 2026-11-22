@@ -746,7 +746,7 @@ function App() {
       setCoregResults({});
       setProjectionSet(null);
       live.current = { entries: st.entries, referenceId: st.referenceId, activeId: st.activeId, overlayIds: st.overlayIds ?? [] };
-      setNotice(tx("Projekt „{name}“ geöffnet: {length} {v}.", { name: file.name, length: st.entries.length, v: st.entries.length === 1 ? "Datensatz" : tx("Datensätze") }));
+      setNotice(tx("Projekt „{name}“ geöffnet: {length} {v}.", { name: file.name, length: st.entries.length, v: st.entries.length === 1 ? tx("Datensatz") : tx("Datensätze") }));
     } catch (e) {
       setProjectError(e instanceof ProjectError ? e.message : tx("Öffnen fehlgeschlagen: {v}", { v: e instanceof Error ? e.message : String(e) }));
     } finally {
@@ -2272,7 +2272,7 @@ function App() {
         }
       }
       setImcalcResults((prev) => [...prev, ...created]);
-      setImcalcStatus(tx("{length} {v} angelegt{v2}.", { length: created.length, v: created.length === 1 ? "Datensatz" : tx("Datensätze"), v2: created.length > 1 ? tx(" – weitere über „Ebenen“ einblenden") : "" }));
+      setImcalcStatus(tx("{length} {v} angelegt{v2}.", { length: created.length, v: created.length === 1 ? tx("Datensatz") : tx("Datensätze"), v2: created.length > 1 ? tx(" – weitere über „Ebenen“ einblenden") : "" }));
     } catch (e) {
       setImcalcError(e instanceof Error ? e.message : String(e));
       setImcalcStatus(null);
@@ -2790,7 +2790,7 @@ function App() {
             const hidden = d.filter((x) => !x.shown);
             if (hidden.length)
               setNotice(
-                tx("{length} {v} geladen – nicht eingeblendet: {v2}. Einblenden über „Ebenen“ oben rechts im Viewer.", { length: d.length, v: d.length === 1 ? "Datensatz" : tx("Datensätze"), v2: hidden.map((h) => h.name).join(", ") }),
+                tx("{length} {v} geladen – nicht eingeblendet: {v2}. Einblenden über „Ebenen“ oben rechts im Viewer.", { length: d.length, v: d.length === 1 ? tx("Datensatz") : tx("Datensätze"), v2: hidden.map((h) => h.name).join(", ") }),
               );
           }
         }}
@@ -3233,16 +3233,16 @@ function App() {
               </InfoText>
               <div className="button-row">
                 <button className="secondary-btn" disabled={coregRunning || !reference.landmarks?.some((l) => l.name === LANDMARK_1)} onClick={() => reorientTo("base", true)}>
-                  Basis: Ursprung = Landmarke 1
+                  {tx("Basis: Ursprung = Landmarke 1")}
                 </button>
                 <button className="secondary-btn" disabled={coregRunning || !moving.landmarks?.some((l) => l.name === LANDMARK_1)} onClick={() => reorientTo("moving", true)}>
-                  Datensatz: Ursprung = Landmarke 1
+                  {tx("Datensatz: Ursprung = Landmarke 1")}
                 </button>
               </div>
               {(["base", "moving"] as LandmarkSide[]).map((side) =>
                 sideEntry(side)?.dataset.reoriented ? (
                   <p key={side} className="tool-hint">
-                    {side === "base" ? "Basis" : "Datensatz"}: Ursprung übernommen.{" "}
+                    {side === "base" ? tx("Basis") : tx("Datensatz")}{tx(": Ursprung übernommen.")}{" "}
                     <button className="link-btn" disabled={coregRunning} onClick={() => resetOrigin(side)}>
                       {tx("zurück auf Original-Ursprung")}
                     </button>
@@ -3836,7 +3836,7 @@ function App() {
       headerInfo={
         <ActivityBar
           activities={activities}
-          idleText={entries.length ? tx("{length} {v} geladen", { length: entries.length, v: entries.length === 1 ? "Datensatz" : tx("Datensätze") }) : undefined}
+          idleText={entries.length ? tx("{length} {v} geladen", { length: entries.length, v: entries.length === 1 ? tx("Datensatz") : tx("Datensätze") }) : undefined}
           onOpen={(tab) => {
             setActiveTab(tab);
             setPanelOpen(true);

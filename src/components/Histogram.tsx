@@ -59,7 +59,7 @@ export function Histogram({ data, marker, scale: valueScale = 1 }: HistogramProp
           <input type="checkbox" checked={logScale} onChange={(e) => setLogScale(e.target.checked)} /> log
         </label>
         <label>
-          <input type="checkbox" checked={excludeLowestBin} onChange={(e) => setExcludeLowestBin(e.target.checked)} /> ohne unterste Bin
+          <input type="checkbox" checked={excludeLowestBin} onChange={(e) => setExcludeLowestBin(e.target.checked)} /> {t("ohne unterste Bin")}
         </label>
       </div>
       <svg

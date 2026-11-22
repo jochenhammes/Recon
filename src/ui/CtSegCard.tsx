@@ -79,7 +79,7 @@ export function CtSegCard(props: CtSegCardProps) {
   const inference = p?.inference ? inferenceEstimate(p, now) : null;
   const pct = inference ? 100 * inference.fraction : p && p.total > 0 ? (100 * p.done) / p.total : 3;
   const slow = inference && p && inference.avg && inference.since > 3 * inference.avg;
-  const autoText = props.webgpu ? (firefox ? "Automatisch (Firefox: CPU)" : mac ? "Automatisch (Mac: CPU)" : "Automatisch (WebGPU)") : "Automatisch (CPU)";
+  const autoText = t("Automatisch ({how})", { how: props.webgpu ? (firefox ? "Firefox: CPU" : mac ? "Mac: CPU" : "WebGPU") : "CPU" });
   return (
     <Card title={<>{t("CT-Organsegmentierung")}</>} info={
           <>
@@ -91,10 +91,9 @@ export function CtSegCard(props: CtSegCardProps) {
               <b>{t("TotalSegmentator Organe 1,5 mm")}</b> {t("(24 Organe, etwas genauer, vor allem bei kleinen Organen) und")} <b>{t("MOOSE Organe 1,5 mm")}</b>{" "}
               {t("(19 Organe inkl. Gehirn und Schilddrüsenlappen; auf Low-Dose-CTs aus PET/CT trainiert, CC BY 4.0). Die 1,5-mm-Modelle brauchen etwa 3× Rechenzeit und passen nur für Rumpf-/Bauch-CTs in den Speicher. Vergleich auf Expertendaten (AMOS, 3 Fälle): mittlerer Dice 0,86 bzw. 0,85 statt 0,83.")}
             </p>
-            <p>WebGPU ist auf PCs mit Grafikkarte meist deutlich schneller; auf dem Mac (Apple Silicon) ist die CPU mit allen Kernen schneller, „Automatisch“ nutzt dort die CPU. Hängt WebGPU oder meldet einen Fehler, wird automatisch auf der CPU weitergerechnet.</p>
+            <p>{t("WebGPU ist auf PCs mit Grafikkarte meist deutlich schneller; auf dem Mac (Apple Silicon) ist die CPU mit allen Kernen schneller, „Automatisch“ nutzt dort die CPU. Hängt WebGPU oder meldet einen Fehler, wird automatisch auf der CPU weitergerechnet.")}</p>
             <p>
-              Quellen: TotalSegmentator (Wasserthal et al., Radiology: AI 2023), Apache-2.0; MOOSE (Shiyam Sundar et al., J Nucl Med 2022), CC BY 4.0;
-              {t("nnU-Net (Isensee et al. 2021). Nicht für diagnostische Zwecke zertifiziert.")}
+              {t("Quellen: TotalSegmentator (Wasserthal et al., Radiology: AI 2023), Apache-2.0; MOOSE (Shiyam Sundar et al., J Nucl Med 2022), CC BY 4.0; nnU-Net (Isensee et al. 2021). Nicht für diagnostische Zwecke zertifiziert.")}
             </p>
           </>
         } status={props.running ? { text: t("läuft"), tone: "run" } : null}>
@@ -130,7 +129,7 @@ export function CtSegCard(props: CtSegCardProps) {
             <select value={backend} disabled={props.running} onChange={(e) => chooseBackend(e.target.value as CtSegBackend)}>
               <option value="auto">{autoText}</option>
               <option value="webgpu" disabled={!props.webgpu}>
-                WebGPU (Grafikkarte){props.webgpu ? "" : t(" – nicht verfügbar")}
+                {t("WebGPU (Grafikkarte)")}{props.webgpu ? "" : t(" – nicht verfügbar")}
               </option>
               <option value="wasm">CPU</option>
             </select>
