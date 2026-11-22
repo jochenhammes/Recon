@@ -21,8 +21,9 @@ Alles läuft im Browser; es gibt keinen Server, **die Daten verlassen den Rechne
 | **SPECT-Rekonstruktion** | Projektionen (NM Multi-Frame, 1–2 Köpfe) mit FBP (Rampe, Shepp-Logan, Kosinus, Hamming, Hann, Butterworth) oder OSEM (Subsets, Iterationen) |
 | **Ansicht** | Axial, sagittal, koronar und rotierende MIP in Patientenorientierung; beliebig viele Overlays mit eigener Farbtabelle, eigenem Fenster und eigener Deckkraft; Ebenen-Schnellwahl über den Bildern (in jedem Bereich); Farbskala mit Fenster in SUV/HU/…; Region unter dem Cursor; WebGL2-Darstellung; Screenshot mit Farbskala; Fusion als DICOM/NIfTI exportieren |
 | **Koregistrierung (Patientenraum)** | Für alle Körperregionen: PET/SPECT (auch dynamisch) auf CT/MRT des Patienten; Basis-Datensatz definiert den Raum; beliebige Datensätze darauf registrieren (rigide/affin; NMI, MI, Correlation Ratio, Kreuzkorrelation; Mehrstufen, Grobsuche); **Ursprung & Landmarken** für Datensätze in verschiedenen Koordinatensystemen (z. B. NIfTI und DICOM): je zwei Landmarken im Einzelansicht-Modus setzen, Ursprung auf Landmarke 1 setzen, mit Landmarke 2 ausrichten, Drehen um den Ursprung (90°-Schritte), Ursprung optional dauerhaft übernehmen (wie SPM „Set origin“); Ergebnis prüfen, übernehmen oder verwerfen; manuelle Feinkorrektur; Matrix als JSON |
-| **Standardraum (MNI, Hirn)** | Normalisierung auf Basis eines Patientendatensatzes – T1-MRT (MNI152 2009c), PET/SPECT (SPM-Vorlagen) oder Kopf-CT (SPM-Transmissionsvorlage); affin und nichtlinear (SPM-artig); danach werden **alle** Datensätze des Patientenraums mitübertragen (Labelbilder mit Regionsnamen, dynamische Serien Frame für Frame); SPM/CAT12-`y_*.nii` importieren/exportieren |
-| **Centiloid & SUVR: Atlas** | CerebrA (mitgeliefert), AAL3 (ZIP-Download) oder eigener Atlas; regionale Statistik, Referenzregion, SUVR-Tabelle und SUVR-Bild |
+| **Standardraum (MNI, Hirn)** | Normalisierung auf Basis eines Patientendatensatzes – T1/T2-MRT (MNI152 2009c), PET/SPECT mit tracerspezifischer Vorlage (FDG, PiB/Amyloid, FP-CIT/DaTSCAN, ¹⁸F-DOPA, Raclopride, Perfusion) oder Kopf-CT; affin und nichtlinear (SPM-artig); Ausgabe wahlweise in 1 mm; danach werden **alle** Datensätze des Patientenraums mitübertragen (Labelbilder mit Regionsnamen, dynamische Serien Frame für Frame); SPM/CAT12-`y_*.nii` importieren/exportieren |
+| **Vorlagen & Atlanten** | Katalog im MNI-Raum: MRT-, PET/SPECT- und CT-Vorlagen, Gewebekarten GM/WM/CSF (1 mm), Atlanten CerebrA, Schaefer 2018, Thalamuskerne (1 mm) – mitgeliefert, mit Lizenz und Zitat; Harvard-Oxford, Brainnetome, AAL3, Jülich-Brain, Hammers lädt man selbst von der Quelle, die App erkennt sie am Namen und speichert sie im Browser ([Quellen](Hirnvorlagen-Quellen.md)) |
+| **Centiloid & SUVR: Atlas** | Atlas aus dem Katalog oder eigener; regionale Statistik (feiner Atlas auf gröberen Daten per Mehrheit der Teilvoxel, optional nur graue Substanz), Referenzregion, SUVR-Tabelle und SUVR-Bild |
 | **Centiloid & SUVR: Centiloid** | Amyloid-PET mit GAAIN-Standard-VOIs (vom Nutzer geladen); MRT-Pipeline (affin) an den GAAIN-Referenzdaten kalibriert (Florbetaben und PiB, Kreuzvalidierung RMSE 4–6 CL), Standardgleichungen für extern normalisierte Daten, eigene Gleichung; PET-only (nicht validiert) |
 | **Kinetik (dynamisches PET)** | Dynamische DICOM-Serien und 4D-NIfTI (BIDS-JSON); Bewegungskorrektur der Frames; Übertragung in den MNI-Raum (über T1); Referenzregion aus Atlas; **Patlak (Ki_ref)** und **SRTM (BP_ND, R1)** regional und als Parameterkarten, Kurven, CSV – nach dem MATLAB-Paket der Arbeitsgruppe ([ghaefner/kinetic-modeling](https://github.com/ghaefner/kinetic-modeling)) |
 | **CT-Organsegmentierung** | TotalSegmentator „total“ (117 Strukturen, 3 mm) oder Organmodelle 1,5 mm (TotalSegmentator 24 Organe, MOOSE 19 Organe; genauer) direkt im Browser (WebGPU oder CPU); Regionsliste mit Suche, Ein-/Ausblenden und Sprung zur Region; Modellvergleich mit Laufzeit und Dice gegen ein Referenz-Labelbild |
@@ -64,9 +65,16 @@ die CT-Segmentierung läuft dort ggf. auf der CPU.
 
 ## Mitgelieferte Daten und Lizenzen
 
-- `public/templates/`: MNI ICBM 152 Nonlinear Asymmetrical 2009c (Fonov et al. 2009/2011), © McConnell Brain Imaging
-  Centre (`LICENSE-MNI152NLin2009cAsym.txt`); SPM12-PET-, -SPECT- und -Transmissionsvorlage (toolbox/OldNorm), GNU GPL v2+ (`LICENSE-SPM12-GPL.txt`).
-- `public/atlases/`: CerebrA (Manera et al. 2020, Sci Data 7:237), CC0 1.0, auf das 2-mm-Raster der Vorlage übertragen.
+- `public/templates/`: MNI ICBM 152 Nonlinear Asymmetrical 2009c in 1 und 2 mm, T2 und GM/WM/CSF in 1 mm (Fonov et al.
+  2009/2011), © McConnell Brain Imaging Centre (`LICENSE-MNI152NLin2009cAsym.txt`); SPM12-PET-, -SPECT- und
+  -Transmissionsvorlage (toolbox/OldNorm), GNU GPL v2+ (`LICENSE-SPM12-GPL.txt`); FDG-, PiB- und Raclopride-Vorlage aus
+  Magia (Turku PET Centre, MIT, `README-magia.txt`); FP-CIT-SPECT- und ¹⁸F-DOPA-Vorlage (García-Gómez et al. 2013,
+  „free use … please cite“, `README-spmtemplates.txt`); Kopf-CT-Vorlage aus der Clinical Toolbox (Rorden et al. 2012,
+  BSD-2-Clause, `LICENSE-Clinical-BSD.txt`).
+- `public/atlases/`: CerebrA (Manera et al. 2020, Sci Data 7:237), CC0 1.0, in 1 und 2 mm; Schaefer 2018 (100/200/400
+  Parzellen, MIT); MIAL67-Thalamuskerne (Najdenovska et al. 2018, CC BY 4.0). Je Atlas eine `README-*.txt`.
+- Aufbereitung aller Vorlagen und Atlanten reproduzierbar mit `scripts/prepare-brain-assets.py` (Quellen mit
+  SHA-256-Prüfsummen); Recherche und Lizenzen in [Hirnvorlagen-Quellen.md](Hirnvorlagen-Quellen.md).
 - `public/models/totalseg-total-3mm/`: TotalSegmentator „total“ 3 mm (Wasserthal et al., Radiology: AI 2023; nnU-Net),
   Apache 2.0, nach ONNX exportiert (`tools/totalseg-onnx/export.py`), siehe `NOTICE.txt`.
 - `public/models/totalseg-organs-1.5mm/`: TotalSegmentator-v2-Organmodell 1,5 mm (Dataset291), Apache 2.0, nach ONNX

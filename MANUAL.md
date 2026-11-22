@@ -119,8 +119,9 @@ Alles wird lokal im Browser berechnet; Daten werden nirgendwohin hochgeladen.
    - es eine TotalSegmentator-Ausgabe ist,
    - eine Tabelle mit gleichem Namen mitgeladen wird (z. B. `AAL3v1.nii` + `AAL3v1.nii.txt`), oder
    - der Dateiname auf ein Labelbild hindeutet (`…_seg`, `…_dseg`, `labels`, `aseg` …).
-6. Unter **Standardraum-Vorlage** (aufklappen) lassen sich MNI- und SPM-Vorlagen oder eigene Vorlagen laden
-   (siehe [Abschnitt 6](#6-standardraum-mni-atlas-und-suvr)).
+6. Unter **Vorlagen & Atlanten (Hirn, MNI)** (aufklappen) lassen sich mitgelieferte Vorlagen, Gewebekarten und
+   Hirnatlanten laden, selbst heruntergeladene Atlanten einlesen oder eigene Vorlagen laden
+   (siehe [Abschnitt 6.4](#64-vorlagen-und-atlanten-katalog)).
 
 ### Projekt speichern und öffnen
 
@@ -292,14 +293,24 @@ atlasbasiert auswerten oder im Standardraum speichern.
    - **Grundlage (Patientendatensatz)**: am besten das T1-MRT, sonst das Hirn-PET/SPECT oder das **Kopf-CT**.
    - **Kontrast** und **Vorlage** werden passend vorgeschlagen und bei Bedarf automatisch geladen:
 
-     | Grundlage | Vorlage |
+     | Grundlage | Vorlage (Vorschlag) |
      |---|---|
      | T1-MRT | MNI152 2009c (T1, 2 mm) |
-     | PET | SPM12 PET (Perfusion) |
-     | SPECT | SPM12 SPECT (Perfusion) |
+     | FDG-PET | FDG-PET (Turku/Magia) |
+     | Amyloid-PET (PiB, Florbetaben, Florbetapir, Flutemetamol) | PiB-PET (Turku/Magia, 1 mm) |
+     | DAT-SPECT (¹²³I-FP-CIT, DaTSCAN) | FP-CIT-SPECT (García-Gómez) |
+     | ¹⁸F-DOPA-PET | ¹⁸F-DOPA-PET (García-Gómez) |
+     | Raclopride-PET | Raclopride-PET (Turku/Magia) |
+     | sonstiges PET / SPECT | FDG-PET bzw. SPM12 SPECT (Perfusion) |
      | CT | SPM12 Transmission (Schwächungsbild, Knochen hell) |
 
-     Eigene Vorlagen (z. B. Amyloid-PET, auch 4D/adaptiv) im Bereich *Daten* → *Standardraum-Vorlage*.
+     Der Tracer wird aus dem DICOM-Header (Radiopharmakon, Serien- und Studienbeschreibung) bzw. dem Dateinamen
+     erkannt. In der Liste stehen alle Vorlagen des Katalogs mit ihrem Raum; eigene Vorlagen (z. B. Amyloid-PET, auch
+     4D/adaptiv) im Bereich *Daten* → *Vorlagen & Atlanten*.
+   - **Ausgaberaster**: *wie Vorlage* oder *MNI 2009c, 1 mm*. Geschätzt wird immer auf etwa 2 mm (Vorlagen in 1 mm werden
+     dafür gemittelt – gleiche Rechenzeit); für 1 mm wird das Verformungsfeld auf das feine Raster umgerechnet. Jeder
+     Datensatz in 1 mm braucht etwa 35 MB Arbeitsspeicher. Sinnvoll für Auswertungen mit 1-mm-Atlanten und für die
+     Darstellung auf der MRT-Vorlage; für PET/SPECT allein bringt es keine zusätzliche Auflösung.
    - *Affin (12)* oder *Affin + nichtlinear* (nur bei gleichem Kontrast von Datensatz und Vorlage), optional
      *Nur Gehirn der Vorlage verwenden*.
    - CT: nur ein Kopf-CT verwenden (bei Ganzkörper-CT vorher auf den Kopf zuschneiden). Die HU-Werte werden für die
@@ -325,13 +336,55 @@ atlasbasiert auswerten oder im Standardraum speichern.
 
 ![Regionale SUVR mit CerebrA](docs/images/16-atlas-suvr.png)
 
-1. Bereich **Centiloid & SUVR** (Leiste: *SUVR*), Karte **Atlas & SUVR**: *CerebrA-Atlas laden* (102 Regionen, mitgeliefert) oder *Eigener Atlas …*
+1. Bereich **Centiloid & SUVR** (Leiste: *SUVR*), Karte **Atlas & SUVR**: Atlas aus der Liste wählen und
+   *Atlas laden* (Standard CerebrA 1 mm; außerdem Schaefer 2018, Thalamuskerne) oder *Eigener Atlas …*
    (Labelbild + Tabelle, oder direkt die AAL3-ZIP-Datei von [gin.cnrs.fr](https://www.gin.cnrs.fr/en/tools/aal/)).
+   Ist der Atlas feiner als der Datensatz (1-mm-Atlas, 2-mm-PET), erhält jedes Voxel das häufigste Label seiner
+   Teilvoxel statt des nächsten Nachbarn.
 2. **Datensatz** im Standardraum wählen (z. B. das übertragene PET).
 3. **Referenzregion**: Kleinhirnrinde, Kleinhirn gesamt, Pons/Hirnstamm, ganzes Gehirn oder *Eigene Auswahl …*.
-4. **Regionen auswerten** – Tabelle mit Volumen, Mittelwert und SUVR; sortierbar nach Name, Index oder SUVR.
-5. *Tabelle als CSV* exportieren oder *SUVR-Bild anlegen* (neuer Datensatz = Bild / Referenzmittel).
+4. Optional **Nur graue Substanz (GM ≥ 0,5)**: beschränkt alle Regionen (auch die Referenz) auf Voxel mit einer
+   Wahrscheinlichkeit grauer Substanz ≥ 0,5 laut Gewebekarte MNI 2009c (wird beim Ankreuzen geladen). Vermindert den
+   Einfluss von weißer Substanz und Liquor bei kortikalen Regionen; nur für Daten im MNI-Raum.
+5. **Regionen auswerten** – Tabelle mit Volumen, Mittelwert und SUVR; sortierbar nach Name, Index oder SUVR.
+6. *Tabelle als CSV* exportieren oder *SUVR-Bild anlegen* (neuer Datensatz = Bild / Referenzmittel).
    Mit **⤢** über der Tabelle öffnet sie sich groß über dem Viewer.
+
+### 6.4 Vorlagen und Atlanten (Katalog)
+
+![Katalog „Vorlagen & Atlanten“ und Schaefer-Atlas auf der MNI-Vorlage in 1 mm](docs/images/14a-vorlagen-atlanten.jpg)
+
+Bereich **Daten** → **Vorlagen & Atlanten (Hirn, MNI)**. Jeder Eintrag zeigt Kontrast/Tracer, Raum, Größe und ein
+Lizenz-Abzeichen (*frei*, *frei, zitieren*, *nicht-kommerziell*); das Abzeichen öffnet Lizenz und Zitat, der Name zeigt
+beim Überfahren die Quelle. *Laden* legt den Datensatz an; mitgelieferte Vorlagen und Atlanten werden in der
+Projektdatei nur als Verweis gespeichert und beim Öffnen neu geladen.
+
+**Mitgeliefert:**
+
+| Gruppe | Einträge |
+|---|---|
+| MRT-Vorlagen | MNI152 2009c T1 (2 mm, 1 mm), T2 (1 mm), mit Hirnmaske |
+| PET/SPECT | SPM12 PET und SPECT (Perfusion), FDG, PiB (1 mm), Raclopride (1 mm), FP-CIT-SPECT, ¹⁸F-DOPA |
+| CT | SPM12 Transmission, Kopf-CT (Rorden, Clinical Toolbox) |
+| Gewebekarten | graue Substanz, weiße Substanz, Liquor (MNI 2009c, 1 mm) – als Overlay; GM auch für „nur graue Substanz“ |
+| Atlanten | CerebrA (102 Regionen, 1 und 2 mm), Schaefer 2018 (100/200/400 Parzellen, 7 Netzwerke), Thalamuskerne MIAL67 |
+
+PET-/SPECT-Vorlagen liegen in 1–2 mm vor – feiner ist bei der Auflösung von PET und SPECT nicht sinnvoll. Vorlagen
+mit „MNI152 (SPM)“ und „MNI152NLin2009cAsym“ liegen beide im MNI-Raum, unterscheiden sich aber um wenige Millimeter.
+
+**Selbst herunterladen** (Lizenz erlaubt keine Weitergabe mit der App): Harvard-Oxford (aus FSL oder TemplateFlow),
+Brainnetome, AAL3, Jülich-Brain, Hammers.
+
+1. Im Abschnitt *Selbst herunterladen* beim gewünschten Atlas **Zur Quelle** öffnen und die genannten Dateien laden
+   (Lizenzbedingungen der Quelle beachten).
+2. **Heruntergeladene Dateien auswählen …** und Labelbild **und** Tabelle zusammen wählen (AAL3 auch als ZIP).
+   Beispiel Harvard-Oxford aus einer FSL-Installation: `$FSLDIR/data/atlases/HarvardOxford/HarvardOxford-cort-maxprob-thr25-1mm.nii.gz`
+   und `$FSLDIR/data/atlases/HarvardOxford-Cortical.xml`.
+3. Die App erkennt den Atlas am Dateinamen, setzt Namen, Regionsnamen (FSL-XML, LUT oder TSV) und Quellenangabe und
+   speichert die Dateien **in diesem Browser** (Cache). Danach steht beim Eintrag *Laden* – auch nach einem Neustart;
+   *entfernen* löscht die gespeicherte Kopie.
+
+Herkunft, Lizenzen und Aufbereitung aller Daten: [Hirnvorlagen-Quellen.md](Hirnvorlagen-Quellen.md).
 
 ---
 
@@ -871,7 +924,8 @@ Ein Klick auf eine Zeile wirkt wie in der kleinen Tabelle (z. B. Region ins Hist
 ![Label-Analyse](docs/images/31-label-analyse-karte.png)
 
 1. **Labels** wählen (CT-Organe, Atlas, Läsionsmaske, geladenes Labelbild). Hirnatlanten direkt laden:
-   *Hirnatlas CerebrA (MNI)* oder *AAL3 / eigene Labels …* (AAL3-ZIP oder NIfTI + Tabelle).
+   Atlas aus der Liste und *Atlas laden* (CerebrA, Schaefer, Thalamuskerne) oder *AAL3 / eigene Labels …*
+   (AAL3-ZIP oder NIfTI + Tabelle).
    Hat ein Labelbild keine Regionsnamen, erscheint ein Hinweis mit *TotalSegmentator-Organnamen zuweisen* bzw.
    *Labeltabelle laden …*.
 2. **Datensatz** wählen (z. B. das PET). Labels auf einem anderen Raster werden über die Registrierung übertragen.
