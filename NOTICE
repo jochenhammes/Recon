@@ -1,0 +1,67 @@
+Recon Studio
+Copyright 2026 Jochen Hammes
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Recon Studio is a research tool. It is not a certified medical device and must
+not be used for diagnosis or treatment decisions.
+
+-------------------------------------------------------------------------------
+Derived work
+-------------------------------------------------------------------------------
+
+The kinetic models (Patlak with reference region, SRTM) in src/kinetics are a
+TypeScript port of the MATLAB package "kinetic-modeling" of the working group
+(https://github.com/ghaefner/kinetic-modeling), used with permission.
+
+-------------------------------------------------------------------------------
+Third-party software bundled in the built application
+-------------------------------------------------------------------------------
+
+- React, React DOM (MIT License, Copyright (c) Meta Platforms, Inc. and affiliates)
+- ONNX Runtime Web (MIT License, Copyright (c) Microsoft Corporation)
+- dicom-parser (MIT License, Copyright (c) 2014 Chris Hafey)
+- jpeg-lossless-decoder-js (MIT License, Copyright (c) 2015 RII-UTHSCSA)
+- lucide-react (ISC License, Copyright (c) Lucide Icons and Contributors)
+- coi-serviceworker 0.1.7 (MIT License, Copyright (c) 2021 Guido Zuidhof),
+  modified; see public/LICENSE-coi-serviceworker.txt
+Full licence texts: public/THIRD-PARTY-LICENSES.txt (also served with the app).
+
+-------------------------------------------------------------------------------
+Model weights (public/models), converted to ONNX
+-------------------------------------------------------------------------------
+
+- TotalSegmentator "total" 3 mm (Dataset297) and organ model 1.5 mm (Dataset291),
+  Apache License 2.0. Wasserthal J et al., TotalSegmentator: Robust Segmentation
+  of 104 Anatomic Structures in CT Images. Radiology: AI 2023;5(5):e230024.
+  nnU-Net: Isensee F et al., Nature Methods 2021;18:203-211 (Apache License 2.0).
+- MOOSE 3 clin_ct_organs, weights CC BY 4.0 (code Apache License 2.0).
+  Shiyam Sundar LK et al., J Nucl Med 2022. https://github.com/ENHANCE-PET/MOOSE
+See the NOTICE.txt file in each model directory.
+
+-------------------------------------------------------------------------------
+Brain templates and atlases (public/templates, public/atlases)
+-------------------------------------------------------------------------------
+
+These data files keep their own licences; the licence or README file is next
+to each file. Details and sources: Hirnvorlagen-Quellen.md.
+
+- ICBM 152 Nonlinear Asymmetrical 2009c (MNI152NLin2009cAsym), Copyright (C)
+  1993-2004 Louis Collins, McConnell Brain Imaging Centre, Montreal Neurological
+  Institute, McGill University (permissive licence, LICENSE-MNI152NLin2009cAsym.txt).
+  Fonov V et al., NeuroImage 2011;54(1); NeuroImage 2009;47:S102.
+- SPM12 PET, SPECT and transmission templates (toolbox/OldNorm), Wellcome Centre
+  for Human Neuroimaging, UCL, GNU General Public License v2 or later
+  (LICENSE-SPM12-GPL.txt).
+- Magia PET templates (FDG, PiB, raclopride), Turku PET Centre, MIT License
+  (LICENSE-magia-MIT.txt). Karjalainen T et al., Front Neuroinform 2020;14:3.
+- 123I-FP-CIT SPECT and 18F-DOPA PET templates, "intended for free use by the
+  neuroimaging community". Garcia-Gomez FJ et al., Rev Esp Med Nucl Imagen Mol
+  2013;32(6):350-356 (README-spmtemplates.txt).
+- Head CT template (Clinical Toolbox), BSD 2-Clause, Copyright (c) 2021 Chris
+  Rorden (LICENSE-Clinical-BSD.txt). Rorden C et al., NeuroImage 2012;61:957-965.
+- CerebrA atlas, CC0 1.0. Manera AL et al., Sci Data 2020;7:237.
+- Schaefer 2018 parcellations, MIT License, Copyright (c) 2016 Computational
+  Brain Imaging Group (CBIG). Schaefer A et al., Cereb Cortex 2018;28:3095-3114.
+- MIAL67 thalamic nuclei atlas, CC BY 4.0. Najdenovska E et al., Sci Data
+  2018;5:180270.

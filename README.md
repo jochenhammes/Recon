@@ -63,6 +63,14 @@ die CT-Segmentierung läuft dort ggf. auf der CPU.
 `src/header` DICOM-Header · `src/dosimetry` Dosimetrie · `src/export` DICOM/NIfTI/ZIP · `src/workers` Web Worker · `src/ui`, `src/components` Oberfläche ·
 `tools/totalseg-onnx` Export des Segmentierungsmodells nach ONNX.
 
+## Lizenz
+
+Recon Studio steht unter der [Apache License 2.0](LICENSE); Copyright 2026 Jochen Hammes. Hinweise zu Drittkomponenten,
+Modellgewichten und Daten stehen in [NOTICE](NOTICE). Die mitgelieferten Daten (Vorlagen, Atlanten, Modellgewichte)
+behalten ihre eigenen Lizenzen (siehe unten).
+
+Forschungswerkzeug, kein zertifiziertes Medizinprodukt – nicht für Diagnose oder Therapieentscheidungen.
+
 ## Mitgelieferte Daten und Lizenzen
 
 - `public/templates/`: MNI ICBM 152 Nonlinear Asymmetrical 2009c in 1 und 2 mm, T2 und GM/WM/CSF in 1 mm (Fonov et al.
