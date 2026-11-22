@@ -101,7 +101,7 @@ export function isAnatomical(source: VolumeSource): boolean {
 }
 
 export function suvForSource(source: VolumeSource, opts: { halfLifeSec?: number } = {}): SuvResult | null {
-  return source.kind === "dicom" ? computeSuv(source.files[0].dataSet, { ...opts, modality: source.modality }) : null;
+  return source.kind === "dicom" ? computeSuv(source.files[0].dataSet, { ...opts, modality: source.modality, all: source.files.map((f) => f.dataSet) }) : null;
 }
 
 export function rawUnitLabel(source: VolumeSource): string {

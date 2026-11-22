@@ -52,6 +52,10 @@ Beispieldaten; die Abbildung in Kapitel 9 stammt aus einer realen xSPECT/CT-Dosi
     Viewer, Farbskala, Analyse, Bearbeiten. Die Wahl bleibt im Browser gespeichert; ohne Wahl wird beim Laden eines PET
     mit SUV-Angaben SUV eingestellt. Segmentierung & Läsionen rechnet unabhängig davon immer in SUV, die Dosimetrie immer mit
     Counts bzw. Bq/ml.
+  - SUV (Körpergewicht) nach dem herstellerneutralen QIBA-Verfahren: Einheit BQML, Zerfallskorrektur START oder ADMIN.
+    Bei START wird die Dosis auf die Serienzeit zerfallskorrigiert. Liegt diese nach der frühesten Aufnahmezeit der
+    Bilder (nachträglich neu erzeugte Serie), gilt stattdessen die GE-Scanzeit (0009,100D), falls vorhanden, sonst die
+    früheste Aufnahmezeit.
   Die **Farbskala** unten links zeigt für jede sichtbare Ebene Farbtabelle und Fenster (Min/Max in SUV, HU, BP_ND …) und
   bei Labelbildern die Region unter dem Cursor; sie erscheint auch im Screenshot. Sie ist zugleich Bedienelement:
   - Der Balken umfasst den ganzen Wertebereich des Datensatzes (Zahlen links/rechts darunter); die beiden **weißen

@@ -13,6 +13,8 @@ export interface SuvInfo {
   halfLifeSeconds: number;
   /** DecayCorrection (0054,1102) of the series. */
   decayCorrection: string;
+  /** Which time the decay correction refers to (START): series time, earliest acquisition time or GE private scan time. */
+  referenceTime?: "series" | "acquisition" | "ge-private";
 }
 
 export type SuvResult = { ok: true; info: SuvInfo } | { ok: false; reason: string };
@@ -43,12 +45,29 @@ function parseDt(dt: string | undefined): number | undefined {
   return parseDicomDateTime(dt.slice(0, 8), dt.slice(8).replace(/[+-]\d{4}$/, ""));
 }
 
+/** Earliest acquisition date/time over the given images ((0008,002A), else (0008,0022)/(0008,0032)). */
+function earliestAcquisition(all: DataSet[]): number | undefined {
+  let min: number | undefined;
+  for (const d of all) {
+    const t =
+      parseDt(str(d, "x0008002a")) ??
+      parseDicomDateTime(str(d, "x00080022") ?? str(d, "x00080021") ?? str(d, "x00080020"), str(d, "x00080032"));
+    if (t !== undefined && (min === undefined || t < min)) min = t;
+  }
+  return min;
+}
+
 /**
  * Computes the body-weight SUV factor from a PET header (Units BQML, PatientWeight,
- * Radiopharmaceutical Information Sequence). Supports DecayCorrection START (reference = series
- * start) and ADMIN (reference = injection). Assumes a tissue density of 1 g/ml.
+ * Radiopharmaceutical Information Sequence). Supports DecayCorrection START and ADMIN (reference = injection).
+ * Assumes a tissue density of 1 g/ml.
+ *
+ * START follows the vendor-neutral QIBA SUV pseudo-code: the reference time is the series date/time unless it lies
+ * after the earliest acquisition date/time of the images (a series created or re-processed later); then the GE
+ * private scan date/time (0009,100D) if present, else the earliest acquisition date/time. Pass all images of the
+ * series in `opts.all` (default: only `ds`).
  */
-export function computeSuv(ds: DataSet, opts: { halfLifeSec?: number; modality?: string } = {}): SuvResult {
+export function computeSuv(ds: DataSet, opts: { halfLifeSec?: number; modality?: string; all?: DataSet[] } = {}): SuvResult {
   const modality = opts.modality ?? str(ds, "x00080060");
   if (modality !== "PT") return { ok: false, reason: t("Modality {v} (SUV nur für PET).", { v: modality ?? "unbekannt" }) };
   const units = str(ds, "x00541001");
@@ -65,14 +84,23 @@ export function computeSuv(ds: DataSet, opts: { halfLifeSec?: number; modality?:
   const decayCorrection = str(ds, "x00541102") ?? "START";
   let minutesToReference = 0;
   let doseAtReference = dose;
+  let referenceTime: SuvInfo["referenceTime"];
   if (decayCorrection === "START") {
     const injection =
       parseDt(str(rp, "x00181078")) ??
       parseDicomDateTime(str(ds, "x00080021") ?? str(ds, "x00080020"), str(rp, "x00181072"));
-    const seriesStart = parseDicomDateTime(str(ds, "x00080021") ?? str(ds, "x00080020"), str(ds, "x00080031"));
-    if (injection === undefined || seriesStart === undefined)
+    const series = parseDicomDateTime(str(ds, "x00080021") ?? str(ds, "x00080020"), str(ds, "x00080031"));
+    const acquisition = earliestAcquisition(opts.all?.length ? opts.all : [ds]);
+    let reference = series;
+    referenceTime = "series";
+    if (acquisition !== undefined && (series === undefined || series > acquisition)) {
+      const ge = parseDt(str(ds, "x0009100d"));
+      reference = ge ?? acquisition;
+      referenceTime = ge !== undefined ? "ge-private" : "acquisition";
+    }
+    if (injection === undefined || reference === undefined)
       return { ok: false, reason: t("Injektions- oder Serienstartzeit fehlt.") };
-    let dtMs = seriesStart - injection;
+    let dtMs = reference - injection;
     if (dtMs < 0 && dtMs > -24 * 3600e3 && !str(rp, "x00181078")) dtMs += 24 * 3600e3; // injection before midnight
     if (dtMs < 0) return { ok: false, reason: t("Serienstart liegt vor der Injektion.") };
     minutesToReference = dtMs / 60000;
@@ -91,6 +119,7 @@ export function computeSuv(ds: DataSet, opts: { halfLifeSec?: number; modality?:
       minutesToReference,
       halfLifeSeconds: halfLife,
       decayCorrection,
+      referenceTime,
     },
   };
 }
