@@ -26,7 +26,10 @@ export interface AtlasPanelProps {
   /** Datasets to evaluate (usually PET in standard space). */
   targets: Option[];
   defaultTargetId: string | null;
-  compute: (atlasId: string, targetId: string) => RegionResult;
+  compute: (atlasId: string, targetId: string, gmOnly?: boolean) => RegionResult;
+  /** Grey-matter map (MNI 2009c) loaded, and a way to load it. */
+  gmLoaded: boolean;
+  onLoadGm: () => void;
   onCreateSuvrImage: (targetId: string, refMean: number, refLabel: string) => void;
   error?: string | null;
 }
@@ -40,9 +43,10 @@ export function AtlasPanel(props: AtlasPanelProps) {
   const [targetId, setTargetId] = useState<string | null>(null);
   const [refMode, setRefMode] = useState<string>("cerebellum-gm");
   const [customRefs, setCustomRefs] = useState<number[]>([]);
-  const [result, setResult] = useState<(RegionResult & { atlasId: string; targetId: string }) | null>(null);
+  const [result, setResult] = useState<(RegionResult & { atlasId: string; targetId: string; gmOnly: boolean }) | null>(null);
   const [sort, setSort] = useState<SortKey>("name");
   const [error, setError] = useState<string | null>(null);
+  const [gmOnly, setGmOnly] = useState(false);
 
   const atlas = props.atlases.find((a) => a.id === atlasId) ?? props.atlases[0] ?? null;
   const target = props.targets.find((t) => t.id === targetId) ?? props.targets.find((t) => t.id === props.defaultTargetId) ?? props.targets[0] ?? null;
@@ -56,7 +60,7 @@ export function AtlasPanel(props: AtlasPanelProps) {
   const refIndices = effectiveMode === "custom" ? new Set(customRefs) : (presets.find((p) => p.id === effectiveMode)?.indices ?? new Set<number>());
   const refLabel = effectiveMode === "custom" ? `Eigene Auswahl (${customRefs.length} Regionen)` : (presets.find((p) => p.id === effectiveMode)?.label ?? "");
 
-  const current = result && atlas && target && result.atlasId === atlas.id && result.targetId === target.id ? result : null;
+  const current = result && atlas && target && result.atlasId === atlas.id && result.targetId === target.id && result.gmOnly === (gmOnly && props.gmLoaded) ? result : null;
   const refMean = current ? pooledMean(current.stats, refIndices) : NaN;
   const rows = useMemo(() => {
     if (!current) return [];
@@ -71,7 +75,8 @@ export function AtlasPanel(props: AtlasPanelProps) {
     if (!atlas || !target) return;
     setError(null);
     try {
-      setResult({ ...props.compute(atlas.id, target.id), atlasId: atlas.id, targetId: target.id });
+      const g = gmOnly && props.gmLoaded;
+      setResult({ ...props.compute(atlas.id, target.id, g), atlasId: atlas.id, targetId: target.id, gmOnly: g });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -79,7 +84,7 @@ export function AtlasPanel(props: AtlasPanelProps) {
 
   function downloadCsv() {
     if (!current || !atlas) return;
-    const csv = regionCsv(rows, refMean, { dataset: current.datasetLabel, atlas: atlas.label, reference: refLabel, unit: current.unit || "Wert" });
+    const csv = regionCsv(rows, refMean, { dataset: current.datasetLabel, atlas: current.gmOnly ? `${atlas.label} · nur graue Substanz (GM ≥ 0,5)` : atlas.label, reference: refLabel, unit: current.unit || "Wert" });
     const url = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;
@@ -155,6 +160,17 @@ export function AtlasPanel(props: AtlasPanelProps) {
               ))}
               <option value="custom">Eigene Auswahl …</option>
             </select>
+          </label>
+          <label className="checkbox-field" title="Regionen auf Voxel mit Wahrscheinlichkeit graue Substanz ≥ 0,5 beschränken (Gewebekarte MNI 2009c); vermindert den Einfluss von weißer Substanz und Liquor. Nur für Daten im MNI-Raum.">
+            <input
+              type="checkbox"
+              checked={gmOnly}
+              onChange={(e) => {
+                setGmOnly(e.target.checked);
+                if (e.target.checked && !props.gmLoaded) props.onLoadGm();
+              }}
+            />
+            Nur graue Substanz (GM ≥ 0,5){gmOnly && !props.gmLoaded ? " – Gewebekarte wird geladen …" : ""}
           </label>
           {effectiveMode === "custom" && (
             <label className="field">

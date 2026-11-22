@@ -31,7 +31,7 @@ import { DeformationFieldCard } from "./ui/DeformationFieldCard";
 import { CentiloidPanel, type CentiloidOutcome } from "./ui/CentiloidPanel";
 import { TagInput } from "./ui/TagInput";
 import { LabelList } from "./ui/LabelList";
-import { filteredLabels, labelStats } from "./atlas/labelStats";
+import { filteredLabels, labelStats, majorityLabels, subVoxelOffsets } from "./atlas/labelStats";
 import { TumorPanel, type TumorIndication, type TumorMode } from "./ui/TumorPanel";
 import { CtSegCard } from "./ui/CtSegCard";
 import { type SegBenchmarkResult, SegBenchmarkCard } from "./ui/SegBenchmarkCard";
@@ -642,7 +642,12 @@ function App() {
   function sessionState() {
     return {
       patientId,
-      entries,
+      // Unchanged bundled templates/atlases are stored by catalogue id only and fetched again on opening.
+      entries: entries.map((e) =>
+        e.dataset.catalogId && bundledEntry(e.dataset.catalogId) && !e.dataset.edits.length && e.dataset.current === e.dataset.original
+          ? { ...e, dataset: { catalogRef: e.dataset.catalogId, displayName: e.dataset.displayName } as unknown as LoadedDataset }
+          : e,
+      ),
       referenceId,
       overlayIds,
       activeId,
@@ -696,6 +701,16 @@ function App() {
       const { state, meta } = await loadProject(await file.arrayBuffer());
       const st = state as ReturnType<typeof sessionState>;
       if (!Array.isArray(st.entries)) throw new Error("Projekt enthält keine Datensätze.");
+      // Bundled templates/atlases saved by reference: load them from the app again.
+      st.entries = await Promise.all(
+        st.entries.map(async (e) => {
+          const ref = (e.dataset as unknown as { catalogRef?: string }).catalogRef;
+          if (!ref) return e;
+          const b = bundledEntry(ref);
+          if (!b) throw new Error(`Vorlage/Atlas „${ref}“ ist in dieser Version der App nicht enthalten.`);
+          return { ...e, dataset: { ...(await loadBundledEntry(b)), displayName: e.dataset.displayName } };
+        }),
+      );
       const savedVersion = typeof meta.version === "number" ? meta.version : 1;
       st.entries = st.entries.map((e) => ({ ...e, display: { ...e.display, lut: migrateLut(e.display.lut, savedVersion) } }));
       for (const e of st.entries) {
@@ -2058,19 +2073,45 @@ function App() {
     if (sameGrid({ nx: a.nx, ny: a.ny, nz: a.nz, geometry: a.geometry }, v) && atlasEntry.matrix.every((x, i) => Math.abs(x - target.matrix[i]) < 1e-9)) return a.data;
     const w2v = w2vById.get(atlasEntry.id);
     if (!w2v) throw new Error("Atlas ist nicht im Viewer verfügbar.");
+    // Atlas finer than the dataset (e.g. 1 mm atlas, 2 mm PET): majority of s³ samples per voxel, else nearest neighbour.
+    const s = Math.min(3, Math.round(Math.min(...v.geometry.spacing) / Math.max(...a.geometry.spacing)));
+    const offsets = s >= 2 ? subVoxelOffsets(s) : [[0, 0, 0] as [number, number, number]];
+    const samples = offsets.map(([dx, dy, dz]) => {
+      const pts = new Float32Array(v.nx * v.ny * v.nz * 3);
+      for (let k = 0, o = 0; k < v.nz; k++)
+        for (let j = 0; j < v.ny; j++)
+          for (let i = 0; i < v.nx; i++, o += 3) pts.set(applyMat4(target.matrix, voxelToWorld(v.geometry, i + dx, j + dy, k + dz)), o);
+      return resampleAtPoints(a, w2v, pts, "nearest");
+    });
+    return samples.length === 1 ? samples[0] : majorityLabels(samples);
+  }
+
+  /** Grey-matter probability (MNI 2009c GM map, if loaded) on the grid of a dataset; undefined if not loaded. */
+  function gmOnGrid(target: Entry): Float32Array | undefined {
+    const G = entries.find((e) => e.dataset.catalogId === "mni-gm-1");
+    const w2v = G && w2vById.get(G.id);
+    if (!G || !w2v) return undefined;
+    const v = target.dataset.current;
     const pts = new Float32Array(v.nx * v.ny * v.nz * 3);
     for (let k = 0, o = 0; k < v.nz; k++)
       for (let j = 0; j < v.ny; j++)
         for (let i = 0; i < v.nx; i++, o += 3) pts.set(applyMat4(target.matrix, voxelToWorld(v.geometry, i, j, k)), o);
-    return resampleAtPoints(a, w2v, pts, "nearest");
+    return resampleAtPoints(G.dataset.current, w2v, pts, "linear");
   }
 
-  function computeRegions(atlasId: string, targetId: string): RegionResult {
+  /** Labels restricted to grey matter (GM probability ≥ 0.5). */
+  function restrictToGm(labels: Float32Array, target: Entry): Float32Array {
+    const gm = gmOnGrid(target);
+    if (!gm) throw new Error("Die Gewebekarte „Graue Substanz“ ist nicht geladen.");
+    return Float32Array.from(labels, (l, i) => (gm[i] >= 0.5 ? l : 0));
+  }
+
+  function computeRegions(atlasId: string, targetId: string, gmOnly = false): RegionResult {
     const A = byId(atlasId);
     const E = byId(targetId);
     if (!A?.dataset.atlas || !E) throw new Error("Atlas oder Datensatz nicht gefunden.");
     const v = E.dataset.current;
-    const labels = atlasLabelsFor(A, E);
+    const labels = gmOnly ? restrictToGm(atlasLabelsFor(A, E), E) : atlasLabelsFor(A, E);
     const [sx, sy, sz] = v.geometry.spacing;
     const stats = regionStats(v.data, labels, A.dataset.atlas, (sx * sy * sz) / 1000);
     if (!stats.length) throw new Error("Keine Atlasregion überlappt mit dem Datensatz – liegt er im Standardraum des Atlas?");
@@ -2121,7 +2162,9 @@ function App() {
       labels,
       unit: label,
       datasetLabel: entryLabel(E),
-      note: resampled ? `Labels „${entryLabel(A)}“ über die Registrierung auf das Raster von „${entryLabel(E)}“ übertragen (nächster Nachbar).` : undefined,
+      note: resampled
+        ? `Labels „${entryLabel(A)}“ über die Registrierung auf das Raster von „${entryLabel(E)}“ übertragen (${Math.min(...E.dataset.current.geometry.spacing) / Math.max(...a.geometry.spacing) >= 1.5 ? "Mehrheit der Teilvoxel" : "nächster Nachbar"}).`
+        : undefined,
     };
   }
 
@@ -3306,6 +3349,8 @@ function App() {
         targets={entries.filter((e) => !e.dataset.template && !e.dataset.atlas).map((e) => ({ id: e.id, label: entryLabel(e) }))}
         defaultTargetId={entries.findLast((e) => e.dataset.derivedFrom && !e.dataset.derivedFrom.label && !isAnatomical(unitSource(e.dataset)))?.id ?? null}
         compute={computeRegions}
+        gmLoaded={loadedCatalog.has("mni-gm-1")}
+        onLoadGm={() => void addCatalogEntry("mni-gm-1")}
         onCreateSuvrImage={createSuvrImage}
         error={atlasError}
       />

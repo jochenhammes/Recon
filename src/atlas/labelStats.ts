@@ -52,3 +52,38 @@ export function filteredLabels(vol: Volume3D, keep: number[]): Volume3D {
   filterCache.set(vol.data, { key, vol: out });
   return out;
 }
+
+/**
+ * Most frequent label per voxel over several samples (e.g. s³ points inside each voxel of a coarser grid); ties go
+ * to the label seen first. Background (0) counts like a label, so region borders do not grow.
+ */
+export function majorityLabels(samples: Float32Array[]): Float32Array {
+  const n = samples[0]?.length ?? 0;
+  const out = new Float32Array(n);
+  const m = samples.length;
+  const vals = new Float64Array(m), cnt = new Int32Array(m);
+  for (let i = 0; i < n; i++) {
+    let u = 0;
+    for (let s = 0; s < m; s++) {
+      const v = Math.round(samples[s][i]);
+      let k = 0;
+      while (k < u && vals[k] !== v) k++;
+      if (k === u) {
+        vals[u] = v;
+        cnt[u++] = 1;
+      } else cnt[k]++;
+    }
+    let best = 0;
+    for (let k = 1; k < u; k++) if (cnt[k] > cnt[best]) best = k;
+    out[i] = vals[best];
+  }
+  return out;
+}
+
+/** Sub-sample offsets (voxel units, centred) for an s×s×s grid inside a voxel. */
+export function subVoxelOffsets(s: number): [number, number, number][] {
+  const o = Array.from({ length: s }, (_, q) => (q + 0.5) / s - 0.5);
+  const out: [number, number, number][] = [];
+  for (const z of o) for (const y of o) for (const x of o) out.push([x, y, z]);
+  return out;
+}
