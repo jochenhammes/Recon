@@ -124,3 +124,37 @@ export async function loadBundledPetTemplate(id: (typeof BUNDLED_PET_TEMPLATES)[
   // The transmission template is matched as a whole head (bone carries the information): no brain mask.
   return { ...d, catalogId: t.id, template: { name: t.name, kind: t.kind, mask: t.kind === "CT" ? null : maskFromBase(img.volume.data), attribution: SPM_TEMPLATE_ATTRIBUTION } };
 }
+
+/**
+ * Template for the estimation on a coarser grid: block average over f×f×f voxels (f = round(2 mm / spacing), e.g. 2
+ * for a 1 mm template), so a 1 mm template is matched at 2 mm (same speed as before); the mask is averaged and
+ * thresholded at 0.5. Templates of 1.5 mm or coarser are returned unchanged.
+ */
+export function coarseTemplate(v: Volume3D, mask?: Float32Array | null): { volume: Volume3D; mask?: Float32Array | null } {
+  const f = Math.round(2 / Math.max(...v.geometry.spacing));
+  if (f < 2) return { volume: v, mask };
+  const nx = Math.floor(v.nx / f), ny = Math.floor(v.ny / f), nz = Math.floor(v.nz / f);
+  const avg = (src: Float32Array) => {
+    const out = new Float32Array(nx * ny * nz);
+    const n = f * f * f;
+    for (let k = 0; k < nz; k++)
+      for (let j = 0; j < ny; j++)
+        for (let i = 0; i < nx; i++) {
+          let s = 0;
+          for (let c = 0; c < f; c++)
+            for (let b = 0; b < f; b++) {
+              const row = ((k * f + c) * v.ny + j * f + b) * v.nx + i * f;
+              for (let a = 0; a < f; a++) s += src[row + a];
+            }
+          out[(k * ny + j) * nx + i] = s / n;
+        }
+    return out;
+  };
+  const g = v.geometry;
+  // Centre of the new voxel (0,0,0) = centre of the old block.
+  const shift = (f - 1) / 2;
+  const origin = [0, 1, 2].map((d) => g.origin[d] + g.axes[0][d] * g.spacing[0] * shift + g.axes[1][d] * g.spacing[1] * shift + g.axes[2][d] * g.spacing[2] * shift) as [number, number, number];
+  const geometry = { ...g, origin, spacing: [g.spacing[0] * f, g.spacing[1] * f, g.spacing[2] * f] as [number, number, number] };
+  const volume = new Volume3D(avg(v.data), nz, ny, nx, [geometry.spacing[2], geometry.spacing[1], geometry.spacing[0]], geometry);
+  return { volume, mask: mask ? Float32Array.from(avg(mask), (x) => (x >= 0.5 ? 1 : 0)) : mask };
+}

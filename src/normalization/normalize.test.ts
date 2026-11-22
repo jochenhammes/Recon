@@ -76,3 +76,49 @@ describe("affine normalization to the MNI template", () => {
     expect(correlation(back, template.data, mask)).toBeGreaterThan(0.95);
   }, 180000);
 });
+
+describe("normalization on another grid", () => {
+  it("resampleField keeps an affine normalization exact and interpolates a smooth warp", async () => {
+    const { fieldFromAffine, resampleField } = await import("./model");
+    const { voxelToWorld } = await import("../core/geometry");
+    const g2 = { nx: 20, ny: 22, nz: 18, geometry: { origin: [-19, -21, -17] as [number, number, number], axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]] as [[number, number, number], [number, number, number], [number, number, number]], spacing: [2, 2, 2] as [number, number, number] } };
+    const g1 = { nx: 40, ny: 44, nz: 36, geometry: { ...g2.geometry, origin: [-19.5, -21.5, -17.5] as [number, number, number], spacing: [1, 1, 1] as [number, number, number] } };
+    const A = [1.1, 0.05, 0, 3, -0.02, 0.95, 0.1, -2, 0, 0.03, 1.05, 1, 0, 0, 0, 1];
+    const n = { subjectId: "s", templateName: "t", grid: g2, affine: A, field: fieldFromAffine(g2, A), kind: "affine" as const };
+    const r = resampleField(n, g1);
+    const exact = fieldFromAffine(g1, A);
+    let maxErr = 0;
+    for (let i = 0; i < exact.length; i++) maxErr = Math.max(maxErr, Math.abs(r.field[i] - exact[i]));
+    expect(maxErr).toBeLessThan(1e-3);
+    // Smooth extra displacement d(x) = 2·sin(x/15): interpolation error small inside the grid.
+    const warped = Float32Array.from(n.field);
+    for (let k = 0, o = 0; k < g2.nz; k++) for (let j = 0; j < g2.ny; j++) for (let i = 0; i < g2.nx; i++, o += 3) warped[o] += 2 * Math.sin(voxelToWorld(g2.geometry, i, j, k)[0] / 15);
+    const rw = resampleField({ ...n, field: warped, kind: "nonlinear" }, g1);
+    let e2 = 0;
+    for (let k = 2; k < g1.nz - 2; k++)
+      for (let j = 2; j < g1.ny - 2; j++)
+        for (let i = 2; i < g1.nx - 2; i++) {
+          const o = 3 * ((k * g1.ny + j) * g1.nx + i);
+          const want = exact[o] + 2 * Math.sin(voxelToWorld(g1.geometry, i, j, k)[0] / 15);
+          e2 = Math.max(e2, Math.abs(rw.field[o] - want));
+        }
+    expect(e2).toBeLessThan(0.02);
+  });
+
+  it("coarseTemplate averages 1 mm blocks to 2 mm with the right geometry", async () => {
+    const { coarseTemplate } = await import("./templates");
+    const { Volume3D } = await import("../viewer/volume");
+    const { voxelToWorld } = await import("../core/geometry");
+    const data = new Float32Array(8 * 8 * 8).map((_, i) => i % 8); // value = x index
+    const g = { origin: [-3.5, -3.5, -3.5] as [number, number, number], axes: [[-1, 0, 0], [0, 1, 0], [0, 0, 1]] as [[number, number, number], [number, number, number], [number, number, number]], spacing: [1, 1, 1] as [number, number, number] };
+    const v = new Volume3D(data, 8, 8, 8, [1, 1, 1], g);
+    const c = coarseTemplate(v, new Float32Array(512).fill(1));
+    expect([c.volume.nx, c.volume.ny, c.volume.nz]).toEqual([4, 4, 4]);
+    expect(c.volume.data[1]).toBeCloseTo(2.5);
+    // Centre of coarse voxel 1 = centre of fine voxels 2 and 3.
+    const w = voxelToWorld(c.volume.geometry, 1, 0, 0);
+    const f = voxelToWorld(g, 2.5, 0.5, 0.5);
+    expect(w.map((x, i) => Math.abs(x - f[i])).every((d) => d < 1e-9)).toBe(true);
+    expect(c.mask!.every((x) => x === 1)).toBe(true);
+  });
+});

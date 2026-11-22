@@ -1,4 +1,4 @@
-import { type Vec3, voxelToWorld } from "../core/geometry";
+import { type Vec3, applyWorldToVoxel, voxelToWorld, worldToVoxelTransform } from "../core/geometry";
 import { type Mat4, applyMat4, invert4 } from "../core/transform";
 import type { TargetGrid } from "../resample/resample";
 import type { CoregProgress } from "../registration/coregister";
@@ -59,6 +59,55 @@ export function pullbackPositions(n: Normalization, subjectToWorld: Mat4): Float
     out[i + 2] = M[8] * x + M[9] * y + M[10] * z + M[11];
   }
   return out;
+}
+
+/**
+ * The normalization on another grid of the same standard space (e.g. estimated on 2 mm, output on 1 mm): the
+ * affine part is evaluated exactly on the new grid, the remaining (smooth) displacement is interpolated
+ * trilinearly; outside the old grid it is continued with its edge values.
+ */
+export function resampleField(n: Normalization, grid: TargetGrid): Normalization {
+  const inv = invert4(n.affine);
+  const old = n.grid;
+  const ON = old.nx * old.ny * old.nz;
+  // Residual r = field − A⁻¹·x on the old grid.
+  const r = new Float32Array(ON * 3);
+  let o = 0;
+  for (let k = 0; k < old.nz; k++)
+    for (let j = 0; j < old.ny; j++)
+      for (let i = 0; i < old.nx; i++) {
+        const p = applyMat4(inv, voxelToWorld(old.geometry, i, j, k));
+        r[o] = n.field[o] - p[0];
+        r[o + 1] = n.field[o + 1] - p[1];
+        r[o + 2] = n.field[o + 2] - p[2];
+        o += 3;
+      }
+  const w2v = worldToVoxelTransform(old.geometry);
+  const { nx, ny, nz } = grid;
+  const out = new Float32Array(nx * ny * nz * 3);
+  const cl = (v: number, m: number) => (v < 0 ? 0 : v > m ? m : v);
+  o = 0;
+  for (let k = 0; k < nz; k++)
+    for (let j = 0; j < ny; j++)
+      for (let i = 0; i < nx; i++) {
+        const w = voxelToWorld(grid.geometry, i, j, k);
+        const a = applyMat4(inv, w);
+        const v = applyWorldToVoxel(w2v, w);
+        const x = cl(v[0], old.nx - 1), y = cl(v[1], old.ny - 1), z = cl(v[2], old.nz - 1);
+        const x0 = Math.min(Math.floor(x), old.nx - 2 < 0 ? 0 : old.nx - 2), y0 = Math.min(Math.floor(y), old.ny - 2 < 0 ? 0 : old.ny - 2), z0 = Math.min(Math.floor(z), old.nz - 2 < 0 ? 0 : old.nz - 2);
+        const fx = old.nx > 1 ? x - x0 : 0, fy = old.ny > 1 ? y - y0 : 0, fz = old.nz > 1 ? z - z0 : 0;
+        const x1 = Math.min(x0 + 1, old.nx - 1), y1 = Math.min(y0 + 1, old.ny - 1), z1 = Math.min(z0 + 1, old.nz - 1);
+        const idx = (ii: number, jj: number, kk: number) => 3 * ((kk * old.ny + jj) * old.nx + ii);
+        for (let c = 0; c < 3; c++) {
+          const c00 = r[idx(x0, y0, z0) + c] * (1 - fx) + r[idx(x1, y0, z0) + c] * fx;
+          const c10 = r[idx(x0, y1, z0) + c] * (1 - fx) + r[idx(x1, y1, z0) + c] * fx;
+          const c01 = r[idx(x0, y0, z1) + c] * (1 - fx) + r[idx(x1, y0, z1) + c] * fx;
+          const c11 = r[idx(x0, y1, z1) + c] * (1 - fx) + r[idx(x1, y1, z1) + c] * fx;
+          out[o + c] = a[c] + (c00 * (1 - fy) + c10 * fy) * (1 - fz) + (c01 * (1 - fy) + c11 * fy) * fz;
+        }
+        o += 3;
+      }
+  return { ...n, grid, field: out };
 }
 
 /** Subject position for a template voxel (nearest grid point of the field). */

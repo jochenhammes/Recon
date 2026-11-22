@@ -24,7 +24,7 @@ import { runKineticsJob } from "./kinetics/runner";
 import type { FrameMotion } from "./kinetics/motion";
 import { meanOfFrames } from "./viewer/volumeLoader";
 import { NormalizationPanel, type NormMethod, type Regularization } from "./ui/NormalizationPanel";
-import { type Normalization, REGULARIZATION_WEIGHT, sameGrid, describeCoregProgress, describeWarpProgress, fieldFromAffine, pullbackPositions } from "./normalization/model";
+import { type Normalization, REGULARIZATION_WEIGHT, sameGrid, describeCoregProgress, describeWarpProgress, fieldFromAffine, pullbackPositions, resampleField } from "./normalization/model";
 import { DEFAULT_WARP } from "./normalization/warp";
 import { buildDeformationField, fieldCoverage, parseDeformationField } from "./normalization/yfield";
 import { DeformationFieldCard } from "./ui/DeformationFieldCard";
@@ -55,7 +55,7 @@ import { type CentiloidCalibration, acquisitionWindow, centiloidFromMeans, guess
 import { type CentiloidVois, VOI_LABELS, type VoiName, loadVois, voiMeans, voiVolumeMl } from "./centiloid/vois";
 import { AtlasPanel, type RegionResult } from "./ui/AtlasPanel";
 import { atlasFromLabels, parseFslAtlasXml, parseLabelTable, pickAtlasEntries, regionStats } from "./atlas/atlas";
-import { bundledEntry, identifyUserFiles } from "./brain/catalog";
+import { BUNDLED, bundledEntry, defaultTemplateId, identifyUserFiles } from "./brain/catalog";
 import { loadBundledEntry } from "./brain/load";
 import { cacheUserFiles, cachedEntryIds, cachedUserFiles, removeCachedEntry } from "./brain/userCache";
 import { BrainCatalog } from "./ui/BrainCatalog";
@@ -79,7 +79,8 @@ import { type RegRow, type RegStatusKind, RegistrationSetup } from "./ui/Registr
 import { shortLabel } from "./core/shortLabel";
 import { RegistrationPanel } from "./ui/RegistrationPanel";
 import { CT_PRESETS, acquisitionTime, datasetModality, formatAcquisitionTime, defaultDisplay, isAnatomical, middleEllipsis, modalityLabel, rawUnitLabel, shortName, suvForSource, unitSource } from "./dataset/describe";
-import { BUNDLED_MNI, BUNDLED_PET_TEMPLATES, type TemplateKind, loadBundledMni, loadBundledPetTemplate, loadPetTemplate } from "./normalization/templates";
+import { BUNDLED_PET_TEMPLATES, type TemplateKind, coarseTemplate, loadBundledMni, loadBundledPetTemplate, loadPetTemplate } from "./normalization/templates";
+import { tracerHint } from "./brain/tracer";
 import { AnalysisPanel } from "./components/AnalysisPanel";
 import { type BrushState, FilterSection, type GeometryAction, GeometrySection, type GeometryTarget, HistorySection, ValueSection, VoiSection, type VoiTool } from "./components/EditTools";
 import { type GroupTarget, groupEditFor, referenceCenter, rotationSense } from "./edit/groupGeometry";
@@ -284,6 +285,8 @@ function App() {
   const [normMethod, setNormMethod] = useState<NormMethod>("affine");
   const [normRegularization, setNormRegularization] = useState<Regularization>("medium");
   const [normUseMask, setNormUseMask] = useState(true);
+  /** Output grid of the normalization: the template grid, or MNI 2009c 1 mm. */
+  const [normOutput, setNormOutput] = useState<"template" | "1mm">("template");
   const [normSubjectKindOverride, setNormSubjectKindOverride] = useState<TemplateKind | null>(null);
   const [normalization, setNormalization] = useState<Normalization | null>(null);
   const [normRunning, setNormRunning] = useState(false);
@@ -1178,15 +1181,12 @@ function App() {
   const guessedKind: TemplateKind = subjectModality === "CT" ? "CT" : ["MR", "NIfTI"].includes(subjectModality) ? "T1" : "PET";
   const subjectKind = normSubjectKindOverride ?? guessedKind;
   // Template: chosen by the user, else the loaded or bundled template matching the subject's contrast.
-  const bundledTemplates = [
-    { id: "mni", name: BUNDLED_MNI.name, kind: "T1" as TemplateKind },
-    ...BUNDLED_PET_TEMPLATES.map((t) => ({ id: t.id as string, name: t.name as string, kind: t.kind as TemplateKind })),
-  ];
-  const defaultBundled = subjectKind === "T1" ? "mni" : subjectKind === "CT" ? "spm-transm" : subjectModality === "NM" ? "spm-spect" : "spm-pet";
+  const bundledTemplates = BUNDLED.filter((b) => b.templateKind).map((b) => ({ id: b.id, name: b.name, kind: b.templateKind as TemplateKind, space: b.space }));
+  const defaultBundled = defaultTemplateId({ kind: subjectKind, modality: subjectModality, tracerHint: normSubject ? tracerHint(normSubject.dataset) : undefined });
   const defaultName = bundledTemplates.find((b) => b.id === defaultBundled)!.name;
   const templateOptions = [
     ...templateEntries.map((e) => ({ id: e.id, label: e.dataset.template!.name, kind: e.dataset.template!.kind })),
-    ...bundledTemplates.filter((b) => !templateEntries.some((e) => e.dataset.template?.name === b.name)).map((b) => ({ id: `bundled:${b.id}`, label: `${b.name} (wird geladen)`, kind: b.kind })),
+    ...bundledTemplates.filter((b) => !templateEntries.some((e) => e.dataset.template?.name === b.name)).map((b) => ({ id: `bundled:${b.id}`, label: `${b.name} · ${b.space} (wird geladen)`, kind: b.kind })),
   ];
   const autoTemplateId =
     templateEntries.find((e) => e.dataset.template?.name === defaultName)?.id ??
@@ -1269,8 +1269,9 @@ function App() {
     if (existing?.dataset.template) return existing;
     const id = choice.replace(/^bundled:/, "");
     setNormProgress({ stage: "Vorlage", detail: "wird geladen", fraction: 0.01 });
-    const d = id === "mni" ? await loadBundledMni() : await loadBundledPetTemplate(id as (typeof BUNDLED_PET_TEMPLATES)[number]["id"]);
-    const e = addDataset(d);
+    const b = bundledEntry(id === "mni" ? "mni-t1-2" : id);
+    if (!b) return undefined;
+    const e = addDataset(await loadBundledEntry(b));
     setNormTemplateId(e.id);
     return e;
   }
@@ -1288,14 +1289,27 @@ function App() {
     const transferIds = patientSpaceEntries.map((e) => e.id);
     const nonlinear = sameContrast && normMethod === "nonlinear";
     (async () => {
-      const T = await resolveTemplate(normTemplateChoice);
-      if (!T) throw new Error("Keine Vorlage.");
+      const T0 = await resolveTemplate(normTemplateChoice);
+      if (!T0) throw new Error("Keine Vorlage.");
+      // A 1 mm template is matched on a 2 mm block average (speed, memory); the result is put back on the chosen grid.
+      const tpl0 = T0.dataset.template!;
+      const coarse = tpl0.components?.length ? { volume: T0.dataset.current, mask: tpl0.mask } : coarseTemplate(T0.dataset.current, tpl0.mask);
+      const T: Entry = coarse.volume === T0.dataset.current ? T0 : { ...T0, dataset: { ...T0.dataset, current: coarse.volume, template: { ...tpl0, mask: coarse.mask } } };
       const mask = normUseMask ? (T.dataset.template?.mask ?? undefined) : undefined;
       // CT: limit to the HU range of tissue and bone (metal/contrast outliers would dominate the matching).
       const subject = subjectKind === "CT" ? { ...S, dataset: { ...S.dataset, current: S.dataset.current.withData(Float32Array.from(S.dataset.current.data, (v) => Math.min(2000, Math.max(-1000, v)))) } } : S;
-      const n = await estimateNormalization(T, subject, { nonlinear, cost: normCost, mask, regularization: normRegularization });
+      let n = await estimateNormalization(T, subject, { nonlinear, cost: normCost, mask, regularization: normRegularization });
+      let outTemplate = T0;
+      if (normOutput === "1mm") {
+        setNormProgress({ stage: "Ausgabe 1 mm", detail: "MNI 2009c 1 mm wird geladen", fraction: 0.97 });
+        const ref = await addCatalogEntry("mni-t1-1");
+        if (!ref) throw new Error("Die 1-mm-Vorlage konnte nicht geladen werden.");
+        outTemplate = ref;
+      }
+      const og = outTemplate.dataset.current;
+      if (!sameGrid(n.grid, og)) n = resampleField(n, { nx: og.nx, ny: og.ny, nz: og.nz, geometry: og.geometry });
       setNormalization(n);
-      await transferToStandardSpace(n, transferIds, "linear", T);
+      await transferToStandardSpace(n, transferIds, "linear", outTemplate);
     })()
       .catch((e) => {
         if (!(e instanceof DOMException && e.name === "AbortError")) setNormError(`Normalisierung fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
@@ -3222,6 +3236,9 @@ function App() {
       nonlinearAvailable={sameContrast}
       regularization={normRegularization}
       onRegularizationChange={setNormRegularization}
+      outputGrid={normOutput}
+      onOutputGridChange={setNormOutput}
+      templateResolutionMm={normTemplate ? normTemplate.dataset.current.geometry.spacing[0] : bundledEntry(normTemplateChoice.replace(/^bundled:/, ""))?.resolutionMm}
       useMask={normUseMask}
       onUseMaskChange={setNormUseMask}
       maskAvailable={subjectKind !== "CT" && (normTemplate ? !!normTemplate.dataset.template?.mask : templateKind !== "CT")}

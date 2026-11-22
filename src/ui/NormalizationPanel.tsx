@@ -28,6 +28,11 @@ export interface NormalizationPanelProps {
   nonlinearAvailable: boolean;
   regularization: Regularization;
   onRegularizationChange: (r: Regularization) => void;
+  /** Output grid: the template's own grid or MNI 2009c 1 mm. */
+  outputGrid: "template" | "1mm";
+  onOutputGridChange: (g: "template" | "1mm") => void;
+  /** Voxel size of the chosen template (mm), if known. */
+  templateResolutionMm?: number;
   useMask: boolean;
   onUseMaskChange: (v: boolean) => void;
   maskAvailable: boolean;
@@ -71,7 +76,12 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
             <p>
               Räumliche Normalisierung in den MNI-Standardraum – nur für Hirnuntersuchungen. Grundlage ist ein Datensatz des Patienten: am besten
               das T1-MRT, sonst das Hirn-PET/SPECT oder das Kopf-CT (z. B. aus dem PET/CT). Die Vorlage wird passend gewählt: T1 → MNI152-T1,
-              PET → SPM-PET, SPECT → SPM-SPECT, CT → SPM-Transmissionsbild.
+              PET/SPECT nach dem Tracer im Header (FDG, Amyloid → PiB, FP-CIT/DaTSCAN, ¹⁸F-DOPA, Raclopride, sonst Perfusion), CT →
+              SPM-Transmissionsbild. Weitere Vorlagen in der Karte „Vorlagen &amp; Atlanten“ (Daten).
+            </p>
+            <p>
+              Vorlagen in 1 mm werden für die Schätzung auf 2 mm gemittelt (gleiche Geschwindigkeit). Das Ausgaberaster ist wählbar: das der
+              Vorlage oder MNI 2009c in 1 mm (das Verformungsfeld wird dafür interpoliert; braucht etwa achtmal so viel Speicher je Datensatz).
             </p>
             <p>
               Alle anderen Datensätze werden über ihre Koregistrierung mit diesem Datensatz mitgenommen – PET also vorher im Bereich
@@ -115,6 +125,16 @@ export function NormalizationPanel(props: NormalizationPanelProps) {
             </select>
           </label>
         </div>
+        <label className="field">
+          Ausgaberaster
+          <select value={props.outputGrid} disabled={running} onChange={(e) => props.onOutputGridChange(e.target.value as "template" | "1mm")}>
+            <option value="template">wie Vorlage{props.templateResolutionMm ? ` (${String(props.templateResolutionMm).replace(".", ",")} mm)` : ""}</option>
+            <option value="1mm">MNI 2009c, 1 mm</option>
+          </select>
+        </label>
+        {props.outputGrid === "1mm" && props.transferCandidates.length > 3 && (
+          <InfoText details="Jeder Datensatz in 1 mm braucht etwa 35 MB Arbeitsspeicher (193 × 229 × 193 Voxel), dynamische Serien entsprechend mehr.">Viel Speicher bei vielen Datensätzen</InfoText>
+        )}
         {template && template.kind !== props.subjectKind && (
           <InfoText warn details={`Vorlage (${KIND_LABEL[template.kind]}) passt nicht zum Kontrast (${KIND_LABEL[props.subjectKind]}) – nur affin mit Mutual Information.`}>
             Vorlage passt nicht zum Kontrast
