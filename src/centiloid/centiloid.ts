@@ -25,10 +25,14 @@ export interface CentiloidCalibration {
 }
 
 /**
- * Level-2 calibration of the app's MRI pipeline (PET → T1 rigid, T1 → MNI152 2009c affine, GAAIN standard VOIs)
- * against the GAAIN Florbetaben project (Rowe et al. 2017; 35 subjects, 90–110 min FBB, 50–70 min PiB):
- * ordinary least squares of the published standard-method Centiloid on the app's SUVR (whole cerebellum).
- * Scripts: src/centiloid/README-calibration.md.
+ * Level-2 calibration of the app's MRI pipeline (PET → T1 rigid, T1 → MNI152 2009c affine, GAAIN standard VOIs) after
+ * Klunk et al. 2015, § 2.2.3.2 ("non-standard method"), on the GAAIN Florbetaben project (Rowe et al. 2017; 35 subjects,
+ * PiB 50–70 min, FBB 90–110 min):
+ * - app SUVR (whole cerebellum) = m · published standard PiB SUVR + b (OLS);
+ * - PiB-Calc SUVR = (SUVR − b)/m;
+ * - CL from the anchors of the standard pipeline that produced the published values (YC 1.0186, AD 2.0880 SUVR).
+ * The app fails the Level-1 replication (YC-0 mean +2.2 % against Klunk's 1.009; limit ±2 %), so it is calibrated as a
+ * non-standard method. Validation: recon-publication, M1. Notes: src/centiloid/README-calibration.md.
  */
 export const CALIBRATIONS: CentiloidCalibration[] = [
   {
@@ -36,10 +40,11 @@ export const CALIBRATIONS: CentiloidCalibration[] = [
     tracer: "FBB",
     label: tk("Florbetaben – Recon-Studio-Pipeline (GAAIN-kalibriert)"),
     reference: "WhlCbl",
-    slope: 164.06,
-    intercept: -171.67,
+    // m = 0.5644, b = 0.4742 (FBB SUVR on standard PiB SUVR), R² 0.944
+    slope: 165.66,
+    intercept: -173.80,
     window: [90, 110],
-    source: tk("eigene Kalibrierung an GAAIN-FBB-Daten (n = 35): R² 0,990; Kreuzvalidierung RMSE 5,8 CL"),
+    source: tk("Kalibrierung nach Klunk 2015 (§ 2.2.3.2) an GAAIN-FBB-Daten (n = 35): R² 0,944 gegen PiB-Standard; Kreuzvalidierung RMSE 5,9 CL"),
     pipeline: "recon",
   },
   {
@@ -47,10 +52,11 @@ export const CALIBRATIONS: CentiloidCalibration[] = [
     tracer: "PiB",
     label: tk("[11C]PiB – Recon-Studio-Pipeline (GAAIN-kalibriert)"),
     reference: "WhlCbl",
-    slope: 100.68,
-    intercept: -105.61,
+    // m = 0.9240, b = 0.1101 (app PiB SUVR on standard PiB SUVR), R² 0.995
+    slope: 101.2,
+    intercept: -106.38,
     window: [50, 70],
-    source: tk("eigene Kalibrierung an GAAIN-PiB-Daten (n = 35): R² 0,995; Kreuzvalidierung RMSE 4,1 CL"),
+    source: tk("Kalibrierung nach Klunk 2015 (§ 2.2.3.2) an GAAIN-PiB-Daten (n = 35): R² 0,995; Kreuzvalidierung RMSE 4,1 CL"),
     pipeline: "recon",
   },
   {

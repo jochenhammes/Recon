@@ -56,4 +56,14 @@ describe("pipeline calibrations", () => {
     expect(CALIBRATIONS.find((c) => c.id === "pib-recon")?.tracer).toBe("PiB");
     expect(CALIBRATIONS.filter((c) => c.pipeline === "standard").map((c) => c.id)).toEqual(["fbb-rowe2017", "pib-klunk2015"]);
   });
+
+  it("app equations follow Klunk 2015 Eq. 2.2.3.2 from the published regression parameters", async () => {
+    const { CALIBRATIONS } = await import("./centiloid");
+    // CL = 100 · ((SUVR − b)/m − YC)/(AD − YC), anchors of the standard pipeline (YC 1.0186, AD 2.0880)
+    const yc = 1.0186, ad = 2.088;
+    for (const [id, m, b] of [["pib-recon", 0.924, 0.1101], ["fbb-recon", 0.5644, 0.4742]] as const) {
+      const c = CALIBRATIONS.find((x) => x.id === id)!;
+      for (const suvr of [0.8, 1.2, 2.0]) expect(Math.abs(c.slope * suvr + c.intercept - (100 * ((suvr - b) / m - yc)) / (ad - yc))).toBeLessThan(0.3);
+    }
+  });
 });
