@@ -3170,6 +3170,9 @@ function App() {
                     Ergebnis: {similarity(coregResults[moving.id].result.cost, coregResults[moving.id].result.before)} →{" "}
                     {similarity(coregResults[moving.id].result.cost, coregResults[moving.id].result.after)}. Die Ansicht zeigt es bereits.
                   </p>
+                  {coregResults[moving.id].result.autoCoarse && (
+                    <p className="tool-hint">{tx("Die Bilder lagen zu Beginn weit auseinander; die Grobsuche wurde automatisch eingeschaltet.")}</p>
+                  )}
                   <div className="button-row">
                     <button className="primary-btn" onClick={() => acceptCoregistration(moving.id)}>
                       {tx("Übernehmen")}

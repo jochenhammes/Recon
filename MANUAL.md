@@ -231,6 +231,8 @@ Der Bereich **Koregistrierung** hat drei Karten; erledigte Karten klappen ein un
    - **② Automatisch**: *Rigide (6)* oder *Affin (12)*, Kostenfunktion (automatisch: Kreuzkorrelation bei gleicher
      Modalität, sonst normalisierte Mutual Information), Auflösungsstufen, **Grobsuche** (Schwerpunkt +
      Rotationsraster ±30°) und *Startlage beibehalten*; *Jetzt registrieren*, danach *Übernehmen*/*Verwerfen*.
+     Liegen die Bildschwerpunkte zu Beginn mehr als 40 mm auseinander (z. B. NIfTI-Dateien ohne gemeinsamen Ursprung),
+     schaltet die App die Grobsuche automatisch ein und weist im Ergebnis darauf hin.
    - **Manuell**: Verschiebung und Drehung als Zahlen (mm, °), *In 90°-Schritten drehen*, optional Schieberegler;
      Drehpunkt Volumenmitte oder Landmarke 1.
    - **▸ Erweitert**: Matrix speichern/laden, auf Patientenkoordinaten zurücksetzen, Ursprung dauerhaft in die Datei

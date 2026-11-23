@@ -10,6 +10,7 @@ export const app: Record<string, string> = {
   "1/3 PET → PET-Vorlage (affin + nichtlinear) …": "1/3 PET → PET template (affine + nonlinear) …",
   ": Ursprung übernommen.": ": origin applied.",
   "; automatisch ausgeschlossen: {v}": "; automatically excluded: {v}",
+  "Die Bilder lagen zu Beginn weit auseinander; die Grobsuche wurde automatisch eingeschaltet.": "The images started far apart; coarse search was switched on automatically.",
   "Abbrechen": "Cancel",
   "Affin fein · Stufe {level}/{levels}": "Affine fine · level {level}/{levels}",
   "Affin grob · Stufe {level}/{levels}": "Affine coarse · level {level}/{levels}",

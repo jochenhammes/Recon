@@ -60,7 +60,17 @@ export interface CoregResult {
   before: number;
   after: number;
   evaluations: number;
+  /** True when coarse search was switched on automatically because the images did not overlap at the start. */
+  autoCoarse?: boolean;
 }
+
+/**
+ * Distance (mm) between the centres of mass of the two images, after the start transform, above which coarse search is
+ * switched on automatically. Without a common origin (e.g. NIfTI files from different programs or sessions), the
+ * images can start hundreds of millimetres apart, and a local optimiser then silently ends in a wrong position. A
+ * correct start stays among the coarse-search candidates, so switching it on cannot make a good start worse.
+ */
+export const AUTO_COARSE_MM = 40;
 
 export const DEFAULT_LEVELS = [8, 4, 2];
 
@@ -305,6 +315,17 @@ export function coregister(
   let evaluations = 0;
   let before = NaN;
   let after = NaN;
+  let coarse = opts.coarseSearch;
+  let autoCoarse = false;
+  if (!coarse && !opts.keepStart) {
+    const cf = centerOfMass(fixed);
+    const cm = centerOfMass(moving);
+    if (cf && cm) {
+      const M = opts.initial;
+      const m: Vec3 = [M[0] * cm[0] + M[1] * cm[1] + M[2] * cm[2] + M[3], M[4] * cm[0] + M[5] * cm[1] + M[6] * cm[2] + M[7], M[8] * cm[0] + M[9] * cm[1] + M[10] * cm[2] + M[11]];
+      if (Math.hypot(m[0] - cf[0], m[1] - cf[1], m[2] - cf[2]) > AUTO_COARSE_MM) coarse = autoCoarse = true;
+    }
+  }
 
   for (let li = 0; li < levels.length; li++) {
     const sep = levels[li];
@@ -316,7 +337,7 @@ export function coregister(
     const evaluator = new CostEvaluator(samples, movingL, opts.cost);
     const report = (stage: string, iteration: number, cost: number) => onProgress?.({ level: li + 1, levels: levels.length, stage, iteration, cost });
 
-    if (li === 0 && opts.coarseSearch) params = coarseSearch(evaluator, params, center, fixedL, movingL, sep, report, shouldStop, opts.keepStart);
+    if (li === 0 && coarse) params = coarseSearch(evaluator, params, center, fixedL, movingL, sep, report, shouldStop, opts.keepStart);
 
     params = optimize(evaluator, params, center, RIGID_KEYS, sep, report, "rigide", shouldStop).params;
     if (opts.dof === 12 && (li > 0 || levels.length === 1)) params = optimize(evaluator, params, center, AFFINE_KEYS, sep, report, "affin", shouldStop).params;
@@ -329,7 +350,7 @@ export function coregister(
     evaluations += evaluator.evaluations;
     if (shouldStop?.()) break;
   }
-  return { matrix: matrixFromParams(params, center), params, center, cost: opts.cost, before, after, evaluations };
+  return { matrix: matrixFromParams(params, center), params, center, cost: opts.cost, before, after, evaluations, autoCoarse };
 }
 
 /** Center-of-mass alignment and a coarse rotation grid (±30°), keeping the best start (FLIRT-like). */

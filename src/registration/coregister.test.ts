@@ -105,4 +105,18 @@ describe("coregister", () => {
     const r = coregister(image(fixed), image(moving), { dof: 6, cost: "nmi", levels: [8, 4, 3], coarseSearch: true, initial: IDENTITY_MAT4 });
     expect(meanError(fixed, r.matrix, rotated)).toBeLessThan(1.5);
   }, 60000);
+
+  it("switches coarse search on when the images start far apart (no common origin)", () => {
+    // Same image content, but the moving header places it 200 mm away (as NIfTI files without a shared origin do).
+    const shift: Vec3 = [200, -150, 60];
+    const g = fixed.geometry;
+    const moving = new Volume3D(fixed.data, fixed.nz, fixed.ny, fixed.nx, [g.spacing[2], g.spacing[1], g.spacing[0]], { ...g, origin: [g.origin[0] + shift[0], g.origin[1] + shift[1], g.origin[2] + shift[2]] });
+    const truth = matrixFromParams({ ...IDENTITY_PARAMS, tx: -shift[0], ty: -shift[1], tz: -shift[2] }, [0, 0, 0]);
+    const r = coregister(image(fixed), image(moving), { dof: 6, cost: "nmi", levels: [8, 4, 3], coarseSearch: false, initial: IDENTITY_MAT4 });
+    expect(r.autoCoarse).toBe(true);
+    expect(meanError(fixed, invert4(r.matrix), invert4(truth))).toBeLessThan(1.5);
+    // A small misalignment does not trigger it.
+    const small = coregister(image(fixed), image(movedCopy(fixed, matrixFromParams({ ...IDENTITY_PARAMS, tx: 5 }, center))), { dof: 6, cost: "nmi", levels: [8, 4, 3], coarseSearch: false, initial: IDENTITY_MAT4 });
+    expect(small.autoCoarse).toBe(false);
+  }, 60000);
 });
