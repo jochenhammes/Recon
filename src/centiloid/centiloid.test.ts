@@ -57,13 +57,15 @@ describe("pipeline calibrations", () => {
     expect(CALIBRATIONS.filter((c) => c.pipeline === "standard").map((c) => c.id)).toEqual(["fbb-rowe2017", "pib-klunk2015"]);
   });
 
-  it("app equations follow Klunk 2015 Eq. 2.2.3.2 from the published regression parameters", async () => {
+  it("app equations follow Klunk 2015 (Eq. 2.2.1 anchors, Eq. 2.2.3.1 surrogate tracer)", async () => {
     const { CALIBRATIONS } = await import("./centiloid");
-    // CL = 100 · ((SUVR − b)/m − YC)/(AD − YC), anchors of the standard pipeline (YC 1.0186, AD 2.0880)
-    const yc = 1.0186, ad = 2.088;
-    for (const [id, m, b] of [["pib-recon", 0.924, 0.1101], ["fbb-recon", 0.5644, 0.4742]] as const) {
-      const c = CALIBRATIONS.find((x) => x.id === id)!;
-      for (const suvr of [0.8, 1.2, 2.0]) expect(Math.abs(c.slope * suvr + c.intercept - (100 * ((suvr - b) / m - yc)) / (ad - yc))).toBeLessThan(0.3);
+    const yc = 1.0311, ad = 2.0675; // app means of YC-0 / AD-100 (PiB, whole cerebellum)
+    const pibCl = (suvr: number) => (100 * (suvr - yc)) / (ad - yc);
+    const pib = CALIBRATIONS.find((x) => x.id === "pib-recon")!;
+    const fbb = CALIBRATIONS.find((x) => x.id === "fbb-recon")!;
+    for (const suvr of [0.8, 1.2, 2.0]) {
+      expect(Math.abs(pib.slope * suvr + pib.intercept - pibCl(suvr))).toBeLessThan(0.1);
+      expect(Math.abs(fbb.slope * suvr + fbb.intercept - pibCl((suvr - 0.4085) / 0.6099))).toBeLessThan(0.1);
     }
   });
 });

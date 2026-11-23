@@ -409,10 +409,11 @@ Bereich **SUVR & Centiloid** (Leiste: *SUVR & Centiloid*), Karte **Centiloid**.
    - *… Standard (Rowe 2017 / Klunk 2015)* für Daten, die extern mit der SPM8-Standardmethode normalisiert wurden,
    - oder *Eigene Gleichung …* (Steigung, Achsenabschnitt, Referenzregion).
 3. **Automatisch**: PET und T1-MRT wählen → *Centiloid bestimmen*
-   (PET → T1 rigide, T1 → MNI **affin**, VOI-Auswertung). Kalibriert nach dem Centiloid-Verfahren (Klunk 2015,
-   nicht-standardisierte Methode) an den GAAIN-Referenzdaten. Die kreuzvalidierte Abweichung von der Standardmethode
-   beträgt im Mittel ca. 4 CL (PiB) bzw. 6 CL (Florbetaben). Auf den unabhängigen Level-1-Daten ergeben sich junge
-   Kontrollen −2 ± 5 CL und Alzheimer-Patienten 103 ± 19 CL. Details: `src/centiloid/README-calibration.md`.
+   (PET → T1 rigide, T1 → MNI **affin**, VOI-Auswertung). Kalibriert nach dem Centiloid-Verfahren (Klunk 2015) an den
+   GAAIN-Referenzdaten:
+   - Die Level-1-Replikation ist erfüllt (Steigung 0,995, R² 0,992).
+   - Die typische Abweichung von der Standardmethode beträgt ca. 4–5 CL (PiB) bzw. 6 CL (Florbetaben).
+   - Details: `src/centiloid/README-calibration.md`.
    Ohne MRT: *ohne MRT (PET-only)* – dazu vorher eine PET-Vorlage laden; diese Variante ist nicht validiert.
 4. Oder **Vorhandenen Datensatz im MNI-Raum auswerten**: Datensatz wählen → *Auswerten*. Die GAAIN-kalibrierte
    Gleichung gilt nur für Datensätze aus der affinen Normalisierung der App.
