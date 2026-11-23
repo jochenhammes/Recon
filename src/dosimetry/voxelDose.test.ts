@@ -3,7 +3,7 @@ import type { VolumeGeometry } from "../core/geometry";
 import { Volume3D } from "../viewer/volume";
 import { localDepositionDose } from "./nuclideData";
 import { bedMono } from "./setup";
-import { convolve3d, densityMap, doseFromTia, dvh, parseKernel, voxelTia } from "./voxelDose";
+import { convolve3d, densityMap, doseFromTia, dvh, integrate, labelOverlap, parseKernel, voxelTia } from "./voxelDose";
 
 const I = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 const g: VolumeGeometry = { origin: [0, 0, 0], spacing: [4, 4, 4], axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]] };
@@ -36,6 +36,28 @@ describe("voxel dose", () => {
     const sym = parseKernel("0 0 0 1\n1 0 0 0.5", "oct", 4, "mGy/MBq·s");
     expect(sym.radius).toBe(1);
     expect(sym.values[(1 * 3 + 1) * 3 + 0]).toBeCloseTo(0.0005, 9);
+  });
+
+  it("log-linear voxel integration falls back to trapezoids for implausible curves", () => {
+    const t = [3.7, 27.7, 103.1, 124.0], l = Math.LN2 / (6.647 * 24);
+    // Activity only at late time points with a steep drop: the log-linear fit would extrapolate to ~1e21.
+    expect(integrate(t, [0, 0, 10, 0.001], l, "mono")).toBeCloseTo(integrate(t, [0, 0, 10, 0.001], l, "trapezoid"), 9);
+    expect(integrate(t, [5, 8, 10, 1e-7], l, "mono")).toBeLessThan(1e4);
+    // A regular washout curve keeps the log-linear result: A0/λ.
+    const lam = Math.LN2 / 60;
+    const a = t.map((x) => 100 * Math.exp(-lam * x));
+    expect(integrate(t, a, l, "mono")).toBeCloseTo(100 / lam, 6);
+  });
+
+  it("label overlap (Dice) between placed label maps", () => {
+    const n = 8;
+    const lab = new Float32Array(n * n * n);
+    for (let k = 2; k < 6; k++) for (let j = 2; j < 6; j++) for (let i = 2; i < 6; i++) lab[(k * n + j) * n + i] = 1;
+    const v = new Volume3D(lab, n, n, n, [4, 4, 4], g);
+    expect(labelOverlap({ volume: v, matrix: I }, { volume: v, matrix: I }, [1], 1).get(1)).toBeCloseTo(1, 9);
+    // Shift by 2 voxels (8 mm) along x: overlap 2/4 of the extent → Dice 0.5.
+    const shifted = [1, 0, 0, 8, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+    expect(labelOverlap({ volume: v, matrix: I }, { volume: v, matrix: shifted }, [1], 1).get(1)).toBeCloseTo(0.5, 9);
   });
 
   it("DVH statistics", () => {

@@ -684,6 +684,10 @@ bestimmbar (Schritt 6). Optional Recovery-Koeffizienten (RC) aus einem Kugelphan
    - **Von T1 für alle** (Standard): Organkarte und Läsionen von T1 gelten über die Registrierung für alle Zeitpunkte
      (eigene Labelbilder der anderen Zeitpunkte bleiben unbenutzt). Braucht registrierte Zeitpunkte (Warnung sonst) –
      einmal segmentieren, Läsionen inklusive. Die Kurven erhalten so einen Messpunkt je Zeitpunkt.
+     Haben die anderen Zeitpunkte zusätzlich eine eigene Organkarte, prüft die App nach der Registrierung die
+     Überlappung je Organ (Dice). Liegt sie unter 0,8, erscheint *Geringe Organüberlappung nach Registrierung* mit
+     Zeitpunkt und Organ. Die starre Registrierung des ganzen CTs hat dieses Organ dann nicht deckungsgleich gebracht,
+     typisch bei stark unterschiedlicher Lagerung und für die Nieren. Dann besser „Organkarte je Zeitpunkt“.
    - **Organkarte je Zeitpunkt:** jeder Zeitpunkt wird mit der Organkarte seines CTs gemessen (keine Registrierung
      nötig, robust gegen Lage- und Füllungsunterschiede). *Fehlende Organkarten segmentieren (n CTs)* segmentiert alle
      CTs ohne Organkarte nacheinander. Läsionen werden nur ausgewertet, wenn jeder Zeitpunkt ein eigenes Läsionsbild
@@ -735,6 +739,9 @@ bestimmbar (Schritt 6). Optional Recovery-Koeffizienten (RC) aus einem Kugelphan
 
 **Schritt 9 – Voxel-Dosiskarte** (Karte *Voxel-Dosiskarte*, aufklappen)
 1. **Integration je Voxel:** *Monoexponentiell (log-linear)* oder *Trapez + Ausläufer*; bei einem Zeitpunkt Hänscheid.
+   *Monoexponentiell* fällt je Voxel auf *Trapez + Ausläufer* zurück, wenn ein Zeitpunkt keine Aktivität hat oder die
+   auf t = 0 zurückgerechnete Aktivität mehr als das 10-Fache des höchsten Messwerts beträgt (z. B. Voxel am Rand des
+   Sichtfelds nach der Registrierung).
    Alle Zeitpunkte werden über die Registrierung auf das Raster des SPECT von T1 abgetastet.
 2. **Ohne Kernel:** lokale Energiedeposition der Elektronen mit der CT-Dichte – geeignet für Lu-177 und Tb-161;
    für I-131 fehlen die Photonen, für Y-90 die Reichweite der β-Teilchen (mm).

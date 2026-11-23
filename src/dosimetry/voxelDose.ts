@@ -60,13 +60,21 @@ export async function voxelTia(ref: Placed, tps: VoxelTimePoint[], o: VoxelDoseO
   return out;
 }
 
-/** TIA of one sampled curve (see voxelTia). */
+/** Upper limit of the activity back-extrapolated to t = 0 by the log-linear fit, relative to the largest measured value. */
+const MONO_MAX_A0_FACTOR = 10;
+
+/**
+ * TIA of one sampled curve (see voxelTia). "mono" fits a log-linear mono-exponential; it falls back to trapezoids
+ * (with tail) when a time point has no activity or when the back-extrapolated activity at t = 0 exceeds
+ * MONO_MAX_A0_FACTOR × the largest measured value. This happens, for example, for voxels at the edge of the field of
+ * view after registration, and would otherwise give physically impossible values.
+ */
 export function integrate(t: number[], a: ArrayLike<number>, lPhys: number, method: "trapezoid" | "mono"): number {
   const n = t.length;
   if (n === 1) return (a[0] * 2 * t[0]) / Math.LN2; // Hänscheid
   if (method === "mono") {
-    // Log-linear least squares over the points with activity; λ ≥ λ_phys.
-    let s = 0, st = 0, sl = 0, stt = 0, stl = 0;
+    // Log-linear least squares over all points (all must have activity); λ ≥ λ_phys.
+    let s = 0, st = 0, sl = 0, stt = 0, stl = 0, max = 0;
     for (let m = 0; m < n; m++) {
       if (!(a[m] > 0)) continue;
       const l = Math.log(a[m]);
@@ -75,13 +83,14 @@ export function integrate(t: number[], a: ArrayLike<number>, lPhys: number, meth
       sl += l;
       stt += t[m] * t[m];
       stl += t[m] * l;
+      if (a[m] > max) max = a[m];
     }
-    if (s >= 2) {
+    if (s === n) {
       const den = s * stt - st * st;
       const slope = den > 0 ? (s * stl - st * sl) / den : -lPhys;
       const lam = Math.max(-slope, lPhys);
       const a0 = Math.exp((sl + lam * st) / s);
-      return a0 / lam;
+      if (Number.isFinite(a0) && a0 <= MONO_MAX_A0_FACTOR * max) return a0 / lam;
     }
   }
   let area = (a[0] / 2) * t[0];
@@ -89,6 +98,36 @@ export function integrate(t: number[], a: ArrayLike<number>, lPhys: number, meth
   const a1 = a[n - 2], a2 = a[n - 1];
   const lam = a1 > 0 && a2 > 0 && a2 < a1 ? Math.max(Math.log(a1 / a2) / (t[n - 1] - t[n - 2]), lPhys) : lPhys;
   return area + a2 / lam;
+}
+
+/**
+ * Dice overlap per label between two label maps placed in the reference world (e.g. the organ map of T1 and the organ
+ * map of a later time point after registration). Sampled on the grid of `a` with the given stride; labels not in
+ * `ids` are ignored. A low overlap after registration means that the T1 map does not fit the later anatomy.
+ */
+export function labelOverlap(a: Placed, b: Placed, ids: number[], stride = 2): Map<number, number> {
+  const map = voxelMap(a, b);
+  const { nx, ny, nz, data } = a.volume;
+  const bv = b.volume;
+  const want = new Set(ids);
+  const na = new Map<number, number>(), nb = new Map<number, number>(), both = new Map<number, number>();
+  for (let k = 0; k < nz; k += stride)
+    for (let j = 0; j < ny; j += stride)
+      for (let i = 0; i < nx; i += stride) {
+        const la = Math.round(data[(k * ny + j) * nx + i]);
+        const p = map(i, j, k);
+        const x = Math.round(p[0]), y = Math.round(p[1]), z = Math.round(p[2]);
+        const lb = x >= 0 && y >= 0 && z >= 0 && x < bv.nx && y < bv.ny && z < bv.nz ? Math.round(bv.data[(z * bv.ny + y) * bv.nx + x]) : 0;
+        if (want.has(la)) na.set(la, (na.get(la) ?? 0) + 1);
+        if (want.has(lb)) nb.set(lb, (nb.get(lb) ?? 0) + 1);
+        if (la === lb && want.has(la)) both.set(la, (both.get(la) ?? 0) + 1);
+      }
+  const out = new Map<number, number>();
+  for (const id of ids) {
+    const s = (na.get(id) ?? 0) + (nb.get(id) ?? 0);
+    if (s > 0) out.set(id, (2 * (both.get(id) ?? 0)) / s);
+  }
+  return out;
 }
 
 /** Densities (g/ml) of the reference grid from the CT (1 g/ml without CT). */

@@ -16,7 +16,7 @@ import { DEFAULT_ENERGIES, THERAPY_NUCLIDES, localDepositionDose, nuclideById } 
 import { DEFAULT_ORGANS, type DosRegionOptions, type DosimetrySetup, bedMono, regionKey } from "./setup";
 import { PhantomCalibration } from "./PhantomCalibration";
 import { TAC_MODEL_LABELS, type TacFit, type TacModel, akaikeWeights, fitTac } from "./tacFit";
-import { type DvhStats, dvh, parseKernel, regionDoses } from "./voxelDose";
+import { type DvhStats, dvh, labelOverlap, parseKernel, regionDoses } from "./voxelDose";
 import { plain, runVoxelDose, type VoxelDoseRun } from "./runner";
 import { type DoseUncertainty, doseUncertainty } from "./uncertainty";
 import { buildReport } from "./report";
@@ -292,6 +292,32 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
     if (fo && fo === ref.dataset.current.geometry.frameOfReferenceUid) return true;
     return ct.matrix.some((v, i) => Math.abs(v - ref.matrix[i]) > 1e-6);
   };
+
+  /**
+   * Check of „Von T1 für alle“: when the later time points also have their own organ map, the overlap (Dice) of each
+   * enabled organ between the T1 map (transferred by the registration) and the own map shows whether the T1 organs fit
+   * the anatomy of that time point. Rigid registration of the whole CT can leave single organs (kidneys) displaced when
+   * positioning or filling differ.
+   */
+  const OVERLAP_MIN = 0.8;
+  const overlapKey = [labelSource, ...tps.map((t) => { const o = byId(organIdOf(t)); return `${t.spectId}:${o?.id}:${o?.matrix.join(",")}`; })].join("|");
+  const overlapCheck = useMemo(() => {
+    const out: { label: string; organs: { name: string; dice: number }[] }[] = [];
+    if (labelSource !== "t1" || tps.length < 2) return out;
+    const ref = byId(organIdOf(tps[0]));
+    const atlas = ref?.dataset.atlas;
+    if (!ref || !atlas) return out;
+    const ids = [...atlas.labels.entries()].filter(([, name]) => regionOpts(regionKey(name)).enabled).map(([id]) => id);
+    if (!ids.length) return out;
+    for (const tp of tps.slice(1)) {
+      const own = byId(organIdOf(tp));
+      if (!own || own.id === ref.id || !isRegistered(tp)) continue;
+      const d = labelOverlap(place(ref), place(own), ids);
+      const low = [...d].filter(([, v]) => v < OVERLAP_MIN).map(([id, dice]) => ({ name: atlas.labels.get(id) ?? String(id), dice }));
+      if (low.length) out.push({ label: byId(tp.spectId)?.label ?? tp.spectId, organs: low });
+    }
+    return out;
+  }, [overlapKey, setup.regions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Lesions across time points (centroids in the registered world, optimal pairing) ──
   const maxMm = setup.lesionLinks?.maxMm ?? 20;
@@ -985,6 +1011,13 @@ export function DosimetryPanel({ api }: { api: DosimetryApi }) {
                 {tps.slice(1).some((t) => !isRegistered(t)) && (
                   <InfoText warn details={tr("Die Labelbilder von T1 werden über die Registrierung auf die anderen Zeitpunkte übertragen. Ohne Registrierung liegen sie dort an der falschen Stelle. „Zeitpunkte registrieren“ (Karte Zeitpunkte) oder im Bereich Koregistrierung.")}>
                     {tr("Nicht alle Zeitpunkte registriert")}
+                  </InfoText>
+                )}
+                {overlapCheck.length > 0 && (
+                  <InfoText warn details={tr("Verglichen werden die Organe von T1 (über die Registrierung übertragen) mit der eigenen Organkarte des Zeitpunkts. Geringe Überlappung (Dice < {min}) heißt: Die starre Registrierung des ganzen CTs hat dieses Organ nicht deckungsgleich gebracht, z. B. bei stark unterschiedlicher Lagerung. Die Aktivität würde dann teils außerhalb des Organs gemessen. Abhilfe: „Organkarte je Zeitpunkt“ (jedes CT segmentieren).", { min: OVERLAP_MIN.toFixed(1).replace(".", ",") })}>
+                    {tr("Geringe Organüberlappung nach Registrierung: {list}", {
+                      list: overlapCheck.map((o) => `${o.label} – ${o.organs.map((g) => `${g.name.replace(/_/g, " ")} ${g.dice.toFixed(2).replace(".", ",")}`).join(", ")}`).join("; "),
+                    })}
                   </InfoText>
                 )}
               </>
