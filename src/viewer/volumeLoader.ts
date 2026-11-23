@@ -195,19 +195,19 @@ async function loadNiftiFile(file: File, table?: Map<number, string>, sidecarJso
 function niftiDynamic(buffer: ArrayBuffer, volume: Volume3D, sidecarJson?: string): DynamicInfo | null {
   const view = new DataView(buffer);
   const le = view.getInt32(0, true) === 348;
-  if (!le || view.getInt16(40, true) < 4) return null;
-  const nt = view.getInt16(48, true);
+  if (view.getInt16(40, le) < 4) return null;
+  const nt = view.getInt16(48, le);
   if (nt <= 1) return null;
   const n = volume.nx * volume.ny * volume.nz;
-  const voxOffset = Math.max(352, Math.round(view.getFloat32(108, true)));
-  const all = readNiftiValues(buffer, true, view.getInt16(70, true), voxOffset, n * nt);
-  const slope = view.getFloat32(112, true), inter = view.getFloat32(116, true);
+  const voxOffset = Math.max(352, Math.round(view.getFloat32(108, le)));
+  const all = readNiftiValues(buffer, le, view.getInt16(70, le), voxOffset, n * nt);
+  const slope = view.getFloat32(112, le), inter = view.getFloat32(116, le);
   if (slope !== 0 && Number.isFinite(slope)) for (let i = 0; i < all.length; i++) all[i] = all[i] * slope + inter;
   const frames = Array.from({ length: nt }, (_, t) => all.slice(t * n, (t + 1) * n));
   const bids = sidecarJson ? parseBidsTiming(sidecarJson, nt) : null;
   if (bids) return { frames, ...bids, timeSource: "bids" };
   // pixdim[4] with xyzt_units (time bits 0x38: 8 = s, 16 = ms, 24 = µs); minutes are not a NIfTI unit.
-  const tr = view.getFloat32(92, true);
+  const tr = view.getFloat32(92, le);
   const unit = view.getUint8(123) & 0x38;
   const step = tr > 0 ? (unit === 16 ? tr / 1000 : unit === 24 ? tr / 1e6 : tr) : 60;
   return {
@@ -290,7 +290,7 @@ export function parseNifti1(buffer: ArrayBuffer): { volume: Volume3D; nifti: Nif
 /** Reads `count` voxel values (any supported datatype, little endian) as float32. */
 function readNiftiValues(buffer: ArrayBuffer, littleEndian: boolean, datatype: number, voxOffset: number, count: number): Float32Array {
   const data = new Float32Array(count);
-  if (datatype !== 2 && !littleEndian) throw new VolumeLoadError(t("Big-Endian NIfTI wird nicht unterstützt."));
+  if (!littleEndian && datatype !== 2) return readBigEndianValues(buffer, datatype, voxOffset, count, data);
   const bytes = (size: number) => buffer.slice(voxOffset, voxOffset + count * size);
   let src: ArrayLike<number>;
   switch (datatype) {
@@ -320,6 +320,21 @@ function readNiftiValues(buffer: ArrayBuffer, littleEndian: boolean, datatype: n
   return data;
 }
 
+/**
+ * Big-endian voxel data (e.g. NIfTI/Analyze files written by SPM on big-endian systems, such as the GAAIN Centiloid
+ * reference data): decoded value by value with a DataView.
+ */
+function readBigEndianValues(buffer: ArrayBuffer, datatype: number, voxOffset: number, count: number, data: Float32Array): Float32Array {
+  const size: Record<number, number> = { 4: 2, 512: 2, 8: 4, 16: 4, 64: 8 };
+  const s = size[datatype];
+  if (!s) throw new VolumeLoadError(t("NIfTI-Datentyp {datatype} wird nicht unterstützt.", { datatype }));
+  const view = new DataView(buffer);
+  const m = Math.min(count, Math.floor((buffer.byteLength - voxOffset) / s));
+  for (let i = 0, o = voxOffset; i < m; i++, o += s)
+    data[i] = datatype === 4 ? view.getInt16(o, false) : datatype === 512 ? view.getUint16(o, false) : datatype === 8 ? view.getInt32(o, false) : datatype === 16 ? view.getFloat32(o, false) : view.getFloat64(o, false);
+  return data;
+}
+
 /** A NIfTI file with all its values (e.g. 5D deformation fields: dims [nx, ny, nz, 1, 3]). */
 export interface NiftiAll {
   /** dim[1..dim[0]] */
@@ -333,25 +348,25 @@ export interface NiftiAll {
 /** Reads every value of a NIfTI-1 file (scaled), plus its 3D geometry and dimensions. */
 export function readNiftiAll(buffer: ArrayBuffer): NiftiAll {
   const view = new DataView(buffer);
-  const littleEndian = view.getInt32(0, true) === 348;
-  if (!littleEndian) throw new VolumeLoadError(t("Nur Little-Endian-NIfTI-1 wird unterstützt."));
-  const ndim = view.getInt16(40, true);
-  const dims = Array.from({ length: Math.max(3, Math.min(7, ndim)) }, (_, i) => Math.max(1, view.getInt16(42 + 2 * i, true)));
+  const le = view.getInt32(0, true) === 348;
+  if (!le && view.getInt32(0, false) !== 348) throw new VolumeLoadError(t("Ungültiger NIfTI-1-Header (sizeof_hdr ≠ 348)."));
+  const ndim = view.getInt16(40, le);
+  const dims = Array.from({ length: Math.max(3, Math.min(7, ndim)) }, (_, i) => Math.max(1, view.getInt16(42 + 2 * i, le)));
   const count = dims.reduce((a, b) => a * b, 1);
-  const datatype = view.getInt16(70, true);
-  const voxOffset = Math.max(352, Math.round(view.getFloat32(108, true)));
-  const data = readNiftiValues(buffer, true, datatype, voxOffset, count);
-  const slope = view.getFloat32(112, true);
-  const inter = view.getFloat32(116, true);
+  const datatype = view.getInt16(70, le);
+  const voxOffset = Math.max(352, Math.round(view.getFloat32(108, le)));
+  const data = readNiftiValues(buffer, le, datatype, voxOffset, count);
+  const slope = view.getFloat32(112, le);
+  const inter = view.getFloat32(116, le);
   if (slope !== 0 && Number.isFinite(slope) && (slope !== 1 || inter !== 0)) for (let i = 0; i < count; i++) data[i] = data[i] * slope + inter;
-  const pixdim: Vec3 = [80, 84, 88].map((o) => Math.abs(view.getFloat32(o, true)) || 1) as Vec3;
+  const pixdim: Vec3 = [80, 84, 88].map((o) => Math.abs(view.getFloat32(o, le)) || 1) as Vec3;
   let description = "";
   for (let i = 148; i < 228; i++) {
     const c = view.getUint8(i);
     if (c === 0) break;
     description += String.fromCharCode(c);
   }
-  return { dims, data, geometry: readNiftiGeometry(view, true, pixdim), intentCode: view.getInt16(68, true), description };
+  return { dims, data, geometry: readNiftiGeometry(view, le, pixdim), intentCode: view.getInt16(68, le), description };
 }
 
 /** sform (preferred) or qform geometry; axis-aligned pixdim fallback if neither is set. */
