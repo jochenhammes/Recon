@@ -1015,6 +1015,10 @@ Bereich **Bearbeiten**. Die Werte-Operationen (Grenzwert ersetzen, begrenzen, li
    „CT 3W · Triple-Window …“ es dort (das Original bleibt unter *Ebenen*). Die Werte sind keine echten HU mehr
    (Einheit „HU*“) – nicht für Messungen oder Diagnostik; beim DICOM-Export heißt die Serie
    „Triple-Window (kuenstlich, nicht diagnostisch)“, Fenster 40/400.
+   **Direkteinstieg:** Unter der Adresse `…/Recon/twct` öffnet die App mit dem zusätzlichen Bereich
+   *Triple-Window-CT*, der die nötigen Karten untereinander zeigt: Laden (Ziehen oder Klick), CT-Organsegmentierung,
+   Triple-Window-CT und Export (DICOM vorgewählt, das neueste Triple-Window-CT ausgewählt). Es sind dieselben
+   Karten wie in den übrigen Bereichen; alle anderen Bereiche bleiben verfügbar.
 3. **Filter**: Gauß-Glättung (FWHM in mm).
 4. **Geometrie**: Spiegeln (R↔L, A↔P, H↔F), Drehen (↻ 90° / ↺ 90°), Resampling auf neue Voxelgröße.
    Die Schritte wirken auf **alle geladenen Datensätze**; einzelne lassen sich in der Liste *Betroffene Datensätze*

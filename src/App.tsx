@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { sanitizePatientId, setExportPatientId, umlaut, withPatientId } from "./core/exportName";
 import { Card } from "./ui/Card";
-import { Activity, BarChart3, Brain, Calculator, Crosshair, Download, Eye, FileCode2, FolderOpen, Gauge, Radiation, Save, Target, Wand2 } from "lucide-react";
+import { Activity, BarChart3, Brain, Calculator, Crosshair, Download, Eye, FileCode2, FolderOpen, Gauge, Layers, Radiation, Save, Target, Wand2 } from "lucide-react";
 import { ManualOverlay } from "./ui/ManualOverlay";
 import { acquisitionMs } from "./dosimetry/sessions";
 import { type DosimetryApi, DosimetryPanel } from "./dosimetry/DosimetryPanel";
@@ -128,6 +128,9 @@ import {
 import type { SpectProjectionSet } from "./dicom/types";
 import "./App.css";
 
+
+/** Route /Recon/twct (also /Recon/twct/): opens the "Triple-Window-CT" column. */
+const TWCT_ROUTE = new RegExp(`^${import.meta.env.BASE_URL}twct/?$`).test(window.location.pathname);
 import { T } from "./i18n/T";
 /**
  * A loaded dataset. `matrix` maps its own patient coordinates to the reference dataset's world
@@ -261,7 +264,7 @@ function App() {
   const [rotPivot, setRotPivot] = useState<"landmark" | "center">("landmark");
   const [layout, setLayout] = useState<LayoutKind>("grid");
   const [focusView, setFocusView] = useState<ViewKind>("axial");
-  const [activeTab, setActiveTab] = useState("data");
+  const [activeTab, setActiveTab] = useState(TWCT_ROUTE ? "twct" : "data");
   const [panelOpen, setPanelOpen] = useState(true);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
@@ -2776,27 +2779,31 @@ function App() {
     updateEntry(id, { dataset: { ...e.dataset, displayName, originalName, ...(derivedFrom ? { derivedFrom } : {}) } });
   }
 
+  const uploadPanel = (
+  <VolumeUploadPanel
+    title={entries.length ? tx("Weiteren Datensatz laden") : tx("Volumen laden")}
+    onLoaded={handleVolumeLoaded}
+    onProjectFile={(f) => void openProjectFile(f)}
+    onBusyChange={(b) => {
+      setLoadBusy(b);
+      if (b) loadDecisions.current = [];
+      else {
+        const d = loadDecisions.current;
+        const hidden = d.filter((x) => !x.shown);
+        if (hidden.length)
+          setNotice(
+            tx("{length} {v} geladen – nicht eingeblendet: {v2}. Einblenden über „Ebenen“ oben rechts im Viewer.", { length: d.length, v: d.length === 1 ? tx("Datensatz") : tx("Datensätze"), v2: hidden.map((h) => h.name).join(", ") }),
+          );
+      }
+    }}
+    description={tx("PET, SPECT, CT oder MRT als DICOM (Datei oder Serie) bzw. NIfTI – beliebig viele.")}
+    compact={entries.length > 0}
+  />
+  );
+
   const dataTab = (
     <>
-      <VolumeUploadPanel
-        title={entries.length ? tx("Weiteren Datensatz laden") : tx("Volumen laden")}
-        onLoaded={handleVolumeLoaded}
-        onProjectFile={(f) => void openProjectFile(f)}
-        onBusyChange={(b) => {
-          setLoadBusy(b);
-          if (b) loadDecisions.current = [];
-          else {
-            const d = loadDecisions.current;
-            const hidden = d.filter((x) => !x.shown);
-            if (hidden.length)
-              setNotice(
-                tx("{length} {v} geladen – nicht eingeblendet: {v2}. Einblenden über „Ebenen“ oben rechts im Viewer.", { length: d.length, v: d.length === 1 ? tx("Datensatz") : tx("Datensätze"), v2: hidden.map((h) => h.name).join(", ") }),
-              );
-          }
-        }}
-        description={tx("PET, SPECT, CT oder MRT als DICOM (Datei oder Serie) bzw. NIfTI – beliebig viele.")}
-        compact={entries.length > 0}
-      />
+      {uploadPanel}
       <section className="card patient-card">
         <label className="field">
           {tx("Patient-ID")}
@@ -3363,7 +3370,58 @@ function App() {
     </>
   );
 
+  const ctSegCard = (
+    <CtSegCard
+      cts={ctEntries.map((e) => ({ id: e.id, label: entryLabel(e) }))}
+      defaultCtId={ctEntries[0]?.id ?? null}
+      running={ctSegRunning}
+      progress={ctSegProgress}
+      status={ctSegStatus}
+      error={ctSegError}
+      webgpu={webgpuAvailable}
+      onRun={startCtSegmentation}
+      onCancel={() => ctSegRun.current?.cancel()}
+    />
+  );
+  const tripleWindowCard = (
+    <TripleWindowCard
+      cts={ctEntries.filter((e) => e.dataset.kindLabel !== "CT 3W").map((e) => ({ id: e.id, label: entryLabel(e) }))}
+      organSets={organEntries.map((e) => ({ id: e.id, label: entryLabel(e), forCt: ctEntries.find((c) => tBoth("CT-Organe · {displayName}", { displayName: c.dataset.displayName }).includes(e.dataset.displayName))?.id }))}
+      busy={tripleBusy}
+      status={tripleStatus}
+      error={tripleError}
+      onRun={(r) => void createTripleWindow(r)}
+    />
+  );
+  const exportItems = spaces.map((sp) => {
+    const suv = suvById.get(sp.id);
+    return { ...sp, suvFactor: suv?.ok ? suv.info.factor : null };
+  });
+  // Route /Recon/twct: the existing cards for a triple-window CT in one column (load → organ segmentation →
+  // triple-window CT → DICOM export); the newest triple-window CT is preselected for the export.
+  const tripleEntry = [...entries].reverse().find((e) => e.dataset.kindLabel === "CT 3W");
+  const twctTab: ShellTab = {
+    id: "twct",
+    label: tx("Triple-Window-CT"),
+    icon: Layers,
+    content: (
+      <>
+        {uploadPanel}
+        {ctSegCard}
+        {tripleWindowCard}
+        {dataset && active ? (
+          <ExportPanel key={tripleEntry?.id ?? active.id} items={exportItems} activeId={tripleEntry?.id ?? active.id} initialFormat="dicom" onActivity={setExportActivity} />
+        ) : (
+          <Card title={tx("Export")}>
+            <p className="hint">{tx("Erst einen Datensatz laden")}</p>
+          </Card>
+        )}
+      </>
+    ),
+  };
+
   const tabs: ShellTab[] = [
+    ...(TWCT_ROUTE ? [twctTab] : []),
     { id: "data", label: tx("Daten"), icon: FolderOpen, content: dataTab, badge: entries.length > 1 ? entries.length : undefined },
     { id: "view", label: tx("Ansicht"), icon: Eye, disabled: layers.length === 0, disabledReason: tx("Erst einen Datensatz laden"), content: viewTab },
     { id: "registration", label: tx("Koregistrierung (Patientenraum)"), shortLabel: tx("Ko\u00adregis\u00adtrierung"), icon: Crosshair, disabled: entries.length < 2, disabledReason: tx("Koregistrierung ab zwei Datensätzen"), content: registrationTab },
@@ -3410,17 +3468,7 @@ function App() {
       disabledReason: tx("Erst ein PET oder CT laden"),
       content: (
         <>
-        <CtSegCard
-          cts={ctEntries.map((e) => ({ id: e.id, label: entryLabel(e) }))}
-          defaultCtId={ctEntries[0]?.id ?? null}
-          running={ctSegRunning}
-          progress={ctSegProgress}
-          status={ctSegStatus}
-          error={ctSegError}
-          webgpu={webgpuAvailable}
-          onRun={startCtSegmentation}
-          onCancel={() => ctSegRun.current?.cancel()}
-        />
+        {ctSegCard}
         <SegBenchmarkCard
           cts={ctEntries.map((e) => ({ id: e.id, label: entryLabel(e) }))}
           references={entries.filter((e) => e.dataset.atlas).map((e) => ({ id: e.id, label: entryLabel(e) }))}
@@ -3628,14 +3676,7 @@ function App() {
             }}
             onCrop={() => voiBounds && handleApplyEdit({ type: "crop", min: voiBounds.min, max: voiBounds.max })}
           />
-          <TripleWindowCard
-            cts={ctEntries.filter((e) => e.dataset.kindLabel !== "CT 3W").map((e) => ({ id: e.id, label: entryLabel(e) }))}
-            organSets={organEntries.map((e) => ({ id: e.id, label: entryLabel(e), forCt: ctEntries.find((c) => tBoth("CT-Organe · {displayName}", { displayName: c.dataset.displayName }).includes(e.dataset.displayName))?.id }))}
-            busy={tripleBusy}
-            status={tripleStatus}
-            error={tripleError}
-            onRun={(r) => void createTripleWindow(r)}
-          />
+          {tripleWindowCard}
           <FilterSection busy={editBusy} onApply={handleApplyEdit} />
           <GeometrySection
             key={`${active?.id}:${volume.nx}x${volume.ny}x${volume.nz}`}
@@ -3670,10 +3711,7 @@ function App() {
       disabledReason: tx("Erst einen Datensatz laden"),
       content: dataset && active && (
         <ExportPanel
-          items={spaces.map((sp) => {
-            const suv = suvById.get(sp.id);
-            return { ...sp, suvFactor: suv?.ok ? suv.info.factor : null };
-          })}
+          items={exportItems}
           activeId={active.id}
           onActivity={setExportActivity}
         />
@@ -3686,6 +3724,7 @@ function App() {
   // ── Activity indicator: running jobs and errors, wherever they were started ──
   const activities: JobActivity[] = [];
   const act = (a: JobActivity | false | "" | null | undefined) => {
+    if (a && TWCT_ROUTE && ["load", "ctseg", "ctseg-error", "triple", "export"].includes(a.id)) a = { ...a, tab: "twct" };
     if (a) activities.push(a);
   };
   act(projectBusy && { id: "project", label: projectBusy === "save" ? tx("Projekt speichern") : tx("Projekt öffnen"), tab: "data" });

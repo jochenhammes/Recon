@@ -16,6 +16,8 @@ export interface ExportPanelProps {
   activeId: string;
   /** Reports the running export (activity indicator); null when done. */
   onActivity?: (text: string | null) => void;
+  /** Format preselected on opening (default NIfTI). */
+  initialFormat?: "dicom" | "nifti";
 }
 
 type SpaceMode = "native" | "resampled";
@@ -36,9 +38,9 @@ function download(file: { name: string; bytes: Uint8Array<ArrayBuffer>; type: st
  * Export: choose datasets, format (DICOM/NIfTI) and space (own grid without resampling, or resampled into the grid
  * of another dataset); several files are downloaded as one ZIP. NIfTI from PET optionally in SUV.
  */
-export function ExportPanel({ items, activeId, onActivity }: ExportPanelProps) {
+export function ExportPanel({ items, activeId, onActivity, initialFormat = "nifti" }: ExportPanelProps) {
   const [selected, setSelected] = useState<string[]>([activeId]);
-  const [format, setFormat] = useState<"dicom" | "nifti">("nifti");
+  const [format, setFormat] = useState<"dicom" | "nifti">(initialFormat);
   const [spaceMode, setSpaceMode] = useState<SpaceMode>("native");
   const [targetId, setTargetId] = useState<string | null>(null);
   const [gridMode, setGridMode] = useState<GridMode>("target");
